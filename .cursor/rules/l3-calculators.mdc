@@ -1,0 +1,270 @@
+---
+description: Guidelines and best practices for layer3 calculators like StandardDeviationCalculator
+globs: avg_calc.py, adjperf_calc.py, time_dec_sdev_calc.py, time_dec_avg_calc.py, sdev_calc.py
+alwaysApply: false
+---
+---
+description: Guidelines and best practices for layer3 calculators like StandardDeviationCalculator
+globs: libs/feature_store/calculators/*_calc.py, tests/tests_layer3/test_*_calc.py
+alwaysApply: false
+---
+# Layer 3 Calculators Rule
+
+This rule outlines the architecture, common patterns, and best practices for layer3 calculators in the UFC fight prediction system, based on the optimized implementation in StandardDeviationCalculator and TimedecStdDevCalculator.
+
+## Architecture Overview
+
+Layer3 calculators extend the `BaseCalculator` class and perform operations like:
+- Rolling statistics (averages, standard deviations)
+- Opponent statistics
+- Time-decay weighted metrics
+- Cross-fighter comparative metrics
+
+### High-Performance Implementation
+
+The key performance optimization is the use of `execute_layer_update` which:
+- Creates temporary unlogged tables to hold calculation results
+- Applies minimal indexing for performance
+- Updates the target table in efficient batches
+- Keeps processing in the database rather than transferring data to Python
+
+### Inheritance Pattern
+
+```python
+class Layer3Calculator(BaseCalculator):
+    def __init__(self, context_or_conn, include_patterns=set(), exclude_patterns=set()):
+        # Handle context initialization
+        if isinstance(context_or_conn, CalculatorContext):
+            self.context = context_or_conn
+            conn = self.context.connection
+        else:
+            conn = context_or_conn
+            self.context = CalculatorContext(conn)
+            
+        # Initialize with BaseCalculator and appropriate calculator_type
+        super().__init__(conn, calculator_type='multi_table')
+        
+        # Add specific initialization
+        self.layer_suffix = '_specific_suffix'  # e.g., '_sdev', '_avg', etc.
+```
+
+## Key Methods
+
+### 1. calculate_for_table
+
+This method generates the SQL for a specific table:
+
+```python
+def calculate_for_table(self, table_name, columns=None):
+    # 1. Get columns if not provided
+    if columns is None:
+        columns = self.get_features(table_name)
+        
+    # 2. Filter out columns already processed
+    calc_columns = [col for col in columns if not col.endswith(self.layer_suffix)]
+    if not calc_columns:
+        return ""
+        
+    # 3. Build SQL expressions for each column
+    expressions = []
+    for col in calc_columns:
+        expressions.append(f"""
+            CASE 
+                WHEN ... THEN ...
+                ELSE ...
+            END AS {col}{self.layer_suffix}
+        """)
+        
+    # 4. Prepare template parameters
+    template_params = {
+        'schema': 'features',
+        'table_name': table_name,
+        'columns': calc_columns,
+        'expressions_str': ",\n        ".join(expressions)
+    }
+    
+    # 5. Use SQL templates to generate final SQL
+    sql = self.execute_sql_template(
+        'template_name',
+        'operation',
+        template_params
+    )
+    
+    return sql
+```
+
+### 2. execute_for_table (Optional)
+
+This method is maintained for unit testing and specific operations but typically not used in the main workflow:
+
+```python
+def execute_for_table(self, table_name, columns=None):
+    sql = self.calculate_for_table(table_name, columns)
+    if not sql:
+        return pd.DataFrame()
+        
+    # Execute SQL and return DataFrame for analysis or testing
+    df = self.execute_raw_sql(sql, return_results=True)
+    return df
+```
+
+### 3. run
+
+The main entry point that processes all tables using high-performance approach:
+
+```python
+def run(self, table_pattern=""):
+    # 1. Precompute any required statistics
+    self.precompute_required_stats()
+    
+    # 2. Get and filter tables
+    tables = self.get_feature_tables()
+    if table_pattern:
+        tables = [t for t in tables if table_pattern in t]
+        
+    results = {}
+    
+    # 3. Process each table sequentially
+    for i, table_name in enumerate(tables, 1):
+        try:
+            # Filter columns
+            columns = self.stat_tables.get(table_name, [])
+            filtered_columns = self.filter_columns(columns)
+            
+            if not filtered_columns:
+                results[table_name] = pd.DataFrame()
+                continue
+                
+            # Generate SQL
+            sql = self.calculate_for_table(table_name, filtered_columns)
+            if not sql:
+                results[table_name] = pd.DataFrame()
+                continue
+                
+            # Execute high-performance update
+            self.execute_layer_update(
+                calculation_sql=sql,
+                table_name=table_name,
+                schema=self.schema,
+                batch_size=100000
+            )
+            
+            # Mark as successful
+            results[table_name] = pd.DataFrame({"success": [True]})
+            
+        except Exception as e:
+            self.logger.error(f"Error processing {table_name}: {str(e)}")
+            results[table_name] = pd.DataFrame()
+    
+    return results
+```
+
+## SQL Template Structure
+
+SQL templates for layer3 calculators should follow this pattern:
+
+```sql
+WITH fight_data AS (
+    SELECT
+        f.fight_id,
+        f.fighter_id,
+        em.event_date,
+        -- Other fields
+    FROM {{ schema }}.{{ table_name }} f
+    JOIN {{ schema }}.event_mapping em ON f.event_id = em.event_id
+    JOIN {{ schema }}.fight_mapping fm ON f.fight_id = fm.fight_id
+),
+computed_data AS (
+    SELECT
+        fd.*,
+        {{ expressions_str }}
+    FROM fight_data fd
+    -- Any required joins
+)
+SELECT
+    fight_id,
+    fighter_id,
+    {{ output_columns }}
+FROM computed_data
+ORDER BY event_date, fight_id
+```
+
+## Common Pitfalls and Solutions
+
+### 1. Avoid Transferring Large DataFrames
+
+**Problem**: Transferring large amounts of data between database and Python.
+
+**Solution**: Use `execute_layer_update` to keep computation in the database:
+
+```python
+# Good - High performance
+self.execute_layer_update(
+    calculation_sql=sql,
+    table_name=table_name,
+    schema=self.schema,
+    batch_size=100000
+)
+
+# Bad - Slow for large data
+df = self.execute_raw_sql(sql, return_results=True)
+self.bulk_update_dataframe(df, table_name)
+```
+
+### 2. Table Pattern Filtering
+
+Always implement table pattern filtering to allow selective processing:
+
+```python
+if table_pattern:
+    filtered_tables = [table for table in tables if table_pattern in table]
+    tables = filtered_tables
+```
+
+### 3. Proper Batch Size
+
+Set an appropriate batch size for database operations:
+
+```python
+# Default for most operations
+batch_size = 100000
+
+# For tables with many columns, consider smaller batches
+if len(filtered_columns) > 50:
+    batch_size = 50000
+```
+
+## Testing Layer3 Calculators
+
+Tests should include:
+1. Unit tests with mocked templates and SQL execution
+2. Integration tests with realistic data flows
+
+### Mock Template Example
+
+```python
+calculator = TestCalculator()
+expected_sql = """SELECT ... FROM ..."""
+calculator.execute_sql_template = MagicMock(return_value=expected_sql)
+```
+
+### Mock execute_layer_update
+
+```python
+calculator.execute_layer_update = MagicMock()
+calculator.run()
+calculator.execute_layer_update.assert_called_with(
+    calculation_sql=ANY,
+    table_name="expected_table",
+    schema="features",
+    batch_size=100000
+)
+```
+
+## Performance Considerations
+
+1. Always use `execute_layer_update` for bulk operations
+2. Use column filtering to process only necessary columns
+3. Add table pattern filtering to allow selective processing
+4. Set appropriate batch sizes based on data volume
+5. Use proper indexing in SQL templates with ANALYZE commands

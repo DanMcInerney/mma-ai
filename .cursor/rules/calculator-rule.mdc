@@ -1,0 +1,269 @@
+---
+description: Calculator implementation
+globs: 
+alwaysApply: false
+---
+# Concise Calculator Implementation Guide
+
+## Core Principles
+
+1. **Layered Architecture**: Calculators are organized in layers of increasing complexity:
+   - **Layer 1**: Basic features from raw data (e.g., `age_calc.py`)
+   - **Layer 2**: Derived features from L1 (e.g., per-minute stats)
+   - **Layer 3**: Advanced features using complex joins and aggregations (e.g., `opp_calc.py`, `sdev_calc.py`, `adj_perf_calc.py`)
+
+2. **SQL-First Approach**: Perform calculations in SQL where possible:
+   - Use SQL templates with Jinja2 for complex queries
+   - Move processing logic to database for efficiency
+   - Return well-structured DataFrames for Python manipulation
+
+3. **Progressive Enhancement**:
+   - Each calculator builds on features created by previous calculators
+   - Clear dependency chain from L1 → L2 → L3
+   - Consistent naming with suffixes (e.g., `_avg`, `_sdev`, `_opp`, `_adjperf`)
+
+## Essential Implementation Patterns
+
+### Calculator Initialization
+
+```python
+def __init__(self, conn, include_patterns=set(), exclude_patterns=set()):
+    super().__init__(conn)
+    # CRITICAL: Define clear suffixes
+    self.layer_suffix = '_your_suffix'  # e.g., '_avg', '_sdev', '_per_min'
+    self.schema = 'features'
+    # CRITICAL: Initialize SQL manager directly
+    self.sql_template_manager = SQLTemplateManager(conn)
+```
+
+### Feature Detection
+
+```python
+def get_features(self, table_name=None) -> List[str]:
+    """Get columns that need processing, applying includes/excludes"""
+    if table_name is None:
+        table_name = self.table_name
+    return self.feature_utils.get_columns_from_table(
+        self.schema, table_name,
+        exclude_strs=self.exclude_patterns,
+        include_strs=self.include_patterns
+    )
+```
+
+### Table-Specific Processing Pattern
+
+```python
+def calculate_for_table(self, table: str, columns: List[str]) -> str:
+    """Generate SQL for a specific feature table"""
+    # 1. Filter columns that need processing
+    calc_columns = [col for col in columns if not col.endswith(self.layer_suffix)]
+    
+    # 2. Prepare template parameters
+    template_params = {
+        'schema': self.schema,
+        'table_name': table,
+        'columns': calc_columns,
+        # Add calculation-specific parameters
+    }
+    
+    # 3. Generate SQL using template
+    return self.sql_template_manager.render_template(
+        'template_type',  # e.g., 'rolling_avg', 'opponent'
+        'calculate',      # action
+        template_params
+    )
+```
+
+### Execution with Validation
+
+```python
+def execute_for_table(self, table: str, columns: List[str]) -> pd.DataFrame:
+    """Execute calculation and validate results"""
+    try:
+        # 1. Generate SQL
+        sql = self.calculate_for_table(table, columns)
+        if not sql:
+            return pd.DataFrame()
+            
+        # 2. Execute SQL
+        result_df = self.feature_utils.execute_raw_sql(sql)
+        
+        # 3. Validate outputs
+        self._validate_outputs(table, columns, result_df)
+        
+        return result_df
+    except Exception as e:
+        self.logger.error(f"Error executing for {table}: {str(e)}")
+        self.conn.rollback()  # CRITICAL: Rollback on error
+        raise
+```
+
+### Multi-Table Processing Pattern
+
+```python
+def run(self) -> None:
+    """Process all applicable tables"""
+    successful_tables = []
+    failed_tables = []
+    
+    # Process each table independently
+    for table_name in self.get_tables():
+        try:
+            self.save_for_table(table_name)
+            successful_tables.append(table_name)
+        except Exception as e:
+            # CRITICAL: Continue with next table on failure
+            failed_tables.append((table_name, str(e)))
+            continue
+```
+
+## Key Gotchas and Solutions
+
+1. **SQL Template Manager Initialization**
+   - **❌ WRONG**: `self.sql_template_manager = self.get_sql_template_manager()`
+   - **✅ RIGHT**: `self.sql_template_manager = SQLTemplateManager(conn)`
+
+2. **SQL Column Selects Formatting**
+   - **❌ WRONG**: Direct string concatenation: `"SELECT " + ", ".join(cols)`
+   - **✅ RIGHT**: Format with proper indentation and use dedicated methods:
+     ```python
+     def _prepare_column_selects(self, columns):
+         return ",\n    ".join([f"{col} AS {col}_suffix" for col in columns])
+     ```
+
+3. **Statistical Calculation Consistency**
+   - **❌ WRONG**: Different statistical formulas between Python/SQL
+   - **✅ RIGHT**: Match SQL's behavior in Python:
+     - PostgreSQL STDDEV uses n-1 denominator → `np.std(values, ddof=1)`
+     - Document any statistical assumptions in code comments
+
+4. **First-Fight Fallbacks**
+   - **❌ WRONG**: Defaulting to 0 or NULL for first fights
+   - **✅ RIGHT**: Use weight-class averages/stddevs as fallbacks:
+     ```sql
+     CASE 
+         WHEN first_fight THEN weightclass_avg
+         ELSE calculated_value 
+     END
+     ```
+
+5. **Zero-Division Protection**
+   - **❌ WRONG**: Leaving division operations unprotected
+   - **✅ RIGHT**: Use NULLIF, GREATEST or CASE to handle zeros:
+     ```sql
+     CASE 
+         WHEN divisor < 0.000001 THEN 0
+         ELSE numerator / divisor
+     END
+     ```
+
+6. **Feature Table Detection**
+   - **❌ WRONG**: Hard-coding table names
+   - **✅ RIGHT**: Query information_schema for dynamic discovery:
+     ```python
+     def _get_feature_tables(self):
+         query = """
+             SELECT table_name 
+             FROM information_schema.tables 
+             WHERE table_schema = '{self.schema}'
+             AND table_name NOT LIKE '%_mapping'
+         """
+         return self.feature_utils.execute_raw_sql(query)['table_name'].tolist()
+     ```
+
+7. **Method Call Chains**
+   - **❌ WRONG**: Direct method calls without state validation
+   - **✅ RIGHT**: Ensure proper call order with state checks:
+     ```python
+     def save_for_table(self, table):
+         columns = self.get_features(table)
+         if not columns:
+             return pd.DataFrame()
+         sql = self.calculate_for_table(table, columns)
+         # ...
+     ```
+
+## Testing Essentials
+
+1. **Realistic Data Testing**:
+   - Create mock data with known expected values
+   - Include comments showing manual calculation of expected results
+   - Test with both single and multiple fights per fighter
+
+2. **Edge Case Testing**:
+   - First fighter/first fight (special handling)
+   - Missing values (NULL handling)
+   - Zero denominators (division protection)
+   - Tiny values (precision issues)
+
+3. **SQL Template Verification**:
+   - Verify correct template parameters are passed
+   - Test SQL parsing and execution
+   - Compare actual vs expected SQL structure
+
+4. **Mock Implementation Pattern**:
+   ```python
+   class TestCalculator(YourCalculator):
+       def __init__(self, conn=None):
+           # Create mock connection if none provided
+           if conn is None:
+               conn = MagicMock()
+               
+           # Initialize parent
+           super().__init__(conn)
+           
+           # Override SQL template manager with mock
+           self.sql_template_manager = MagicMock()
+           
+       def _ensure_columns_exist(self, *args, **kwargs):
+           # Skip column validation for tests
+           pass
+   ```
+
+5. **Precision Testing**:
+   ```python
+   # Use appropriate precision for floating point comparisons
+   np.testing.assert_almost_equal(
+       actual_value,
+       expected_value,  # Show calculation: (0.40 + 0.45) / 2
+       decimal=4,
+       err_msg="Value calculation incorrect"
+   )
+   ```
+
+## Testing Gotchas and Solutions
+
+1. **Calculator Type Execution Behavior**:
+   - **❌ WRONG**: Expecting `run_parallel()` to be called for `single_table` calculators when `parallel=True`
+   - **✅ RIGHT**: `single_table` calculators always use `run_sequential()` even when `parallel=True` is specified
+   ```python
+   # When testing parallel execution for single_table calculators:
+   with patch.object(calculator, 'run_sequential') as mock_run_sequential:
+       calculator.run(parallel=True, max_workers=2)
+       mock_run_sequential.assert_called_once()  # Correct assertion
+   ```
+
+2. **Complete Mock Chain**:
+   - **❌ WRONG**: Only mocking high-level methods during testing
+   - **✅ RIGHT**: Mock the complete execution chain to avoid real SQL execution:
+   ```python
+   # Mock all methods in the execution chain
+   with patch.object(pd, 'read_sql', return_value=mock_data):
+       with patch.object(calculator, 'calculate_for_table', return_value="SELECT * FROM mock_query"):
+           with patch.object(calculator, 'execute_raw_sql', return_value=mock_data):
+               # Now test execution
+               result = calculator.run()
+   ```
+
+3. **SQL Template Testing**:
+   - **❌ WRONG**: Expecting SQL templates to exist during unit tests
+   - **✅ RIGHT**: Always mock the SQL template manager in unit tests:
+   ```python
+   mock_sql_manager = MagicMock()
+   mock_sql_manager.render_template.return_value = "SELECT * FROM mock_table"
+   context.sql_manager = mock_sql_manager  # Replace with mock
+   ```
+
+4. **Execution Flow Understanding**:
+   - Key method chain: `run()` → `run_sequential()/run_parallel()` → `save_for_table()` → `execute_for_table()` → `calculate_for_table()`
+   - When mocking, understand which method in the chain is appropriate for your test

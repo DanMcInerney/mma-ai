@@ -1,0 +1,135 @@
+---
+description: 
+globs: libs/feature_store/calculators/*_calc.py, libs/feature_store/sql_templates/*/*.sql
+alwaysApply: false
+---
+---
+description: Common mistakes encountered and their solutions in the UFC fight prediction system
+globs: libs/feature_store/calculators/*_calc.py, libs/feature_store/sql_templates/*/*.sql
+alwaysApply: false
+---
+# Common Mistakes and Solutions
+
+This rule documents common mistakes encountered in the UFC fight prediction system and their solutions. Use this as a reference to avoid repeating these issues in the future.
+
+## SQL Generation Issues
+
+### 1. Missing Space in Template-Generated SQL
+
+**Problem**: SQL syntax error where column aliases run into the FROM keyword in generated SQL:
+
+```
+...AS ufcage_ratio_opp_avgFROM features.ufcage f
+```
+
+**Root Cause**: When generating SQL for multiple columns, the string concatenation in the template doesn't ensure proper spacing between the last column alias and the FROM keyword.
+
+**Solution**: Add an extra space after the column alias in the column calculation string:
+
+```python
+# Incorrect:
+f"AVG({col}) OVER (...) AS {col}{self.layer_suffix}"
+
+# Correct:
+f"AVG({col}) OVER (...) AS {col}{self.layer_suffix} "  # Note the extra space
+```
+
+### 2. Missing SQL Templates
+
+**Problem**: Error messages about missing SQL templates when calculators try to render SQL:
+
+```
+Error executing SQL template first_time_avg.calculate: Error loading template first_time_avg/calculate.sql
+```
+
+**Root Cause**: Calculators refer to SQL templates that don't exist or are in unexpected locations. This often happens with new calculators that need specialized templates.
+
+**Solution**: 
+1. Ensure all SQL templates exist in the expected location (`libs/feature_store/sql_templates/<calculator_type>/`)
+2. For specialized calculators, create the appropriate template directory structure
+3. Use fallback inline SQL generation when templates are missing:
+
+```python
+try:
+    sql = self.execute_sql_template(
+        'template_name',
+        'operation',
+        template_params
+    )
+    return sql
+except Exception as e:
+    self.logger.warning(f"Template rendering failed, using inline SQL: {str(e)}")
+    # Generate SQL inline as fallback
+```
+
+## Class Inheritance Issues
+
+### 1. BaseLayerCalculator vs BaseCalculator
+
+**Problem**: TypeError when calling get_features in calculators extending BaseLayerCalculator instead of BaseCalculator.
+
+**Root Cause**: BaseLayerCalculator implements a get_features method with a different signature than BaseCalculator's get_features method.
+
+**Solution**: Always extend BaseCalculator directly rather than using BaseLayerCalculator. Update any existing calculators to extend BaseCalculator and adjust method signatures accordingly.
+
+## Testing Issues
+
+### 1. Mocking BaseCalculator and ColumnFilter in Tests
+
+**Problem**: AttributeError when testing calculators that use include_patterns or exclude_patterns:
+
+```
+AttributeError: 'TimedecAvgCalculator' object has no attribute 'include_patterns'. Did you mean: 'add_include_pattern'?
+```
+
+**Root Cause**: When mocking BaseCalculator.__init__ in tests, the ColumnFilter initialization is skipped, which is where include_patterns and exclude_patterns are initialized.
+
+**Solution**: When writing tests for calculators, ensure proper initialization of all required attributes:
+
+```python
+# Correct approach for testing calculators
+with patch.object(ColumnFilter, '__init__', return_value=None), \
+     patch.object(BaseCalculator, '__init__', return_value=None):
+    
+    # Create calculator with empty patterns to avoid add_pattern calls
+    calculator = MyCalculator(
+        mock_context,
+        include_patterns=set(),  # Empty to avoid add_include_pattern calls
+        exclude_patterns=set()   # Empty to avoid add_exclude_pattern calls
+    )
+    
+    # Manually initialize all required attributes
+    calculator.include_patterns = set(['land', 'acc'])
+    calculator.exclude_patterns = set(['opp'])
+    # ... other attributes
+    
+    # Mock method calls that use these attributes
+    calculator.add_include_pattern = MagicMock()
+    calculator.add_exclude_pattern = MagicMock()
+```
+
+### 2. Testing Column Filtering Methods
+
+**Problem**: Difficulty testing the should_process_column method when it's already mocked in setUp.
+
+**Root Cause**: In test suites, methods are often mocked globally in setUp, but specific tests might need to test the actual implementation.
+
+**Solution**: For testing specific methods that are already mocked, temporarily replace the mock:
+
+```python
+# Save original mock implementation
+original_method = self.calculator.should_process_column
+
+try:
+    # Replace with test implementation
+    self.calculator.should_process_column = custom_implementation
+    
+    # Run tests
+    for test_case in test_cases:
+        # Test the method with different inputs
+        result = self.calculator.should_process_column(test_case)
+        self.assertEqual(result, expected_result)
+finally:
+    # Restore original mock for other tests
+    self.calculator.should_process_column = original_method
+```

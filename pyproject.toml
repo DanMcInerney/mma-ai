@@ -1,0 +1,78 @@
+[project]
+name = "mma-ai-db"
+version = "0.1.0"
+description = "UFC fight prediction system using AutoGluon and PostgreSQL"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    # --- Core ---
+    "pandas>=1.5.0",
+    "numpy>=1.23.0",
+    
+    # --- Database ---
+    "sqlalchemy>=2.0.0",
+    "sqlalchemy-utils>=0.38.0",
+    "psycopg2-binary>=2.9.5",
+    
+    # --- Machine Learning (AutoGluon is installed manually later) ---
+    "scikit-learn>=1.3.0",
+    "joblib>=1.3.0",
+    "catboost>=1.2.8",
+    "lightgbm>=4.6.0",
+    "xgboost>=2.1.4",
+    "torch>=2.5.1",  # This will pull the Nightly CUDA 13 version
+    "omegaconf>=2.3.0",
+    
+    # --- Web & Scraping ---
+    "requests>=2.28.0",
+    "beautifulsoup4>=4.11.0",
+    "curl-cffi>=0.5.0",
+    "lxml>=4.9.0",
+    "scrapy>=2.13.0",
+    "selenium>=4.15.0",
+    "webdriver-manager>=4.0.0",
+    
+    # --- Visualization ---
+    "matplotlib>=3.6.0",
+    "seaborn>=0.12.0",
+    "plotly>=5.17.0",
+    "kaleido>=0.2.1",
+    
+    # --- Utilities ---
+    "fuzzywuzzy>=0.18.0",
+    "unidecode>=1.3.0",
+    "tqdm>=4.64.0",
+    "python-dotenv>=1.0.0",
+    "jinja2>=3.0.0",
+    "pillow>=9.5.0",
+    "shap>=0.42.0",
+    "optuna>=3.4.0",
+    "optuna-dashboard>=0.13.0",
+    "tabulate>=0.9.0",
+    "python-levenshtein>=0.25.1",
+    "autogluon.tabular>=1.3.0",
+    "google-generativeai>=0.8.0",
+    
+    # --- Testing ---
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=7.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+# --- COMMANDS ---
+
+[project.scripts]
+mma-scrape-ufcstats = "scripts.scrape_ufcstats:main"
+mma-rebuild-db = "main:cli"
+mma-train = "libs.modeling.train:cli"
+mma-predict = "predict:cli"

@@ -1,0 +1,95 @@
+OPTIMIZATION SCRIPT IMPROVEMENTS
+Based on comprehensive data analysis - 2026-01-01
+
+=== FINDINGS ===
+
+1. BOUNDARY HITS (18% of cases):
+   - Accuracy stats hitting both ends: sub_acc needs (2, 150) not (10, 100)
+   - Beta-binomial hitting upper: win needs (..., 90) not (..., 60)
+   - Poisson-gamma hitting upper: rev needs (..., 120) not (..., 80)
+
+2. SMALL IMPROVEMENTS (median +0.59%):
+   - Global tau is already well-optimized
+   - 60% of per-class optimizations show <0.1% change (noise level)
+   - Only 4.3% show >1% improvement
+   - Should add minimum improvement threshold for per-class selection
+
+3. DATA QUALITY ISSUES:
+   - Some improvement calculations produce -inf or NaN
+   - Need to handle edge cases better (division by zero, empty folds)
+   - Catchweight has only 88 fights (too small for reliable per-class tau)
+
+4. HIGH VARIANCE STATS (good candidates for per-class):
+   - KO rates: CV=0.265 (flyweight 10% vs heavyweight 25%)
+   - Sub accuracy: CV=0.282 (featherweight 19% vs heavyweight 47%)
+   - Sig strikes: CV=0.072 (LOW - global tau sufficient)
+
+=== RECOMMENDED CHANGES ===
+
+1. EXPAND SEARCH RANGES:
+   comprehensive_likelihood_tuner.py line ~140-180
+
+   Current:
+   - accuracy: (10.0, 100.0)
+   - beta_binomial: (3.0, 60.0)
+   - poisson_gamma: varies
+
+   New:
+   - accuracy: (3.0, 150.0)  # Allow wider range for sparse stats
+   - beta_binomial: (3.0, 90.0)  # Many win stats hit 60 upper bound
+   - poisson_gamma: (0.3, 120.0)  # Rev stats hit 80 upper bound
+
+2. ADD MINIMUM IMPROVEMENT THRESHOLD:
+   comprehensive_likelihood_tuner.py ~line 480-510 (_evaluate_per_weightclass)
+
+   Current logic:
+   if per_class_nll < global_nll:
+       use per-class
+
+   New logic:
+   improvement_pct = (global_nll - per_class_nll) / global_nll * 100
+   if improvement_pct > 0.5:  # Require >0.5% improvement
+       use per-class
+   else:
+       use global (simpler model, avoid overfitting noise)
+
+3. ADD MINIMUM SAMPLE SIZE:
+   comprehensive_likelihood_tuner.py ~line 480-510
+
+   MIN_FIGHTS_PER_WEIGHTCLASS = 200  # Exclude catchweight (88 fights)
+
+   if n_samples < MIN_FIGHTS_PER_WEIGHTCLASS:
+       use global tau (insufficient data)
+
+4. ADD MAXIMUM STABILITY THRESHOLD:
+   comprehensive_likelihood_tuner.py ~line 480-510
+
+   if tau_stability > 20:
+       use global tau (unstable optimization across CV folds)
+
+5. FIX NaN/INF HANDLING:
+   comprehensive_likelihood_tuner.py throughout
+
+   - Add checks for np.isfinite() before calculating improvements
+   - Handle empty CV folds gracefully
+   - Add epsilon to denominators to prevent division by zero
+
+=== EXPECTED IMPACT ===
+
+- Fewer false positives: Only use per-class when improvement >0.5% (not noise)
+- Better coverage: Boundary hits eliminated, can find true optima
+- More stable: Reject unstable optimizations (tau_stability >20)
+- Cleaner data: No more inf/-inf/NaN in results
+
+=== PRIORITY ===
+
+HIGH PRIORITY:
+1. Expand search ranges (fixes 18% of cases hitting boundaries)
+2. Add minimum improvement threshold (prevents overfitting to noise)
+
+MEDIUM PRIORITY:
+3. Add minimum sample size filter (exclude catchweight)
+4. Fix NaN/inf handling (clean up output)
+
+LOW PRIORITY:
+5. Add stability threshold (additional safety check)

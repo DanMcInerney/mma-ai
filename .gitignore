@@ -1,0 +1,91 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Development folders
+old/
+temp/
+tmp/
+
+# IDE specific files
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+.DS_Store
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# pytest
+.pytest_cache/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm    # SQLite shared memory file
+*.db-wal    # SQLite write-ahead log file
+*.sqlite-shm
+*.sqlite3-shm
+*.sqlite-wal
+*.sqlite3-wal
+
+# test files
+dynamic_result.csv
+
+# AutoGluon
+AutoGluonModels/
+
+# Generated data and reports
+data/
+pics/
+visualizations/
+blogs/
+queries/
+experiments/
+walk_forward_test_run/
+*.csv
+*.html
+*.ipynb
+*data.csv
+notes.txt
+odds_last_scrape.txt
+README_OPTIMIZATION.md
+
+# Backups and model artifacts
+backups/
+OptimizedModels/

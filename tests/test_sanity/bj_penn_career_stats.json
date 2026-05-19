@@ -1,0 +1,468 @@
+{
+  "fighter": "BJ Penn",
+  "extraction_date": "2025-09-02T20:23:08.806288",
+  "_metadata": {
+    "description": "BJ Penn's career stats and opponent stats for sanity checking",
+    "adjperf_calculation": {
+      "formula": "stat_adjperf = (fighter1_stat - fighter2_stat_opp_avg) / fighter2_stat_opp_mad",
+      "explanation": {
+        "fighter1_stat": "The current fighter's stat value for this fight",
+        "fighter2_stat_opp_avg": "The opponent's historical average of this stat against their previous opponents",
+        "fighter2_stat_opp_mad": "The opponent's historical median absolute deviation of this stat against their previous opponents"
+      },
+      "fallback": "For first-time fighters (no previous fights), fallback values are used from weightclass averages",
+      "decay_variants": {
+        "_dec_avg": "Time-decayed average with 1.5-year half-life weighting recent fights more heavily",
+        "_adjperf": "Adjusted performance using opponent's historical stats",
+        "_dec_adjperf": "Adjusted performance using time-decayed opponent stats",
+        "_dec_adjperf_dec_avg": "Time-decayed average of adjusted performance values"
+      }
+    },
+    "smoothing_methods": {
+      "poisson_gamma": {
+        "description": "Poisson-Gamma smoothing applied to most count-based stats",
+        "applies_to": "All stats except ko, sub_land, decision, and win",
+        "purpose": "Smooths count data using Bayesian inference with Poisson likelihood and Gamma prior"
+      },
+      "beta_binomial": {
+        "description": "Beta-Binomial smoothing applied to binary outcome stats",
+        "applies_to": "ko, sub_land, decision, and win stats only",
+        "purpose": "Smooths binary/proportion data using Bayesian inference with Beta prior"
+      }
+    }
+  },
+  "fights": [
+    {
+      "fight_id": 184,
+      "event_date": "2001-05-04",
+      "event_location": "Atlantic City, New Jersey, USA",
+      "opponent": "joey gilbert",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 192,
+      "event_date": "2001-06-29",
+      "event_location": "East Rutherford, New Jersey, USA",
+      "opponent": "din thomas",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 394,
+      "event_date": "2001-11-02",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "caol uno",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 376,
+      "event_date": "2002-01-11",
+      "event_location": "Uncasville, Connecticut, USA",
+      "opponent": "jens pulver",
+      "method": "Decision - Majority",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 387,
+      "event_date": "2002-05-10",
+      "event_location": "Bossier City, Louisiana, USA",
+      "opponent": "paul creighton",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 360,
+      "event_date": "2002-09-27",
+      "event_location": "Uncasville, Connecticut, USA",
+      "opponent": "matt serra",
+      "method": "Decision - Unanimous",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 324,
+      "event_date": "2003-02-28",
+      "event_location": "Atlantic City, New Jersey, USA",
+      "opponent": "caol uno",
+      "method": "Decision - Split",
+      "result": 2,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 319,
+      "event_date": "2004-01-31",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "matt hughes",
+      "method": "Submission",
+      "result": 1,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 448,
+      "event_date": "2006-03-04",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "georges st-pierre",
+      "method": "Decision - Split",
+      "result": 1,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 680,
+      "event_date": "2006-09-23",
+      "event_location": "Anaheim, California, USA",
+      "opponent": "matt hughes",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 830,
+      "event_date": "2007-06-23",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "jens pulver",
+      "method": "Submission",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 749,
+      "event_date": "2008-01-19",
+      "event_location": "Newcastle, England, United Kingdom",
+      "opponent": "joe stevenson",
+      "method": "Submission",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 969,
+      "event_date": "2008-05-24",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "sean sherk",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1061,
+      "event_date": "2009-01-31",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "georges st-pierre",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1331,
+      "event_date": "2009-08-08",
+      "event_location": "Philadelphia, Pennsylvania, USA",
+      "opponent": "kenny florian",
+      "method": "Submission",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1260,
+      "event_date": "2009-12-12",
+      "event_location": "Memphis, Tennessee, USA",
+      "opponent": "diego sanchez",
+      "method": "TKO - Doctor's Stoppage",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1196,
+      "event_date": "2010-04-10",
+      "event_location": "Abu Dhabi, United Arab Emirates",
+      "opponent": "frankie edgar",
+      "method": "Decision - Unanimous",
+      "result": 0,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1457,
+      "event_date": "2010-08-28",
+      "event_location": "Boston, Massachusetts, USA",
+      "opponent": "frankie edgar",
+      "method": "Decision - Unanimous",
+      "result": 1,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1357,
+      "event_date": "2010-11-20",
+      "event_location": "Auburn Hills, Michigan, USA",
+      "opponent": "matt hughes",
+      "method": "KO/TKO",
+      "result": 0,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1682,
+      "event_date": "2011-02-26",
+      "event_location": "Sydney, New South Wales, Australia",
+      "opponent": "jon fitch",
+      "method": "Decision - Majority",
+      "result": 2,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 1837,
+      "event_date": "2011-10-29",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "nick diaz",
+      "method": "Decision - Unanimous",
+      "result": 0,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 2146,
+      "event_date": "2012-12-08",
+      "event_location": "Seattle, Washington, USA",
+      "opponent": "rory macdonald",
+      "method": "Decision - Unanimous",
+      "result": 0,
+      "weightclass": "welterweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 2649,
+      "event_date": "2014-07-06",
+      "event_location": "Las Vegas, Nevada, USA",
+      "opponent": "frankie edgar",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "featherweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 4042,
+      "event_date": "2017-01-15",
+      "event_location": "Phoenix, Arizona, USA",
+      "opponent": "yair rodriguez",
+      "method": "KO/TKO",
+      "result": 1,
+      "weightclass": "featherweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 3899,
+      "event_date": "2017-06-25",
+      "event_location": "Oklahoma City, Oklahoma, USA",
+      "opponent": "dennis siver",
+      "method": "Decision - Majority",
+      "result": 0,
+      "weightclass": "featherweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 4676,
+      "event_date": "2018-12-29",
+      "event_location": "Los Angeles, California, USA",
+      "opponent": "ryan hall",
+      "method": "Submission",
+      "result": 0,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    },
+    {
+      "fight_id": 4848,
+      "event_date": "2019-05-11",
+      "event_location": "Rio de Janeiro, Rio de Janeiro, Brazil",
+      "opponent": "clay guida",
+      "method": "Decision - Unanimous",
+      "result": 0,
+      "weightclass": "lightweight",
+      "stats": {
+        "bj_penn": {},
+        "opponent": {}
+      },
+      "adjperf_analysis": {},
+      "opponent_history": {},
+      "weightclass_priors": {}
+    }
+  ]
+}

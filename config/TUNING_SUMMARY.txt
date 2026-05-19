@@ -1,0 +1,249 @@
+================================================================================
+BAYESIAN SMOOTHING PARAMETER TUNING SUMMARY
+================================================================================
+
+Training Period: 2014-01-01 to 2023-12-31
+Stats Tuned: 49
+Weight Classes: 8
+Total Optimizations: 392
+
+================================================================================
+BETA-BINOMIAL PARAMETERS (Binary Outcomes)
+================================================================================
+
+Global Parameters:
+  ctrl                 tau =   50.0
+  ctrl_rd1             tau =   50.0
+  decision             tau =   71.2
+  ko                   tau =   56.3
+  ko_rd1               tau =  207.5
+  sub_land             tau =   80.0
+  sub_land_rd1         tau =   80.0
+  win                  tau =   71.2
+  win_rd1              tau =   63.3
+
+Per-Weightclass Overrides:
+  bantamweight:
+    ctrl               tau =   50.0
+    ctrl_rd1           tau =   50.0
+    decision           tau =   71.2
+    ko                 tau =   71.2
+    win_rd1            tau =   71.2
+  featherweight:
+    ctrl_rd1           tau =   50.0
+  flyweight:
+    ko                 tau =   71.2
+    ko_rd1             tau =   56.3
+    sub_land           tau =   13.0
+    sub_land_rd1       tau =   80.0
+    win_rd1            tau =   71.2
+  heavyweight:
+    ctrl               tau =   50.0
+    ctrl_rd1           tau =   50.0
+    sub_land           tau =   80.0
+    sub_land_rd1       tau =   80.0
+    win_rd1            tau =   56.3
+  light heavyweight:
+    decision           tau =   39.6
+    ko                 tau =   71.2
+    ko_rd1             tau =  157.7
+    sub_land           tau =   80.0
+    sub_land_rd1       tau =   80.0
+    win_rd1            tau =   71.2
+  lightweight:
+    sub_land           tau =    5.0
+    sub_land_rd1       tau =    6.1
+  middleweight:
+    ctrl               tau =   50.0
+    sub_land           tau =   80.0
+  welterweight:
+    ctrl               tau =   50.0
+    sub_land           tau =    5.0
+    sub_land_rd1       tau =    5.0
+
+================================================================================
+POISSON-GAMMA PARAMETERS (Count Data, tau in pseudo-minutes)
+================================================================================
+
+Global Parameters:
+  body                 tau =    2.3 minutes
+  body_rd1             tau =    1.9 minutes
+  clinch               tau =    1.8 minutes
+  clinch_rd1           tau =    1.2 minutes
+  distance             tau =    1.1 minutes
+  distance_rd1         tau =    1.0 minutes
+  ground               tau =    0.9 minutes
+  ground_rd1           tau =    0.1 minutes
+  head                 tau =    0.9 minutes
+  head_rd1             tau =    0.7 minutes
+  kd                   tau =   20.8 minutes
+  kd_rd1               tau =   10.8 minutes
+  leg                  tau =    2.3 minutes
+  leg_rd1              tau =    1.5 minutes
+  rev                  tau =   40.1 minutes
+  rev_rd1              tau =  120.0 minutes
+  sig_str              tau =    0.9 minutes
+  sig_str_rd1          tau =    0.7 minutes
+  sub                  tau =   12.3 minutes
+  sub_rd1              tau =    7.3 minutes
+  td                   tau =    6.6 minutes
+  td_rd1               tau =    8.0 minutes
+
+Per-Weightclass Overrides:
+  bantamweight:
+    clinch             tau =    1.8 minutes
+    clinch_rd1         tau =    1.3 minutes
+    kd                 tau =    6.2 minutes
+    kd_rd1             tau =    5.0 minutes
+    td_rd1             tau =   20.6 minutes
+  featherweight:
+    clinch_rd1         tau =    1.3 minutes
+    rev                tau =   25.9 minutes
+    rev_rd1            tau =  120.0 minutes
+    sub                tau =   10.9 minutes
+    sub_rd1            tau =    6.6 minutes
+    td                 tau =    8.7 minutes
+    td_rd1             tau =   13.0 minutes
+  flyweight:
+    body_rd1           tau =    3.1 minutes
+    clinch             tau =    2.6 minutes
+    clinch_rd1         tau =    1.3 minutes
+    head_rd1           tau =    1.1 minutes
+    kd_rd1             tau =    5.0 minutes
+    sub                tau =   16.8 minutes
+    td                 tau =    7.3 minutes
+  heavyweight:
+    body               tau =    1.7 minutes
+    body_rd1           tau =    1.1 minutes
+    kd                 tau =    5.6 minutes
+    kd_rd1             tau =    5.0 minutes
+    leg                tau =    1.7 minutes
+    sub                tau =    8.7 minutes
+    td                 tau =    5.1 minutes
+  light heavyweight:
+    kd                 tau =   28.9 minutes
+    kd_rd1             tau =   12.0 minutes
+    rev                tau =  120.0 minutes
+    rev_rd1            tau =  120.0 minutes
+    sub                tau =    5.9 minutes
+    sub_rd1            tau =    5.1 minutes
+  lightweight:
+    kd                 tau =  120.0 minutes
+    kd_rd1             tau =  120.0 minutes
+    rev                tau =   32.2 minutes
+    rev_rd1            tau =  120.0 minutes
+  middleweight:
+    kd_rd1             tau =   55.7 minutes
+    leg                tau =    1.7 minutes
+    rev                tau =   35.9 minutes
+  welterweight:
+    ground             tau =    0.9 minutes
+    kd                 tau =   13.4 minutes
+    rev                tau =  120.0 minutes
+    rev_rd1            tau =  120.0 minutes
+    sub_rd1            tau =    4.4 minutes
+    td_rd1             tau =   12.3 minutes
+
+================================================================================
+ACCURACY PARAMETERS (Landed/Attempted Ratios)
+================================================================================
+
+Global Parameters:
+  body_acc             tau =   16.8
+  body_acc_rd1         tau =   12.3
+  clinch_acc           tau =   16.0
+  clinch_acc_rd1       tau =   18.4
+  distance_acc         tau =   28.0
+  distance_acc_rd1     tau =   28.0
+  ground_acc           tau =   16.4
+  ground_acc_rd1       tau =   16.4
+  head_acc             tau =   16.8
+  head_acc_rd1         tau =   13.0
+  leg_acc              tau =   11.6
+  leg_acc_rd1          tau =    9.4
+  sig_str_acc          tau =   20.6
+  sig_str_acc_rd1      tau =   22.4
+  sub_acc              tau =  150.0
+  sub_acc_rd1          tau =  150.0
+  td_acc               tau =    6.6
+  td_acc_rd1           tau =    8.0
+
+Per-Weightclass Overrides:
+  bantamweight:
+    td_acc_rd1         tau =   11.6
+  featherweight:
+    leg_acc            tau =   11.6
+    leg_acc_rd1        tau =    8.0
+  flyweight:
+    head_acc_rd1       tau =   22.4
+    leg_acc            tau =   11.6
+    leg_acc_rd1        tau =   16.8
+    sub_acc            tau =   13.2
+    sub_acc_rd1        tau =  150.0
+  heavyweight:
+    body_acc           tau =   17.4
+    body_acc_rd1       tau =   16.8
+    distance_acc       tau =   25.0
+    distance_acc_rd1   tau =   28.0
+    ground_acc         tau =    9.3
+    ground_acc_rd1     tau =    9.3
+    head_acc           tau =   12.3
+    head_acc_rd1       tau =   10.1
+    leg_acc            tau =    8.7
+    leg_acc_rd1        tau =    5.9
+    sig_str_acc        tau =   18.7
+    sig_str_acc_rd1    tau =   16.8
+    sub_acc            tau =  150.0
+    sub_acc_rd1        tau =  150.0
+    td_acc             tau =    4.4
+    td_acc_rd1         tau =    5.1
+  light heavyweight:
+    clinch_acc         tau =   25.0
+    distance_acc       tau =   28.0
+    distance_acc_rd1   tau =   25.0
+    head_acc           tau =   12.3
+    leg_acc_rd1        tau =   14.9
+    sig_str_acc        tau =   24.3
+    sig_str_acc_rd1    tau =   24.3
+    sub_acc            tau =  150.0
+    sub_acc_rd1        tau =  150.0
+  lightweight:
+    body_acc_rd1       tau =   18.7
+    ground_acc_rd1     tau =   10.4
+    sub_acc            tau =    3.0
+    sub_acc_rd1        tau =    5.9
+  middleweight:
+    distance_acc       tau =   22.0
+    head_acc_rd1       tau =   16.8
+    sig_str_acc        tau =   20.6
+    sig_str_acc_rd1    tau =   24.3
+    sub_acc            tau =  150.0
+  welterweight:
+    sub_acc            tau =    3.0
+    sub_acc_rd1        tau =    3.0
+
+================================================================================
+KEY DIAGNOSTICS
+================================================================================
+
+Stats with High Prior Weight (shrinkage > 50%):
+  sub_acc_rd1          heavyweight          shrinkage=68.2% tau=150.0
+  sub_acc_rd1          light heavyweight    shrinkage=60.2% tau=150.0
+  sub_acc              heavyweight          shrinkage=55.8% tau=150.0
+  sub_land_rd1         heavyweight          shrinkage=53.3% tau=80.0
+
+Stats with Low Prior Weight (shrinkage < 20%, more responsive):
+  ground_rd1           lightweight          shrinkage=0.0% tau=0.1
+  ground_rd1           welterweight         shrinkage=0.0% tau=0.1
+  ground_rd1           featherweight        shrinkage=0.0% tau=0.1
+  ground_rd1           middleweight         shrinkage=0.0% tau=0.1
+  ground_rd1           bantamweight         shrinkage=0.0% tau=0.1
+  ground_rd1           light heavyweight    shrinkage=0.0% tau=0.1
+  ground_rd1           heavyweight          shrinkage=0.0% tau=0.1
+  ground_rd1           flyweight            shrinkage=0.0% tau=0.1
+  ctrl                 lightweight          shrinkage=0.0% tau=50.0
+  ctrl                 welterweight         shrinkage=0.0% tau=50.0
+
+================================================================================
+END OF SUMMARY
+================================================================================
