@@ -1,6 +1,154 @@
-# MMA AI Database: Comprehensive Architecture & Configuration Guide
+# MMA AI
 
-**Complete technical documentation of the UFC fight prediction system from raw data ingestion through model training.**
+Dockerized UFC fight data, model training, analytics, and prediction dashboard.
+This repository combines the raw UFCStats scraping workflow from `UFCScraper`
+with the feature store, training, and prediction system from `mma-ai-db`.
+
+## Quick Start
+
+For a first-time local install with predictions ready, run the bootstrap script.
+It downloads the database dumps, processed prediction/training CSVs, and starter
+AutoGluon model from `https://huggingface.co/datasets/DanMcInerney/mma-ai`,
+imports the dumps into Docker Postgres, optionally records a Gemini/Google API
+key for LLM analytics, starts the dashboard, and opens it in your browser.
+
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+macOS/Linux:
+
+```bash
+bash setup.sh
+```
+
+Open the dashboard at http://127.0.0.1:8000.
+
+The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
+`.env.example` to `.env` yourself if you want to provide keys or non-default
+paths before running setup.
+
+If you already bootstrapped artifacts and only want to start the app:
+
+```bash
+docker compose up --build
+```
+
+The Compose stack starts PostgreSQL 18 and initializes both the main `mma-ai`
+database and the auxiliary `odds` database used by odds-related workflows. The
+setup scripts restore the Hugging Face dumps into those databases.
+
+For local development without Docker:
+
+```bash
+uv sync
+uv run mma-web
+```
+
+## Seed Data And Database Bootstrap
+
+This repo ships with current seed UFCStats CSVs at
+`data/raw/ufcstats/competitions.csv` and `data/raw/ufcstats/individuals.csv`.
+Generated training/prediction CSVs, trained models, screenshots, logs, and
+database dumps stay out of git. Docker Compose bind-mounts local `data/` to
+`/app/data`, so the checked-in seed CSVs are available to the web app and can be
+updated in place.
+
+Large PostgreSQL dumps for the main `mma-ai` database and the auxiliary `odds`
+database are distributed through the companion Hugging Face Dataset:
+`https://huggingface.co/datasets/DanMcInerney/mma-ai`. Import those once for the
+fast bootstrap path. `setup.ps1` and `setup.sh` perform that import and extract
+the pretrained `ag-20260304_110750-win-extreme` model as the initial Predict tab
+model. After that, normal data updates are:
+
+```bash
+uv run mma-rebuild-db --scrape --reset-db
+```
+
+The UFCStats scraper is incremental by default. It reads the existing CSVs,
+skips fighter URLs and event URLs already present, merges only newly discovered
+fighters/fights, and preserves the existing rows. Use `uv run
+mma-scrape-ufcstats --force-full` only when you intentionally want to rebuild
+the raw CSVs from scratch.
+
+To run the dashboard directly against your current host PostgreSQL databases:
+
+```powershell
+$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/mma-ai"
+$env:ODDS_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/odds"
+uv run mma-web
+```
+
+To run the Docker web app against an existing Postgres instance on your host,
+copy `.env.example` to `.env` and set the Compose-specific URLs:
+
+```env
+MMA_AI_COMPOSE_DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/mma-ai
+MMA_AI_COMPOSE_ODDS_DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/odds
+```
+
+Then run only the web service so Compose does not also start its bundled
+Postgres service on port 5432:
+
+```bash
+docker compose up --build web
+```
+
+If you want a fully isolated Docker database instead, leave those Compose URLs
+unset and import the Hugging Face dumps into the Compose Postgres volume. The
+Data tab defaults to incremental UFCStats scrape plus generated-schema
+recreation, so future raw CSV updates rebuild the local feature store without
+requiring another dump import. Train/Predict also need generated CSVs and model
+artifacts in the mounted `data/` and `AutoGluonModels/` folders, or you need to
+run the Data and Train tabs to create them.
+
+## Dashboard
+
+- Data: refresh raw UFCStats CSVs, rebuild the PostgreSQL feature store, write
+  finalized CSVs, and run read-only AI analytics over Postgres or finalized CSV
+  fallbacks. The collapsed pipeline options include an opt-in BFO odds refresh
+  that scrapes odds and recalculates odds features only when enabled.
+- Train: launch model training with the existing `libs/modeling/train.py`
+  defaults, keep advanced knobs collapsed, chat about training/features, and
+  inspect saved evaluation artifacts.
+- Predict: choose a model, load upcoming UFC events from Wikipedia, predict a
+  selected event, or run a manual fighter-vs-fighter matchup with positive-EV
+  output cards. Event prediction accepts manual fighter odds in the dashboard so
+  web jobs never need to block on terminal prompts.
+
+Each long-running Data, Train, or Predict job writes a debug log under
+`data/logs/jobs` and exposes it through the dashboard and `/api/jobs/{job_id}/log`.
+
+## Commands
+
+```bash
+uv run mma-scrape-ufcstats
+uv run mma-rebuild-db
+uv run mma-train
+uv run mma-predict
+uv run pytest
+```
+
+The dashboard uses the same command paths in background jobs so the UI does not
+fork a separate feature or prediction implementation.
+
+## Project Files
+
+- `AGENTS.md` and `CLAUDE.md`: agent guidance for safe analytics, training,
+  prediction, feature semantics, and test expectations.
+- `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
+  and the FastAPI dashboard.
+- `libs/web`: FastAPI app, background jobs, web service adapters, analytics,
+  training chat, evaluation summaries, and static UI.
+- `data`: finalized CSV outputs such as `prediction_data.csv`,
+  `training_data.csv`, and `training_data_dec.csv`.
+
+## Architecture Reference
+
+The remainder of this README preserves the technical feature-store guide from
+the original `mma-ai-db` project.
 
 **Last Updated:** 2026-01-01
 **System Version:** Production (Post Tau & Decay Optimization)
@@ -47,7 +195,7 @@ This system transforms raw UFC fight statistics into high-quality machine learni
 ### Technology Stack
 
 - **Database:** PostgreSQL (features schema)
-- **Language:** Python 3.9+
+- **Language:** Python 3.10-3.12
 - **Key Libraries:** SQLAlchemy, pandas, numpy, scipy
 - **Optimization:** Time-series cross-validation with Beta-Binomial/Negative Binomial likelihood
 
@@ -743,7 +891,8 @@ training_df = ctd.create_training_data()
 2. **Configure local environment:**
    ```bash
    cp .env.example .env
-   # Edit DATABASE_URL if your PostgreSQL setup needs a username, password, host, or different DB name.
+   # The example URLs match Docker Compose's localhost Postgres defaults.
+   # Edit them if your PostgreSQL setup uses different credentials, host, or DB names.
    ```
 
 3. **Restore shared database artifacts (fast path):**
@@ -770,11 +919,11 @@ training_df = ctd.create_training_data()
    createdb -U postgres odds
 
    pg_restore --clean --if-exists --no-owner --jobs 4 \
-     --dbname "postgresql://postgres@localhost:5432/mma-ai" \
+     --dbname "postgresql://postgres:postgres@localhost:5432/mma-ai" \
      artifacts/mma-ai-dataset/dumps/mma-ai.postgres-custom
 
    pg_restore --clean --if-exists --no-owner --jobs 4 \
-     --dbname "postgresql://postgres@localhost:5432/odds" \
+     --dbname "postgresql://postgres:postgres@localhost:5432/odds" \
      artifacts/mma-ai-dataset/dumps/odds.postgres-custom
    ```
 
@@ -785,11 +934,11 @@ training_df = ctd.create_training_data()
    createdb -U postgres odds
 
    pg_restore --clean --if-exists --no-owner --jobs 4 `
-     --dbname "postgresql://postgres@localhost:5432/mma-ai" `
+     --dbname "postgresql://postgres:postgres@localhost:5432/mma-ai" `
      artifacts\mma-ai-dataset\dumps\mma-ai.postgres-custom
 
    pg_restore --clean --if-exists --no-owner --jobs 4 `
-     --dbname "postgresql://postgres@localhost:5432/odds" `
+     --dbname "postgresql://postgres:postgres@localhost:5432/odds" `
      artifacts\mma-ai-dataset\dumps\odds.postgres-custom
    ```
 
@@ -822,17 +971,17 @@ training_df = ctd.create_training_data()
      --no-shap
    ```
 
-4. **Scrape UFCStats from this repo (full rebuild path):**
+4. **Scrape UFCStats from this repo (incremental raw CSV update):**
    ```bash
    uv run python -m scripts.scrape_ufcstats
    ```
 
-5. **Rebuild the database and training CSVs:**
+5. **Recreate the database schemas and training CSVs from the CSVs:**
    ```bash
    uv run python main.py --reset-db
    ```
 
-   You can combine scraping and rebuild in one command:
+   You can combine the incremental scrape and database recreation in one command:
    ```bash
    uv run python main.py --scrape --reset-db
    ```
@@ -851,8 +1000,8 @@ training_df = ctd.create_training_data()
 
 Root `.env` example:
 ```env
-DATABASE_URL=postgresql://postgres@localhost:5432/mma-ai
-ODDS_DATABASE_URL=postgresql://postgres@localhost:5432/odds
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mma-ai
+ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds
 THE_ODDS_API_KEY=
 GOOGLE_API_KEY=
 GEMINI_API_KEY=

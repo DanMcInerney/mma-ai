@@ -1,7 +1,7 @@
 [project]
-name = "mma-ai-db"
+name = "mma-ai"
 version = "0.1.0"
-description = "UFC fight prediction system using AutoGluon and PostgreSQL"
+description = "Dockerized UFC fight data, training, analytics, and prediction dashboard"
 requires-python = ">=3.10,<3.13"
 dependencies = [
     # --- Core ---
@@ -51,6 +51,8 @@ dependencies = [
     "python-levenshtein>=0.25.1",
     "autogluon.tabular>=1.3.0",
     "google-generativeai>=0.8.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
     
     # --- Testing ---
     "pytest>=8.3.5",
@@ -61,13 +63,25 @@ dependencies = [
 test = [
     "pytest>=7.0.0",
     "pytest-mock>=3.10.0",
+    "httpx>=0.27.0",
 ]
 
 [dependency-groups]
 dev = [
     "pytest>=7.0.0",
     "pytest-mock>=3.10.0",
+    "httpx>=0.27.0",
 ]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main", "predict"]
+
+[tool.setuptools.packages.find]
+include = ["config*", "libs*", "scripts*"]
 
 # --- COMMANDS ---
 
@@ -76,3 +90,4 @@ mma-scrape-ufcstats = "scripts.scrape_ufcstats:main"
 mma-rebuild-db = "main:cli"
 mma-train = "libs.modeling.train:cli"
 mma-predict = "predict:cli"
+mma-web = "libs.web.cli:main"

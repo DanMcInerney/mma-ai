@@ -71,7 +71,12 @@ dynamic_result.csv
 AutoGluonModels/
 
 # Generated data and reports
-data/
+data/**
+!data/
+!data/raw/
+!data/raw/ufcstats/
+!data/raw/ufcstats/competitions.csv
+!data/raw/ufcstats/individuals.csv
 pics/
 visualizations/
 blogs/
@@ -82,6 +87,11 @@ walk_forward_test_run/
 *.html
 *.ipynb
 *data.csv
+!data/
+!data/raw/
+!data/raw/ufcstats/
+!data/raw/ufcstats/competitions.csv
+!data/raw/ufcstats/individuals.csv
 notes.txt
 odds_last_scrape.txt
 README_OPTIMIZATION.md

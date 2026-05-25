@@ -1,0 +1,137 @@
+from pathlib import Path
+
+
+STATIC_DIR = Path(__file__).resolve().parents[2] / "libs" / "web" / "static"
+
+
+def test_prediction_card_renderer_exposes_value_and_market_context():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert 'src="/vendor/plotly.min.js"' in html
+    assert 'src="/static/icons.js"' in html
+    assert "cdn.plot.ly" not in html
+    assert "unpkg.com" not in html
+    assert "Value Side" in app_js
+    assert "Fighter1_Market_Prob" in app_js
+    assert "Fighter2_Market_Prob" in app_js
+    assert "Fighter1_Odds" in app_js
+    assert "Fighter2_Odds" in app_js
+    assert ".value-strip" in styles
+
+
+def test_local_icon_bundle_covers_dashboard_icons():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    icons_js = (STATIC_DIR / "icons.js").read_text(encoding="utf-8")
+
+    icon_names = {
+        token.split('"', 1)[0]
+        for token in html.split('data-lucide="')[1:]
+    }
+
+    assert icon_names
+    for icon_name in icon_names:
+        assert f'{icon_name}:' in icons_js or f'"{icon_name}":' in icons_js
+    assert "window.lucide = { createIcons }" in icons_js
+
+
+def test_primary_workflow_buttons_render_api_errors_in_place():
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert app_js.count("catch (error)") >= 8
+    assert 'renderJson("#data-output", error.message)' in app_js
+    assert 'renderJson("#train-jobs", error.message)' in app_js
+    assert 'renderJson("#events-output", error.message)' in app_js
+    assert 'renderJson("#prediction-output", error.message)' in app_js
+
+
+def test_manual_matchup_validates_required_fighter_names_before_api_call():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'qs("#fighter1").value.trim()' in app_js
+    assert 'qs("#fighter2").value.trim()' in app_js
+    assert 'id="fight-date" type="date"' in html
+    assert 'fight_date: qs("#fight-date").value || null' in app_js
+    assert "Enter both fighter names before prediction." in app_js
+
+
+def test_training_advanced_feature_filter_controls_are_wired():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    for element_id in [
+        "train-feature-list",
+        "train-include-patterns",
+        "train-exclude-patterns",
+        "train-required-features",
+    ]:
+        assert f'id="{element_id}"' in html
+        assert f'qs("#{element_id}").value' in app_js
+
+    assert "feature_list" in app_js
+    assert "included_strings" in app_js
+    assert "excluded_strings" in app_js
+    assert "required_strings" in app_js
+
+
+def test_prediction_advanced_csv_controls_are_wired():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    for element_id in ["predict-data-csv", "predict-training-csv", "predict-output-dir"]:
+        assert f'id="{element_id}"' in html
+        assert f'qs("#{element_id}").value.trim()' in app_js
+
+    assert "prediction_data_csv: predictionDataCsv()" in app_js
+    assert "training_data_csv: trainingDataCsv()" in app_js
+    assert "output_dir: predictionOutputDir()" in app_js
+    assert 'params.set("prediction_data_csv", predictionCsv)' in app_js
+    assert "/api/predict/fighters" in app_js
+    assert "/api/predict/upcoming" in app_js
+
+
+def test_dynamic_select_options_escape_backend_values():
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert '<option value="${escapeHtml(model.path)}">${escapeHtml(model.name)}</option>' in app_js
+    assert '<option value="${escapeHtml(name)}"></option>' in app_js
+
+
+def test_dashboard_controls_hydrate_from_defaults_endpoint():
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'api("/api/defaults")' in app_js
+    assert "function applyDashboardDefaults(defaults)" in app_js
+    assert "setValue(\"#analytics-max-rows\", data.analytics_max_rows)" in app_js
+    assert "setValue(\"#train-time-limit\", train.time_limit)" in app_js
+    assert "setValue(\"#train-split\", train.split_strategy)" in app_js
+    assert "setValue(\"#train-model-families\", listValue(train.included_model_types))" in app_js
+    assert "setChecked(\"#train-refit\", train.refit_full)" in app_js
+    assert "setValue(\"#predict-upcoming\", predict.upcoming_number)" in app_js
+    assert "selectedUpcomingNumber = Number(predict.upcoming_number || 1)" in app_js
+    assert "loadDashboardDefaults().catch(() => {})" in app_js
+
+
+def test_analytics_options_expose_bounded_row_limit():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="analytics-max-rows" type="number" min="1" max="1000" value="100"' in html
+    assert "max_rows: Number(qs(\"#analytics-max-rows\").value || 100)" in app_js
+
+
+def test_debug_logs_and_manual_event_odds_are_wired():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+
+    for element_id in ["data-log", "train-log", "events-log", "prediction-log", "event-manual-odds"]:
+        assert f'id="{element_id}"' in html
+
+    assert "function parseManualOdds(value)" in app_js
+    assert 'manual_odds: parseManualOdds(qs("#event-manual-odds").value)' in app_js
+    assert "async function renderJobLog(target, jobId)" in app_js
+    assert "/api/jobs/${jobId}/log" in app_js
+    assert ".debug-log" in styles

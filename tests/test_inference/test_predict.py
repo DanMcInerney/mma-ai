@@ -26,7 +26,9 @@ from predict import (
     convert_prob_to_american_odds,
     american_odds_to_prob,
     calculate_expected_value,
-    has_positive_ev
+    has_positive_ev,
+    parse_manual_odds_json,
+    apply_manual_odds,
 )
 
 
@@ -41,7 +43,7 @@ class TestBFOLatestOddsOnly:
         assert isinstance(scraper.NAME_MAPPINGS, dict)
         assert isinstance(scraper.REVERSE_MAPPINGS, dict)
         assert isinstance(scraper.DUPE_NAMES, dict)
-    
+
     @patch('predict.requests.get')
     @patch('predict.BeautifulSoup')
     def test_get_fighter_link_success(self, mock_soup, mock_requests):
@@ -997,6 +999,24 @@ class TestErrorHandling:
         
         assert model is not None
         assert calibrator is None  # Should handle the exception gracefully
+
+
+def test_parse_manual_odds_json_accepts_fighter_mapping():
+    result = parse_manual_odds_json('{"fighter one": "-120", "fighter two": "+100"}')
+
+    assert result == {"fighter one": -120, "fighter two": 100}
+
+
+def test_apply_manual_odds_overrides_missing_odds_and_devigs_pair():
+    fight_list = [(datetime(2026, 6, 1), "fighter one", "fighter two")]
+    odds = {"fighter one": "N/A", "fighter two": {"original": 100, "vigless": 105}}
+
+    result = apply_manual_odds(fight_list, odds, {"fighter one": -120})
+
+    assert result["fighter one"]["original"] == -120
+    assert result["fighter two"]["original"] == 100
+    assert isinstance(result["fighter one"]["vigless"], int)
+    assert isinstance(result["fighter two"]["vigless"], int)
 
 
 if __name__ == "__main__":

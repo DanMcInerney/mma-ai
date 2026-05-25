@@ -15,17 +15,17 @@ from libs.feature_store.create_training_data import CreateTrainingData
 def db_engine():
     """Create a database engine once for all tests."""
     # Read database configuration from environment variables or use default test database
-    db_url = os.getenv('TEST_DATABASE_URL', 'postgresql://postgres@localhost:5432/mma-ai')
+    db_url = os.getenv('TEST_DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/mma-ai')
     engine = create_engine(db_url)
     
     # Verify database connection is working
-    with engine.connect() as conn:
-        try:
+    try:
+        with engine.connect() as conn:
             result = conn.execute(text("SELECT 1")).fetchone()
             if not result or result[0] != 1:
                 pytest.skip("Database connection test failed")
-        except Exception as e:
-            pytest.skip(f"Could not connect to test database: {str(e)}")
+    except Exception as e:
+        pytest.skip(f"Could not connect to test database: {str(e)}")
     
     yield engine
 

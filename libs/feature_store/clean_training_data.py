@@ -5,6 +5,9 @@ from typing import Set, List
 import logging
 from libs.feature_store.features import BASE_STATIC_FEATS
 
+STATIC_STATS = BASE_STATIC_FEATS
+
+
 class CleanTrainingData:
     def __init__(self, df: pd.DataFrame, include_patterns: Set[str], exclude_patterns: Set[str] = None,
                  target_type: str = 'win_loss'):
@@ -550,6 +553,7 @@ class CleanTrainingData:
         self.load_data()
         self.shift_fighter_stats()
         self.calculate_stat_differences()
+        correlations = pd.Series(dtype=float)
         
         self.final_df.sort_values(by=['event_date', 'fight_id'], inplace=True)
         self.final_df.reset_index(drop=True, inplace=True)
@@ -601,5 +605,5 @@ class CleanTrainingData:
             print("\nTop 50 Negative Correlations with y_true:")
             print(correlations.tail(50))
 
-        return self.final_df, correlations
-    
+        self.correlations = correlations
+        return self.final_df

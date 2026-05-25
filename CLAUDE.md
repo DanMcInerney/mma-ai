@@ -1,91 +1,148 @@
-# MMA AI Database - CLAUDE.md
+# MMA AI Claude Guide
 
-**Keep this file under 150 lines.**
+This repo is becoming a public, Dockerized MMA AI app that combines the old
+`UFCScraper` raw-data scraper with the `mma-ai-db` feature store, training, and
+prediction system. Keep changes simple, tested, and aligned with the Data,
+Train, and Predict dashboard.
 
-## Project Overview
+## Main Entry Points
 
-This repo contains MMA fight prediction models and outputs. The main workflow is generating predictions, then publishing them to the website.
+- Web app: `libs.web.app:app`
+- First-time setup: `setup.ps1` on Windows or `setup.sh` on macOS/Linux
+- Web command: `uv run mma-web`
+- Docker: `docker compose up --build`
+- Docker Postgres init: `docker/postgres-init/01-create-odds.sql` creates the
+  auxiliary `odds` database for `ODDS_DATABASE_URL`
+- Local chart asset: `/vendor/plotly.min.js` served from the Python `plotly`
+  package
+- Local icon asset: `/static/icons.js`; do not reintroduce CDN icon dependencies
+- Scrape raw UFCStats CSVs: `uv run mma-scrape-ufcstats`
+- Rebuild database and finalized CSVs: `uv run mma-rebuild-db --reset-db`
+- Train model: `uv run mma-train`
+- Predict upcoming event: `uv run mma-predict`
 
-## Key Paths
+## Dashboard Tabs
 
-- **Picks folder:** `pics/picks/` — contains event subfolders with `fight_predictions.csv`
-- **Website repo:** configure per machine, commonly a sibling checkout such as `../mmaai-flask/`
-- **Events JSON:** configure per machine, commonly `../mmaai-flask/data/eventsv6.json`
+- Data: scrape `competitions.csv` and `individuals.csv`, rebuild the Postgres
+  feature store, create `prediction_data.csv`, `training_data.csv`, and
+  `training_data_dec.csv`, optionally refresh BFO odds/features, then support
+  read-only analytics.
+- Train: expose defaults from `libs/modeling/train.py`; keep advanced knobs in
+  collapsed UI controls. The Evaluations subtab reads saved model artifacts and
+  charts holdout prediction metrics. The Training Chat box answers process,
+  feature, leakage, and evaluation questions using local context, or Gemini when
+  configured.
+- Predict: select a model, load upcoming UFC events from Wikipedia, predict the
+  selected event, and run manual fighter matchups through the same inference
+  path.
 
-## Updating the Website with New Picks
+LLM-assisted analytics and training chat use `GEMINI_API_KEY` first and
+`GOOGLE_API_KEY` as a fallback alias.
 
-### Step 1: Read the predictions CSV
+Background jobs write stdout, stderr, subprocess command lines, and tracebacks
+to `data/logs/jobs`; the dashboard reads full logs from `/api/jobs/{job_id}/log`.
 
-The user will tell you which folder in `pics/picks/` to read from. Open `fight_predictions.csv` in that folder.
+The setup scripts download from
+`https://huggingface.co/datasets/DanMcInerney/mma-ai`, verify checksums, restore
+the main and odds dumps into Docker Postgres, copy processed CSVs into `data/`,
+extract `ag-20260304_110750-win-extreme` into `AutogluonModels/`, optionally
+write `GEMINI_API_KEY`, and start the dashboard.
 
-CSV columns: `Fighter1, Fighter2, Fighter1_Odds, Fighter2_Odds, Fighter1_AI_Prob, Fighter2_AI_Prob, Fighter1_Market_Prob, Fighter2_Market_Prob, AI_Pick, Confidence, AI_Odds, EV`
+## Data And Database
 
-### Step 2: Determine result status for each fight
+Default paths:
 
-For each fight, set the `result` field based on these rules:
+- Raw UFCStats CSVs: `data/raw/ufcstats`
+- Finalized CSVs: `data`
+- Models: `AutogluonModels`
+- Picks and graphics: `pics`
 
-- **"Pending"** — ONLY if BOTH conditions are true:
-  1. `EV` = 1 (positive expected value)
-  2. The AI pick is the **Vegas odds favorite** (the picked fighter's odds are negative)
-  - Limit to top 1-2 fights (user specifies how many). Rank by confidence.
-- **"Pending - no bet"** — all other fights
+Important environment variables:
 
-### Step 3: Build the new event entry
+- `DATABASE_URL`
+- `ODDS_DATABASE_URL`
+- `MMA_AI_DATA_DIR`
+- `MMA_AI_UFCSTATS_DIR`
+- `MMA_AI_MODELS_DIR`
+- `MMA_AI_PICKS_DIR`
+- `GEMINI_API_KEY`
+- `GOOGLE_API_KEY`
+- `THE_ODDS_API_KEY`
 
-Add a new entry to the `events` array in `eventsv6.json`:
+The release repo tracks the seed raw UFCStats files
+`data/raw/ufcstats/competitions.csv` and `data/raw/ufcstats/individuals.csv`.
+Generated finalized CSVs, model artifacts, logs, and database dumps are ignored.
+The UFCStats scraper is incremental by default: it skips existing fighter URLs
+and event URLs, merges only new rows, and requires `--force-full` for a raw CSV
+rebuild from scratch. After the initial Hugging Face database import, the normal
+update command is `uv run mma-rebuild-db --scrape --reset-db`.
 
-```json
-{
-  "name": "UFC Fight Night",
-  "date": "YYYY-M-DD",
-  "predictions": [
-    {
-      "fight": "fighter1 vs fighter2",
-      "prediction": "ai_pick_name",
-      "ai_win_pct": 73.6,
-      "ai_odds": -278,
-      "vegas_odds": -116.0,
-      "result": "Pending"
-    }
-  ]
-}
-```
+Core tables live in the `features` schema:
 
-Field mapping from CSV:
-- `fight`: lowercase `"Fighter1 vs Fighter2"`
-- `prediction`: lowercase `AI_Pick`
-- `ai_win_pct`: `Confidence` value
-- `ai_odds`: `AI_Odds` value (integer)
-- `vegas_odds`: The picked fighter's odds as a float (Fighter1_Odds if AI picked Fighter1, else Fighter2_Odds)
-- `result`: See Step 2
+- `fight_stats_fe`: raw UFCStats rows.
+- `fight_stats_derived`: smoothed and derived fight rows.
+- `fighter_mapping`, `event_mapping`, `fight_mapping`: stable IDs and joins.
+- Feature tables such as `age`, `reach`, `height`, `ufc_age`,
+  `days_since_last_fight`, `sig_str`, `strikes`, `td`, `ctrl`, `head`, `body`,
+  `leg`, `distance`, `clinch`, `ground`, `ko`, `decision`, `win`, and `odds`.
 
-Sort predictions by confidence (highest first). Append the new event to the end of the `events` array.
+Feature suffixes:
 
-### Step 4: Resolve the previous event's results
+- `_rd1`: first round.
+- `_smooth`: Bayesian smoothing.
+- `_total`: cumulative total.
+- `_acc`, `_def`, `_per_min`, `_ratio`, `_per`: derived rate features.
+- `_avg`, `_dec_avg`: historical and time-decayed averages.
+- `_mad`, `_sdev`: variability features.
+- `_opp_*`: opponent features.
+- `_adjperf`, `_dec_adjperf`: opponent-adjusted performance.
+- `_diff`: fighter1 minus fighter2 for model input.
 
-Find the most recent prior event in `eventsv6.json` that still has "Pending" or "Pending - no bet" fights. For each unresolved fight:
+## Training Defaults
 
-1. **Search the internet** for the fight result (who won)
-2. Compare the actual winner to the `prediction` field
-3. Update `result`:
+Match `libs/modeling/train.py` unless the user asks otherwise:
 
-| Old Status | AI Correct? | New Status |
-|---|---|---|
-| Pending | Yes | Hit! |
-| Pending | No | Miss |
-| Pending - no bet | Yes | Hit - no bet |
-| Pending - no bet | No | Miss - no bet |
+- target `win`
+- preset `extreme`
+- time limit `3000`
+- split `timeseries_split`
+- walk-forward windows `4`
+- walk-forward initial year `2021`
+- start date `2014-01-01`
+- minimum fights `2`
+- normalization `robust`
+- recency weights enabled with decay `0.15`
+- feature importance enabled
+- refit full enabled
+- refit all data disabled
+- custom feature list/include/exclude/required filters unset by default
 
-Note: If a fight was a draw or no-contest, ask the user how to handle it.
+## Analytics Rules
 
-### Step 5: Save and verify
+Analytics must be read-only. Only execute one `SELECT` or `WITH` statement and
+reject mutation keywords. Prefer finalized model data, then feature-specific
+tables, then `fight_stats_derived`, then raw `fight_stats_fe`.
 
-Save `eventsv6.json` with the updates. Verify the JSON is valid.
+When Postgres is unavailable, analytics can query finalized CSV fallbacks as
+read-only tables: `training_data`, `training_data_dec`, and `prediction_data`.
 
-## Important Notes
+Respect time ordering. A feature for a fight must not use fights after that
+fight's `event_date`.
 
-- Fighter names should be **lowercase** in the JSON
-- Date format in JSON is `YYYY-M-DD` (no leading zeros on month/day, e.g., `2025-3-15`)
-- Vegas odds: negative = favorite, positive = underdog
-- The `events` array is ordered chronologically; always append new events at the end
-- When searching for fight results, confirm the correct event/date to avoid confusion with rematches
+## Prediction Rules
+
+Manual matchups use `predict.py --fighter1 ... --fighter2 ...`, optional
+`--fight-date`, and optional manual American odds. Web jobs must use
+`--no-manual-odds` for BFO lookups so prediction never waits for terminal input.
+Keep event and manual prediction on the same `InferenceDataBuilder` path.
+Advanced dashboard prediction CSV path overrides must stay under
+`MMA_AI_DATA_DIR`, prediction output directory overrides must stay under
+`MMA_AI_DATA_DIR`, and manual matchup dates must use `YYYY-MM-DD`. Event
+prediction can ingest user-supplied American odds through the API/UI
+`manual_odds` mapping, which is passed to `predict.py --manual-odds-json`.
+
+## Testing Rules
+
+Add tests with behavior changes. Web app import and API tests must not import
+AutoGluon, start Scrapy, call Wikipedia, or contact external LLMs. Use
+monkeypatching for heavy training and prediction paths.

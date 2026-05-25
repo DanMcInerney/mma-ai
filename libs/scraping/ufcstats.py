@@ -66,6 +66,16 @@ def _read_existing_values(path: Path, column: str) -> set[str]:
     return set(df[column].dropna().astype(str))
 
 
+def _read_csv_frame(path: Path) -> pd.DataFrame | None:
+    if not path.exists() or path.stat().st_size == 0:
+        return None
+
+    try:
+        return pd.read_csv(path, dtype=str)
+    except pd.errors.EmptyDataError:
+        return None
+
+
 def _merge_csv(
     existing_path: Path,
     new_path: Path,
@@ -73,18 +83,18 @@ def _merge_csv(
     key_columns: list[str],
     replace: bool = False,
 ) -> int:
-    frames = []
-
-    if not replace and existing_path.exists() and existing_path.stat().st_size > 0:
-        frames.append(pd.read_csv(existing_path, dtype=str))
-
-    if new_path.exists() and new_path.stat().st_size > 0:
-        try:
-            frames.append(pd.read_csv(new_path, dtype=str))
-        except pd.errors.EmptyDataError:
-            pass
-
     existing_path.parent.mkdir(parents=True, exist_ok=True)
+    existing_frame = None if replace else _read_csv_frame(existing_path)
+    new_frame = _read_csv_frame(new_path)
+
+    if not replace and existing_frame is not None and (new_frame is None or new_frame.empty):
+        return len(existing_frame)
+
+    frames = []
+    if existing_frame is not None:
+        frames.append(existing_frame)
+    if new_frame is not None:
+        frames.append(new_frame)
 
     if not frames:
         with existing_path.open("w", newline="", encoding="utf-8") as handle:
@@ -108,8 +118,23 @@ class CsvWriterPipeline:
     def __init__(self):
         self._files = {}
         self._writers = {}
+        self._crawler = None
 
-    def open_spider(self, spider):
+    @classmethod
+    def from_crawler(cls, crawler):
+        pipeline = cls()
+        pipeline._crawler = crawler
+        return pipeline
+
+    def _spider(self, spider=None):
+        if spider is not None:
+            return spider
+        if self._crawler is not None:
+            return self._crawler.spider
+        raise RuntimeError("Scrapy did not provide a spider instance to CsvWriterPipeline")
+
+    def open_spider(self, spider=None):
+        spider = self._spider(spider)
         output_path = Path(spider.output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         handle = output_path.open("w", newline="", encoding="utf-8")
@@ -118,13 +143,15 @@ class CsvWriterPipeline:
         self._files[id(spider)] = handle
         self._writers[id(spider)] = writer
 
-    def close_spider(self, spider):
+    def close_spider(self, spider=None):
+        spider = self._spider(spider)
         handle = self._files.pop(id(spider), None)
         self._writers.pop(id(spider), None)
         if handle:
             handle.close()
 
-    def process_item(self, item, spider):
+    def process_item(self, item, spider=None):
+        spider = self._spider(spider)
         self._writers[id(spider)].writerow(dict(item))
         return item
 
@@ -153,6 +180,10 @@ if scrapy is not None:
             base_url = "http://ufcstats.com/statistics/fighters?char="
             for char in "abcdefghijklmnopqrstuvwxyz":
                 yield scrapy.Request(f"{base_url}{char}&page=all", callback=self.parse)
+
+        async def start(self):
+            for request in self.start_requests():
+                yield request
 
         def parse(self, response):
             for fighter_link in response.css("td.b-statistics__table-col a::attr(href)").getall():

@@ -1,0 +1,17 @@
+.git
+.pytest_cache
+.venv
+.python-version
+__pycache__
+*.pyc
+AutogluonModels
+data/**
+!data/
+!data/raw/
+!data/raw/ufcstats/
+!data/raw/ufcstats/competitions.csv
+!data/raw/ufcstats/individuals.csv
+pics
+visualizations
+walk_forward_test_run
+*.ipynb

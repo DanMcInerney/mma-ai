@@ -721,10 +721,18 @@ def get_manual_fighter_odds(fighter_name):
         except ValueError:
             print("❌ Please enter a valid integer (e.g., -150, +200) or 'skip'")
 
-def get_bfo_odds(fight_list):
+def _empty_odds_for_fights(fight_list):
+    odds = {}
+    for fight in fight_list:
+        odds[fight[1]] = "N/A"
+        odds[fight[2]] = "N/A"
+    return odds
+
+
+def get_bfo_odds(fight_list, allow_manual_input=True):
     """
     Get the latest odds for fights using lightweight BFO scraper (no database operations).
-    If odds are missing, prompt for manual input.
+    If odds are missing, optionally prompt for manual input.
     
     Args:
         fight_list: List of tuples [(fight_date, fighter1_name, fighter2_name), ...]
@@ -749,7 +757,10 @@ def get_bfo_odds(fight_list):
         
         missing_fighters = [fighter for fighter in all_fighters if latest_odds.get(fighter, "N/A") == "N/A"]
         
-        if missing_fighters:
+        if missing_fighters and not allow_manual_input:
+            print(f"\nMissing odds for {len(missing_fighters)} fighters; leaving them as N/A in non-interactive mode.")
+
+        if missing_fighters and allow_manual_input:
             print(f"\n⚠️  Missing odds for {len(missing_fighters)} fighters:")
             for fighter in missing_fighters:
                 print(f"  - {fighter}")
@@ -819,6 +830,10 @@ def get_bfo_odds(fight_list):
         print(f"❌ Error getting BFO odds: {str(e)}")
         print("⚠️  Falling back to manual input for all fighters")
         
+        if not allow_manual_input:
+            print("Non-interactive mode enabled; leaving all odds as N/A")
+            return _empty_odds_for_fights(fight_list)
+
         # If BFO scraping fails entirely, ask for manual input for all fighters
         manual_odds = {}
         scraper = BFOLatestOddsOnly()  # Need scraper instance for devigging
@@ -855,6 +870,103 @@ def get_bfo_odds(fight_list):
         
         return manual_odds
 
+
+def build_manual_odds(fight_list, fighter1_odds=None, fighter2_odds=None):
+    """Build prediction odds from explicit CLI/UI inputs without prompting."""
+    odds = _empty_odds_for_fights(fight_list)
+    if len(fight_list) != 1:
+        return odds
+
+    _fight_date, fighter1, fighter2 = fight_list[0]
+    if fighter1_odds is None and fighter2_odds is None:
+        return odds
+
+    odds[fighter1] = int(fighter1_odds) if fighter1_odds is not None else "N/A"
+    odds[fighter2] = int(fighter2_odds) if fighter2_odds is not None else "N/A"
+
+    if fighter1_odds is None or fighter2_odds is None:
+        return odds
+
+    scraper = BFOLatestOddsOnly()
+    try:
+        fair1, fair2 = scraper.remove_vig(int(fighter1_odds), int(fighter2_odds))
+    except Exception:
+        fair1, fair2 = int(fighter1_odds), int(fighter2_odds)
+
+    odds[fighter1] = {"original": int(fighter1_odds), "vigless": int(fair1)}
+    odds[fighter2] = {"original": int(fighter2_odds), "vigless": int(fair2)}
+    return odds
+
+
+def parse_manual_odds_json(raw_value):
+    """Parse CLI/UI supplied fighter odds as a JSON object of fighter name to American odds."""
+    if not raw_value:
+        return {}
+    parsed = json.loads(raw_value)
+    if not isinstance(parsed, dict):
+        raise ValueError("--manual-odds-json must be a JSON object like {\"fighter name\": -150}")
+
+    manual_odds = {}
+    for fighter_name, odds in parsed.items():
+        name = str(fighter_name).strip()
+        if not name or odds in (None, ""):
+            continue
+        if isinstance(odds, str):
+            odds = odds.strip().replace("+", "")
+        manual_odds[name] = int(odds)
+    return manual_odds
+
+
+def _extract_original_odds(odds_value):
+    if isinstance(odds_value, dict):
+        odds_value = odds_value.get("original", "N/A")
+    if odds_value == "N/A" or odds_value is None:
+        return None
+    try:
+        if isinstance(odds_value, str):
+            odds_value = odds_value.strip().replace("+", "")
+        return int(odds_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def apply_manual_odds(fight_list, odds, manual_odds):
+    """Apply explicit fighter odds to an odds map and devig complete fight pairs."""
+    if not manual_odds:
+        return odds
+
+    resolved_odds = dict(odds or _empty_odds_for_fights(fight_list))
+    manual_by_name = {str(name).strip().lower(): int(value) for name, value in manual_odds.items()}
+    scraper = BFOLatestOddsOnly()
+
+    print(f"\nApplying manually supplied odds for {len(manual_by_name)} fighters...")
+    for fight in fight_list:
+        _fight_date, fighter1, fighter2 = fight
+        fighter1_key = fighter1.lower()
+        fighter2_key = fighter2.lower()
+        if fighter1_key in manual_by_name:
+            resolved_odds[fighter1] = manual_by_name[fighter1_key]
+            print(f"  Manual odds: {fighter1}({manual_by_name[fighter1_key]:+d})")
+        if fighter2_key in manual_by_name:
+            resolved_odds[fighter2] = manual_by_name[fighter2_key]
+            print(f"  Manual odds: {fighter2}({manual_by_name[fighter2_key]:+d})")
+
+        fighter1_odds = _extract_original_odds(resolved_odds.get(fighter1))
+        fighter2_odds = _extract_original_odds(resolved_odds.get(fighter2))
+        if fighter1_odds is None or fighter2_odds is None:
+            continue
+
+        try:
+            fair1, fair2 = scraper.remove_vig(fighter1_odds, fighter2_odds)
+        except Exception as exc:
+            print(f"  Warning: could not devig manual odds for {fighter1} vs {fighter2}: {exc}")
+            fair1, fair2 = fighter1_odds, fighter2_odds
+
+        resolved_odds[fighter1] = {"original": int(fighter1_odds), "vigless": int(fair1)}
+        resolved_odds[fighter2] = {"original": int(fighter2_odds), "vigless": int(fair2)}
+    return resolved_odds
+
+
 def convert_american_to_decimal(american_odds):
     """Convert American odds to decimal odds."""
     try:
@@ -877,6 +989,19 @@ def get_fights(df, upcoming_number):
     fight_list = [fight for event in events.values() for fight in event]
     event_names = [x for x in events.keys()]
     return fight_list, event_names
+
+
+def get_manual_fight(fighter1, fighter2, fight_date=None):
+    """Return a one-fight list compatible with the event prediction pipeline."""
+    if not fighter1 or not fighter2:
+        raise ValueError("Both --fighter1 and --fighter2 are required for manual matchup prediction.")
+    if fighter1.strip().lower() == fighter2.strip().lower():
+        raise ValueError("Manual matchup prediction requires two different fighters.")
+
+    parsed_date = datetime.strptime(fight_date, "%Y-%m-%d") if fight_date else datetime.now()
+    clean_fighter1 = fighter1.strip()
+    clean_fighter2 = fighter2.strip()
+    return [(parsed_date, clean_fighter1, clean_fighter2)], [f"{clean_fighter1}_vs_{clean_fighter2}"]
 
 def load_model_and_calibrator(model_path, use_calibrated=True):
     """
@@ -1182,7 +1307,14 @@ def parse_args():
     parser.add_argument("--prediction-data-csv", default=str(data_file("prediction_data.csv")))
     parser.add_argument("--training-data-csv", default=None, help="Training CSV for SHAP background data.")
     parser.add_argument("--upcoming-number", type=int, default=1, help="1 is the next event, 2 is the event after next.")
+    parser.add_argument("--fighter1", default=None, help="Manual matchup fighter 1. Skips Wikipedia event lookup when paired with --fighter2.")
+    parser.add_argument("--fighter2", default=None, help="Manual matchup fighter 2. Skips Wikipedia event lookup when paired with --fighter1.")
+    parser.add_argument("--fight-date", default=None, help="Manual matchup date in YYYY-MM-DD format. Defaults to now.")
+    parser.add_argument("--fighter1-odds", type=int, default=None, help="Manual American odds for fighter 1.")
+    parser.add_argument("--fighter2-odds", type=int, default=None, help="Manual American odds for fighter 2.")
+    parser.add_argument("--manual-odds-json", default=None, help="JSON object mapping fighter names to manual American odds.")
     parser.add_argument("--odds", action="store_true", help="Include latest BFO odds in the output.")
+    parser.add_argument("--no-manual-odds", action="store_true", help="Do not prompt for missing odds; use N/A instead.")
     parser.add_argument("--no-shap", action="store_true", help="Skip SHAP visualizations.")
     parser.add_argument("--use-calibrated", action="store_true", help="Use calibrated predictions when calibrator.pkl exists.")
     parser.add_argument("--output-dir", default=None, help="Directory for prediction images and CSVs.")
@@ -1209,6 +1341,7 @@ def cli():
     
     odds = args.odds
     SHAP = not args.no_shap
+    manual_odds = parse_manual_odds_json(args.manual_odds_json)
     
     prediction_data_csv = args.prediction_data_csv
     
@@ -1296,8 +1429,10 @@ def cli():
         print(f"📊 Using original (uncalibrated) predictions")
 
     ## Single fight or event
-    # Event
-    fight_list, event_names = get_fights(df_pred, upcoming_number)
+    if args.fighter1 or args.fighter2:
+        fight_list, event_names = get_manual_fight(args.fighter1, args.fighter2, args.fight_date)
+    else:
+        fight_list, event_names = get_fights(df_pred, upcoming_number)
     print(fight_list)
 
     # Single fight
@@ -1312,8 +1447,15 @@ def cli():
     
     os.makedirs(ss_output_dir, exist_ok=True)
     
-    # Get latest odds from BFO with vig removal
-    bfo_odds = get_bfo_odds(fight_list)
+    if args.fighter1_odds is not None or args.fighter2_odds is not None:
+        bfo_odds = build_manual_odds(fight_list, args.fighter1_odds, args.fighter2_odds)
+    elif odds:
+        # Get latest odds from BFO with vig removal
+        bfo_odds = get_bfo_odds(fight_list, allow_manual_input=not args.no_manual_odds)
+    else:
+        bfo_odds = _empty_odds_for_fights(fight_list)
+    if manual_odds:
+        bfo_odds = apply_manual_odds(fight_list, bfo_odds, manual_odds)
     
     # Get inference data using the prediction_data.csv file
     # New refactored system: generates all features (fighter1_*, fighter2_*, *_diff)

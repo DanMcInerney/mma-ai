@@ -543,6 +543,24 @@ def merge_raw_fighter_odds(df, conn):
         print("Proceeding without merging raw odds.")
         return df # Return the original DataFrame if merge fails
 
+
+def refresh_odds_features(conn, enabled=False):
+    """Refresh BFO odds and derived odds features when requested."""
+    if not enabled:
+        print("\nSkipping BFO odds refresh and odds feature calculation.")
+        return {"enabled": False, "records_scraped": None}
+
+    print("\nStarting BFO Odds Scraping...")
+    bfo_scraper = BFOScraper(conn)
+    records_scraped = bfo_scraper.scrape_all_fighters()
+    print(f"Finished BFO Odds Scraping. Records saved: {records_scraped}\n")
+
+    print("Calculating odds features...")
+    OddsCalculator(conn).run()
+    print("Finished calculating odds features.")
+    return {"enabled": True, "records_scraped": records_scraped}
+
+
 def main(odds=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrape=False, reset_db=False):
     from libs.feature_store.config import DECAY_HALF_LIFE_YEARS
     decay_rate_years = DECAY_HALF_LIFE_YEARS
@@ -808,17 +826,7 @@ def main(odds=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrap
         #print("Calculating style...")
         #StyleCalculator(conn).run()
 
-        # Scrape BFO odds data before calculating odds features
-        print("\nStarting BFO Odds Scraping...")
-        # Assume default odds DB URL for now, can be made configurable if needed
-        bfo_scraper = BFOScraper(conn) 
-        records_scraped = bfo_scraper.scrape_all_fighters()
-        print(f"Finished BFO Odds Scraping. Records saved: {records_scraped}\n")
-
-        # Now calculate odds features using the scraped data
-        print("Calculating odds features...")
-        OddsCalculator(conn).run()
-        print("Finished calculating odds features.")
+        refresh_odds_features(conn, enabled=odds)
 
         # print("Calculating slope...")
         # TimedecSlopeCalculator(conn, decay_rate_years).run()  # Uses centralized config
@@ -872,7 +880,8 @@ def main(odds=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrap
         exclude_patterns = set()
         # Update to match the new CleanTrainingData constructor signature
         clean_td = CleanTrainingData(df=training_df, include_patterns=include_patterns, exclude_patterns=exclude_patterns)
-        final_df, correlations = clean_td.clean_training_data()
+        final_df = clean_td.clean_training_data()
+        correlations = clean_td.correlations
 
         # Add raw odds from features.odds for fighter1
         final_df = merge_raw_fighter_odds(final_df, conn)
@@ -892,7 +901,8 @@ def main(odds=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrap
             exclude_patterns=exclude_patterns,
             target_type='decision'
         )
-        final_df_dec, correlations_dec = clean_td_dec.clean_training_data()
+        final_df_dec = clean_td_dec.clean_training_data()
+        correlations_dec = clean_td_dec.correlations
         
         # Save decision training data to CSV
         output_path_dec = output_data_dir / 'training_data_dec.csv'
@@ -911,7 +921,7 @@ def parse_args():
     parser.add_argument("--output-data-dir", default=str(data_dir()), help="Directory for prediction_data.csv and training_data*.csv.")
     parser.add_argument("--scrape", action="store_true", help="Scrape UFCStats before rebuilding.")
     parser.add_argument("--reset-db", action="store_true", help="Drop generated schemas before rebuilding.")
-    parser.add_argument("--odds", action="store_true", help="Run optional odds update hooks.")
+    parser.add_argument("--odds", action="store_true", help="Refresh BFO odds and calculate odds features.")
     return parser.parse_args()
 
 

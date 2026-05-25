@@ -2,8 +2,27 @@
 
 Dataset URL: `https://huggingface.co/datasets/DanMcInerney/mma-ai`
 
-This repo is code-only. Large database, CSV, and model artifacts live in the
-Hugging Face Dataset repository.
+This repo tracks only the small raw UFCStats seed CSVs needed to update from
+source: `data/raw/ufcstats/competitions.csv` and
+`data/raw/ufcstats/individuals.csv`. Large database dumps, finalized model CSVs,
+and trained model artifacts live in the Hugging Face Dataset repository.
+
+For first-time app setup, prefer the code repo bootstrap scripts:
+
+```bash
+bash setup.sh
+```
+
+or on Windows:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+```
+
+The scripts download these artifacts, verify checksums, restore the dumps into
+the Docker Postgres service, copy processed CSVs into `data/`, extract the
+starter model into `AutogluonModels/`, optionally configure LLM analytics, and
+start the web dashboard.
 
 ## Required Files
 
@@ -20,6 +39,10 @@ Hugging Face Dataset repository.
 | `processed/training_data_dec.csv` | Generated decision-model training CSV. |
 | `processed/prediction_data.csv` | Generated prediction feature CSV. |
 | `models/ag-20260304_110750-win-extreme.tar.gz` | Pretrained AutoGluon win model. |
+
+The dumps were created with PostgreSQL 18.1 custom archive format and gzip
+compression. Restore them with the repo's PostgreSQL 18 Docker service or a
+compatible local PostgreSQL version.
 
 ## Restore
 
@@ -56,6 +79,17 @@ pg_restore --clean --if-exists --no-owner --jobs 4 \
 
 Use your own username, password, host, and port in the connection strings if
 your local Postgres setup differs.
+
+After the first import, you do not need to restore the dumps again for routine
+UFCStats updates. Run the incremental scraper, then recreate the generated
+schemas and finalized CSVs from the merged raw CSVs:
+
+```bash
+uv run mma-rebuild-db --scrape --reset-db
+```
+
+The scraper skips fighter URLs and event URLs already present in the checked-in
+raw CSVs and appends newly discovered fighters/fights.
 
 ## Pretrained Model
 

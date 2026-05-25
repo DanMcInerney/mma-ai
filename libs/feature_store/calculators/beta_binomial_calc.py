@@ -5,6 +5,7 @@ import pandas as pd
 from sqlalchemy import text
 import numpy as np
 from libs.feature_store.calculator_context import CalculatorContext
+from libs.parameter_optimization.loaders.parameter_loader import BASELINE_BETA_BINOMIAL
 
 class BetaBinomialCalculator(BaseCalculator):
     """
@@ -89,6 +90,13 @@ class BetaBinomialCalculator(BaseCalculator):
 
         # Get all weight classes for dynamic parameter loading
         self.weight_classes = self._get_all_weight_classes()
+
+        # Backward-compatible parameter snapshots for tests and exploratory notebooks.
+        # Runtime smoothing still resolves through self.param_loader.
+        self.pseudo_counts = dict(BASELINE_BETA_BINOMIAL)
+        self.per_weightclass_pseudo_counts = {
+            "flyweight": {"ko": 22.44, "default": self.pseudo_counts["default"]},
+        }
 
         # Will store columns to smooth
         self.columns_to_smooth = []
