@@ -203,6 +203,11 @@ normalize_llm_provider() {
     codex) echo "codex" ;;
     anthropic|claude) echo "anthropic" ;;
     grok|xai) echo "grok" ;;
+    openrouter|open-router) echo "openrouter" ;;
+    deepseek|deep-seek) echo "deepseek" ;;
+    mistral) echo "mistral" ;;
+    together|togetherai|together-ai) echo "together" ;;
+    perplexity|sonar) echo "perplexity" ;;
     local|ollama|lmstudio|lm-studio) echo "local" ;;
     custom|openai-compatible) echo "custom" ;;
     *) echo "$provider" ;;
@@ -216,6 +221,11 @@ llm_default_model() {
     codex) echo "gpt-5-codex" ;;
     anthropic) echo "claude-3-5-sonnet-latest" ;;
     grok) echo "grok-2-latest" ;;
+    openrouter) echo "~openai/gpt-latest" ;;
+    deepseek) echo "deepseek-chat" ;;
+    mistral) echo "mistral-large-latest" ;;
+    together) echo "meta-llama/Llama-3.3-70B-Instruct-Turbo" ;;
+    perplexity) echo "sonar-pro" ;;
     local) echo "llama3.1" ;;
     *) echo "gpt-4o-mini" ;;
   esac
@@ -225,6 +235,11 @@ llm_default_base_url() {
   case "$1" in
     openai|codex) echo "https://api.openai.com/v1" ;;
     grok) echo "https://api.x.ai/v1" ;;
+    openrouter) echo "https://openrouter.ai/api/v1" ;;
+    deepseek) echo "https://api.deepseek.com" ;;
+    mistral) echo "https://api.mistral.ai/v1" ;;
+    together) echo "https://api.together.ai/v1" ;;
+    perplexity) echo "https://api.perplexity.ai" ;;
     local|custom) echo "http://host.docker.internal:11434/v1" ;;
     *) echo "" ;;
   esac
@@ -269,6 +284,21 @@ set_llm_config() {
         set_env_value "XAI_API_KEY" "$api_key"
         set_env_value "GROK_API_KEY" "$api_key"
         ;;
+      openrouter)
+        set_env_value "OPENROUTER_API_KEY" "$api_key"
+        ;;
+      deepseek)
+        set_env_value "DEEPSEEK_API_KEY" "$api_key"
+        ;;
+      mistral)
+        set_env_value "MISTRAL_API_KEY" "$api_key"
+        ;;
+      together)
+        set_env_value "TOGETHER_API_KEY" "$api_key"
+        ;;
+      perplexity)
+        set_env_value "PERPLEXITY_API_KEY" "$api_key"
+        ;;
     esac
   elif [[ "$provider" == "local" || "$provider" == "custom" ]]; then
     set_env_value "LLM_API_KEY" ""
@@ -286,8 +316,13 @@ resolve_llm_provider_choice() {
     3) echo "anthropic" ;;
     4) echo "google" ;;
     5) echo "grok" ;;
-    6) echo "local" ;;
-    7) echo "custom" ;;
+    6) echo "openrouter" ;;
+    7) echo "deepseek" ;;
+    8) echo "mistral" ;;
+    9) echo "together" ;;
+    10) echo "perplexity" ;;
+    11) echo "local" ;;
+    12) echo "custom" ;;
     *) normalize_llm_provider "$choice" ;;
   esac
 }
@@ -319,8 +354,13 @@ configure_llm_analytics() {
   echo "  3) Anthropic Claude"
   echo "  4) Google Gemini"
   echo "  5) xAI Grok"
-  echo "  6) Local model (Ollama or LM Studio)"
-  echo "  7) Custom OpenAI-compatible endpoint"
+  echo "  6) OpenRouter"
+  echo "  7) DeepSeek"
+  echo "  8) Mistral"
+  echo "  9) Together AI"
+  echo "  10) Perplexity Sonar"
+  echo "  11) Local model (Ollama or LM Studio)"
+  echo "  12) Custom OpenAI-compatible endpoint"
 
   local choice provider default_model model base_url override api_key
   read -r -p "Provider [1] " choice
@@ -331,7 +371,7 @@ configure_llm_analytics() {
 
   base_url="$(llm_default_base_url "$provider")"
   case "$provider" in
-    openai|codex|grok)
+    openai|codex|grok|openrouter|deepseek|mistral|together|perplexity)
       read -r -p "API base URL [$base_url] " override
       base_url="${override:-$base_url}"
       ;;

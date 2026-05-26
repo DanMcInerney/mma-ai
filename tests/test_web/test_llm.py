@@ -15,6 +15,11 @@ def clear_llm_env(monkeypatch):
         "ANTHROPIC_API_KEY",
         "XAI_API_KEY",
         "GROK_API_KEY",
+        "OPENROUTER_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "MISTRAL_API_KEY",
+        "TOGETHER_API_KEY",
+        "PERPLEXITY_API_KEY",
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
     ]:
@@ -73,6 +78,13 @@ def test_llm_base_url_without_provider_selects_keyless_custom_endpoint(monkeypat
         ("claude", "anthropic", None, True),
         ("grok", "grok", "https://api.x.ai/v1", True),
         ("xai", "grok", "https://api.x.ai/v1", True),
+        ("openrouter", "openrouter", "https://openrouter.ai/api/v1", True),
+        ("open-router", "openrouter", "https://openrouter.ai/api/v1", True),
+        ("deepseek", "deepseek", "https://api.deepseek.com", True),
+        ("mistral", "mistral", "https://api.mistral.ai/v1", True),
+        ("together", "together", "https://api.together.ai/v1", True),
+        ("perplexity", "perplexity", "https://api.perplexity.ai", True),
+        ("sonar", "perplexity", "https://api.perplexity.ai", True),
         ("local", "local", "http://host.docker.internal:11434/v1", False),
         ("ollama", "local", "http://host.docker.internal:11434/v1", False),
         ("lm-studio", "local", "http://host.docker.internal:11434/v1", False),
@@ -103,6 +115,29 @@ def test_setup_provider_choices_match_runtime_config(
     assert config.is_configured is True
     assert config.needs_api_key is requires_key
     assert config.base_url == expected_base_url
+
+
+@pytest.mark.parametrize(
+    ("env_var", "expected_provider", "expected_model"),
+    [
+        ("OPENROUTER_API_KEY", "openrouter", "~openai/gpt-latest"),
+        ("DEEPSEEK_API_KEY", "deepseek", "deepseek-chat"),
+        ("MISTRAL_API_KEY", "mistral", "mistral-large-latest"),
+        ("TOGETHER_API_KEY", "together", "meta-llama/Llama-3.3-70B-Instruct-Turbo"),
+        ("PERPLEXITY_API_KEY", "perplexity", "sonar-pro"),
+    ],
+)
+def test_hosted_openai_compatible_provider_keys_are_auto_detected(monkeypatch, env_var, expected_provider, expected_model):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv(env_var, "provider-key")
+
+    config = llm_config()
+
+    assert config is not None
+    assert config.provider == expected_provider
+    assert config.model == expected_model
+    assert config.api_key == "provider-key"
+    assert config.is_configured is True
 
 
 def test_local_openai_compatible_json_mode_retries_without_response_format(monkeypatch):

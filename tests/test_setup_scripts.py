@@ -73,6 +73,11 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "LLM_BASE_URL" in script
         assert "Anthropic Claude" in script
         assert "xAI Grok" in script
+        assert "OpenRouter" in script
+        assert "DeepSeek" in script
+        assert "Mistral" in script
+        assert "Together AI" in script
+        assert "Perplexity Sonar" in script
         assert "Local model" in script
         assert "MMA_AI_POSTGRES_PORT" in script
         assert "MMA_AI_WEB_PORT" in script
@@ -109,6 +114,29 @@ def test_setup_scripts_clear_stale_llm_key_for_keyless_custom_and_local_endpoint
     assert 'Set-EnvValue "LLM_API_KEY" ""' in powershell
     assert '[[ "$provider" == "local" || "$provider" == "custom" ]]' in bash
     assert 'set_env_value "LLM_API_KEY" ""' in bash
+
+
+def test_setup_scripts_include_hosted_openai_compatible_llm_providers():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    for script in (powershell, bash):
+        assert "openrouter" in script
+        assert "https://openrouter.ai/api/v1" in script
+        assert "OPENROUTER_API_KEY" in script
+        assert "deepseek" in script
+        assert "https://api.deepseek.com" in script
+        assert "DEEPSEEK_API_KEY" in script
+        assert "mistral" in script
+        assert "https://api.mistral.ai/v1" in script
+        assert "MISTRAL_API_KEY" in script
+        assert "together" in script
+        assert "https://api.together.ai/v1" in script
+        assert "TOGETHER_API_KEY" in script
+        assert "perplexity" in script
+        assert "https://api.perplexity.ai" in script
+        assert "PERPLEXITY_API_KEY" in script
+        assert "openai-compatible" in script
 
 
 def test_setup_scripts_detect_existing_postgres_host_port():

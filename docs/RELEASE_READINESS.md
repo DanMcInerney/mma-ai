@@ -69,7 +69,9 @@ badge.
   Postgres dumps into Docker when needed, copy processed CSVs, extract the
   starter model, optionally configure
   `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for
-  analytics, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
+  analytics, including hosted OpenAI-compatible providers such as OpenRouter,
+  DeepSeek, Mistral, Together AI, and Perplexity Sonar, auto-select
+  `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
   write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL` values for
   local CLI commands, start the web service, wait for `/api/readiness`, and open
   the dashboard.
@@ -102,6 +104,11 @@ Public configuration lives in `.env.example`.
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `XAI_API_KEY`
+- `OPENROUTER_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `MISTRAL_API_KEY`
+- `TOGETHER_API_KEY`
+- `PERPLEXITY_API_KEY`
 - `GEMINI_API_KEY`
 - `GOOGLE_API_KEY`
 

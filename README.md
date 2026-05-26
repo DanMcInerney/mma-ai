@@ -87,8 +87,9 @@ database and the auxiliary `odds` database used by odds-related workflows. The
 setup scripts restore the Hugging Face dumps into those databases.
 
 During setup you can choose OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
-Google Gemini, xAI Grok, a local OpenAI-compatible server such as Ollama or LM
-Studio, or a custom endpoint for Data-tab analytics. The
+Google Gemini, xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI,
+Perplexity Sonar, a local OpenAI-compatible server such as Ollama or LM Studio,
+or a custom endpoint for Data-tab analytics. The
 choices are saved in `.env` as `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
 optional `LLM_BASE_URL`. Non-interactive installs can pass values directly:
 
@@ -1101,6 +1102,11 @@ LLM_BASE_URL=
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 XAI_API_KEY=
+OPENROUTER_API_KEY=
+DEEPSEEK_API_KEY=
+MISTRAL_API_KEY=
+TOGETHER_API_KEY=
+PERPLEXITY_API_KEY=
 GOOGLE_API_KEY=
 GEMINI_API_KEY=
 ```

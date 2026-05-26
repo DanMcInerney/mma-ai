@@ -14,6 +14,11 @@ GOOGLE_API_KEY_ENV_VARS = ("LLM_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
 OPENAI_API_KEY_ENV_VARS = ("LLM_API_KEY", "OPENAI_API_KEY")
 ANTHROPIC_API_KEY_ENV_VARS = ("LLM_API_KEY", "ANTHROPIC_API_KEY")
 GROK_API_KEY_ENV_VARS = ("LLM_API_KEY", "XAI_API_KEY", "GROK_API_KEY")
+OPENROUTER_API_KEY_ENV_VARS = ("LLM_API_KEY", "OPENROUTER_API_KEY")
+DEEPSEEK_API_KEY_ENV_VARS = ("LLM_API_KEY", "DEEPSEEK_API_KEY")
+MISTRAL_API_KEY_ENV_VARS = ("LLM_API_KEY", "MISTRAL_API_KEY")
+TOGETHER_API_KEY_ENV_VARS = ("LLM_API_KEY", "TOGETHER_API_KEY")
+PERPLEXITY_API_KEY_ENV_VARS = ("LLM_API_KEY", "PERPLEXITY_API_KEY")
 LOCAL_API_KEY_ENV_VARS = ("LLM_API_KEY",)
 
 DEFAULT_MODELS = {
@@ -22,6 +27,11 @@ DEFAULT_MODELS = {
     "codex": "gpt-5-codex",
     "anthropic": "claude-3-5-sonnet-latest",
     "grok": "grok-2-latest",
+    "openrouter": "~openai/gpt-latest",
+    "deepseek": "deepseek-chat",
+    "mistral": "mistral-large-latest",
+    "together": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    "perplexity": "sonar-pro",
     "local": "llama3.1",
     "custom": "gpt-4o-mini",
 }
@@ -30,6 +40,11 @@ DEFAULT_BASE_URLS = {
     "openai": "https://api.openai.com/v1",
     "codex": "https://api.openai.com/v1",
     "grok": "https://api.x.ai/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
+    "deepseek": "https://api.deepseek.com",
+    "mistral": "https://api.mistral.ai/v1",
+    "together": "https://api.together.ai/v1",
+    "perplexity": "https://api.perplexity.ai",
     "local": "http://host.docker.internal:11434/v1",
 }
 
@@ -42,6 +57,16 @@ PROVIDER_ALIASES = {
     "claude": "anthropic",
     "grok": "grok",
     "xai": "grok",
+    "openrouter": "openrouter",
+    "open-router": "openrouter",
+    "deepseek": "deepseek",
+    "deep-seek": "deepseek",
+    "mistral": "mistral",
+    "together": "together",
+    "togetherai": "together",
+    "together-ai": "together",
+    "perplexity": "perplexity",
+    "sonar": "perplexity",
     "local": "local",
     "ollama": "local",
     "lmstudio": "local",
@@ -101,7 +126,8 @@ def llm_config() -> LlmConfig | None:
 def llm_config_hint() -> str:
     return (
         "Configure LLM_PROVIDER and LLM_MODEL with LLM_API_KEY, provider keys like "
-        "OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY, "
+        "OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, GROK_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY, "
+        "DEEPSEEK_API_KEY, MISTRAL_API_KEY, TOGETHER_API_KEY, PERPLEXITY_API_KEY, or GOOGLE_API_KEY, "
         "or set LLM_BASE_URL for a local/custom OpenAI-compatible endpoint."
     )
 
@@ -131,6 +157,16 @@ def _configured_provider() -> str | None:
         return "anthropic"
     if _first_env(GROK_API_KEY_ENV_VARS):
         return "grok"
+    if _first_env(OPENROUTER_API_KEY_ENV_VARS):
+        return "openrouter"
+    if _first_env(DEEPSEEK_API_KEY_ENV_VARS):
+        return "deepseek"
+    if _first_env(MISTRAL_API_KEY_ENV_VARS):
+        return "mistral"
+    if _first_env(TOGETHER_API_KEY_ENV_VARS):
+        return "together"
+    if _first_env(PERPLEXITY_API_KEY_ENV_VARS):
+        return "perplexity"
     if os.getenv("LLM_BASE_URL"):
         return "custom"
     return None
@@ -145,6 +181,16 @@ def _provider_api_key(provider: str) -> str | None:
         return _first_env(ANTHROPIC_API_KEY_ENV_VARS)
     if provider == "grok":
         return _first_env(GROK_API_KEY_ENV_VARS)
+    if provider == "openrouter":
+        return _first_env(OPENROUTER_API_KEY_ENV_VARS)
+    if provider == "deepseek":
+        return _first_env(DEEPSEEK_API_KEY_ENV_VARS)
+    if provider == "mistral":
+        return _first_env(MISTRAL_API_KEY_ENV_VARS)
+    if provider == "together":
+        return _first_env(TOGETHER_API_KEY_ENV_VARS)
+    if provider == "perplexity":
+        return _first_env(PERPLEXITY_API_KEY_ENV_VARS)
     return _first_env(LOCAL_API_KEY_ENV_VARS)
 
 

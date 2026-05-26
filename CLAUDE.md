@@ -41,10 +41,10 @@ Train, and Predict dashboard.
 
 LLM-assisted analytics use `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
 optional `LLM_BASE_URL` first. The setup scripts can configure OpenAI,
-Codex/OpenAI-compatible, Anthropic Claude, Google Gemini, xAI Grok, a local
-OpenAI-compatible server such as Ollama or LM Studio, or a custom
-OpenAI-compatible endpoint. Legacy `GEMINI_API_KEY` and `GOOGLE_API_KEY` still
-work as Google aliases.
+Codex/OpenAI-compatible, Anthropic Claude, Google Gemini, xAI Grok, OpenRouter,
+DeepSeek, Mistral, Together AI, Perplexity Sonar, a local OpenAI-compatible
+server such as Ollama or LM Studio, or a custom OpenAI-compatible endpoint.
+Legacy `GEMINI_API_KEY` and `GOOGLE_API_KEY` still work as Google aliases.
 
 Background jobs write stdout, stderr, subprocess command lines, and tracebacks
 to `data/logs/jobs`; the dashboard reads full logs from `/api/jobs/{job_id}/log`.
@@ -79,6 +79,11 @@ Important environment variables:
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `XAI_API_KEY`
+- `OPENROUTER_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `MISTRAL_API_KEY`
+- `TOGETHER_API_KEY`
+- `PERPLEXITY_API_KEY`
 - `GEMINI_API_KEY`
 - `GOOGLE_API_KEY`
 - `THE_ODDS_API_KEY`

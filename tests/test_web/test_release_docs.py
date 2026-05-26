@@ -116,6 +116,11 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "LLM_PROVIDER: ${LLM_PROVIDER:-}" in compose
     assert "LLM_MODEL: ${LLM_MODEL:-}" in compose
     assert "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}" in compose
+    assert "OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}" in compose
+    assert "DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}" in compose
+    assert "MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}" in compose
+    assert "TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}" in compose
+    assert "PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}" in compose
     assert "depends_on" not in compose
     assert "artifacts" in dockerignore
     assert ".cursor" in dockerignore
@@ -159,6 +164,11 @@ def test_env_example_lists_public_configuration_without_real_secrets():
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
         "XAI_API_KEY",
+        "OPENROUTER_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "MISTRAL_API_KEY",
+        "TOGETHER_API_KEY",
+        "PERPLEXITY_API_KEY",
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
         "THE_ODDS_API_KEY",

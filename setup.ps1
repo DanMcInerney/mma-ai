@@ -169,11 +169,22 @@ function Normalize-LlmProvider {
         "claude" { return "anthropic" }
         "grok" { return "grok" }
         "xai" { return "grok" }
+        "openrouter" { return "openrouter" }
+        "open-router" { return "openrouter" }
+        "deepseek" { return "deepseek" }
+        "deep-seek" { return "deepseek" }
+        "mistral" { return "mistral" }
+        "together" { return "together" }
+        "togetherai" { return "together" }
+        "together-ai" { return "together" }
+        "perplexity" { return "perplexity" }
+        "sonar" { return "perplexity" }
         "local" { return "local" }
         "ollama" { return "local" }
         "lmstudio" { return "local" }
         "lm-studio" { return "local" }
         "custom" { return "custom" }
+        "openai-compatible" { return "custom" }
         default { return $value }
     }
 }
@@ -186,6 +197,11 @@ function Get-LlmDefaultModel {
         "codex" { return "gpt-5-codex" }
         "anthropic" { return "claude-3-5-sonnet-latest" }
         "grok" { return "grok-2-latest" }
+        "openrouter" { return "~openai/gpt-latest" }
+        "deepseek" { return "deepseek-chat" }
+        "mistral" { return "mistral-large-latest" }
+        "together" { return "meta-llama/Llama-3.3-70B-Instruct-Turbo" }
+        "perplexity" { return "sonar-pro" }
         "local" { return "llama3.1" }
         default { return "gpt-4o-mini" }
     }
@@ -197,6 +213,11 @@ function Get-LlmDefaultBaseUrl {
         "openai" { return "https://api.openai.com/v1" }
         "codex" { return "https://api.openai.com/v1" }
         "grok" { return "https://api.x.ai/v1" }
+        "openrouter" { return "https://openrouter.ai/api/v1" }
+        "deepseek" { return "https://api.deepseek.com" }
+        "mistral" { return "https://api.mistral.ai/v1" }
+        "together" { return "https://api.together.ai/v1" }
+        "perplexity" { return "https://api.perplexity.ai" }
         "local" { return "http://host.docker.internal:11434/v1" }
         "custom" { return "http://host.docker.internal:11434/v1" }
         default { return "" }
@@ -253,6 +274,11 @@ function Set-LlmConfiguration {
                 Set-EnvValue "XAI_API_KEY" $ApiKey
                 Set-EnvValue "GROK_API_KEY" $ApiKey
             }
+            "openrouter" { Set-EnvValue "OPENROUTER_API_KEY" $ApiKey }
+            "deepseek" { Set-EnvValue "DEEPSEEK_API_KEY" $ApiKey }
+            "mistral" { Set-EnvValue "MISTRAL_API_KEY" $ApiKey }
+            "together" { Set-EnvValue "TOGETHER_API_KEY" $ApiKey }
+            "perplexity" { Set-EnvValue "PERPLEXITY_API_KEY" $ApiKey }
         }
     } elseif ($normalizedProvider -in @("local", "custom")) {
         Set-EnvValue "LLM_API_KEY" ""
@@ -271,8 +297,13 @@ function Resolve-LlmProviderChoice {
         "3" { return "anthropic" }
         "4" { return "google" }
         "5" { return "grok" }
-        "6" { return "local" }
-        "7" { return "custom" }
+        "6" { return "openrouter" }
+        "7" { return "deepseek" }
+        "8" { return "mistral" }
+        "9" { return "together" }
+        "10" { return "perplexity" }
+        "11" { return "local" }
+        "12" { return "custom" }
         default { return (Normalize-LlmProvider $value) }
     }
 }
@@ -304,8 +335,13 @@ function Configure-LlmAnalytics {
     Write-Host "  3) Anthropic Claude"
     Write-Host "  4) Google Gemini"
     Write-Host "  5) xAI Grok"
-    Write-Host "  6) Local model (Ollama or LM Studio)"
-    Write-Host "  7) Custom OpenAI-compatible endpoint"
+    Write-Host "  6) OpenRouter"
+    Write-Host "  7) DeepSeek"
+    Write-Host "  8) Mistral"
+    Write-Host "  9) Together AI"
+    Write-Host "  10) Perplexity Sonar"
+    Write-Host "  11) Local model (Ollama or LM Studio)"
+    Write-Host "  12) Custom OpenAI-compatible endpoint"
     $provider = Resolve-LlmProviderChoice (Read-Host "Provider [1]")
 
     $defaultModel = Get-LlmDefaultModel $provider
@@ -315,7 +351,7 @@ function Configure-LlmAnalytics {
     }
 
     $baseUrl = Get-LlmDefaultBaseUrl $provider
-    if ($provider -in @("openai", "codex", "grok")) {
+    if ($provider -in @("openai", "codex", "grok", "openrouter", "deepseek", "mistral", "together", "perplexity")) {
         $override = Read-Host "API base URL [$baseUrl]"
         if (-not [string]::IsNullOrWhiteSpace($override)) {
             $baseUrl = $override

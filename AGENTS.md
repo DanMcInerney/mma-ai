@@ -40,8 +40,9 @@ model training, analytics, and fight prediction.
     probability and EV calculations.
 
 LLM setup choices are OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini,
-xAI Grok, local OpenAI-compatible servers, and custom OpenAI-compatible
-endpoints. LLMs are used by Data-tab analytics.
+xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI, Perplexity Sonar, local
+OpenAI-compatible servers, and custom OpenAI-compatible endpoints. LLMs are
+used by Data-tab analytics.
 
 Heavy workflows are intentionally lazy. Importing the web app must not import
 AutoGluon, start Scrapy, connect to Postgres, or call external APIs.

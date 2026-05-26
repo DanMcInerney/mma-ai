@@ -36,7 +36,8 @@ and `bestfightodds.bfo` are present; pass `-ForceImport` or `--force-import` to
 restore the dumps again.
 
 LLM analytics setup supports OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
-Google Gemini, xAI Grok, local OpenAI-compatible servers, and custom endpoints.
+Google Gemini, xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI,
+Perplexity Sonar, local OpenAI-compatible servers, and custom endpoints.
 The scripts save `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and optional
 `LLM_BASE_URL` to `.env`.
 
