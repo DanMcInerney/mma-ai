@@ -37,6 +37,8 @@ After the web service starts, verify `http://localhost:8000/api/health` returns
 returns a ready payload before relying on predictions. Readiness requires both
 databases, all processed CSVs, and the Hugging Face starter model. Then open the
 dashboard at `http://localhost:8000`, or the alternate port printed by setup.
+The dashboard top bar mirrors this state with a `Ready` or `Setup incomplete`
+badge.
 
 ## Release Surface
 

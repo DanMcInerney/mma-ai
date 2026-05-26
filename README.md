@@ -26,7 +26,8 @@ bash setup.sh
 ```
 
 Open the dashboard at http://localhost:8000, or the alternate port printed by
-setup if port 8000 is already in use.
+setup if port 8000 is already in use. The top bar shows a `Ready` badge when
+the databases, processed CSVs, and starter model are available.
 
 The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 `.env.example` to `.env` yourself if you want to provide keys or non-default

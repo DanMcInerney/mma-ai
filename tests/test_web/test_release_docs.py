@@ -41,6 +41,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "--postgres-port 55432" in readme
     assert "Setup is safe to rerun after an interrupted install" in readme
     assert "/api/readiness" in readme
+    assert "top bar shows a `Ready` badge" in readme
     assert "--skip-download" in readme
     assert "--force-download" in readme
     assert "AGENTS.md" in readme
@@ -77,6 +78,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "mma-evaluate" in release_notes
     assert "Odds are not model inputs" in release_notes
     assert "wait for `/api/readiness`" in release_notes
+    assert "The dashboard top bar mirrors this state" in release_notes
+    assert "`Setup incomplete`" in release_notes
     assert "docker compose up --build db web" in release_notes
     assert "docker compose up --build web" in release_notes
     assert "uv run pytest -q" in release_notes
@@ -137,6 +140,7 @@ def test_public_repo_tracks_seed_raw_csvs_and_no_heavy_generated_artifacts():
     }
 
     assert seed_paths.issubset(tracked)
+    assert "libs/web/static/index.html" in tracked
     for seed_path in seed_paths:
         path = ROOT / seed_path
         assert path.exists()

@@ -142,6 +142,43 @@ async function loadDashboardDefaults() {
   applyDashboardDefaults(await api("/api/defaults"));
 }
 
+function failingReadinessChecks(payload) {
+  const checks = payload?.checks || {};
+  return Object.entries(checks)
+    .filter(([, check]) => !check?.ok)
+    .map(([name]) => name.replace(/_/g, " "));
+}
+
+function renderReadiness(payload) {
+  const badge = qs("#readiness-badge");
+  if (!badge) return;
+  const ready = Boolean(payload?.ready);
+  const failures = failingReadinessChecks(payload);
+  badge.classList.remove("ready", "not-ready", "checking");
+  badge.classList.add(ready ? "ready" : "not-ready");
+  badge.textContent = ready ? "Ready" : "Setup incomplete";
+  badge.title = ready
+    ? "Ready for predictions: databases, processed CSVs, and starter model are available."
+    : `Missing or unavailable: ${failures.join(", ") || "readiness checks"}`;
+}
+
+async function refreshReadiness() {
+  const badge = qs("#readiness-badge");
+  if (badge) {
+    badge.classList.remove("ready", "not-ready");
+    badge.classList.add("checking");
+    badge.textContent = "Checking readiness";
+    badge.title = "Checking data, model, and database readiness.";
+  }
+  try {
+    const response = await fetch("/api/readiness");
+    const body = await response.json().catch(() => ({}));
+    renderReadiness(response.ok ? body : body.detail || body);
+  } catch (error) {
+    renderReadiness({ ready: false, checks: { web: { ok: false, error: error.message } } });
+  }
+}
+
 function renderPredictionGraphic(target, predictions) {
   if (!predictions || predictions.length === 0) {
     qs(target).innerHTML = `<div class="muted">No prediction rows were produced.</div>`;
@@ -394,6 +431,7 @@ async function refreshJobs() {
     renderDataRefreshResult(dataJob.result || {});
     activeDataJobId = null;
     await refreshStatus().catch(() => {});
+    await refreshReadiness().catch(() => {});
   } else if (dataJob?.state === "failed") {
     renderJson("#data-output", dataJob.error || "Data pipeline failed");
     activeDataJobId = null;
@@ -449,7 +487,9 @@ function wireTabs() {
 }
 
 function wireData() {
-  qs("#refresh-status").addEventListener("click", refreshStatus);
+  qs("#refresh-status").addEventListener("click", async () => {
+    await Promise.allSettled([refreshStatus(), refreshReadiness()]);
+  });
   qs("#run-data").addEventListener("click", async () => {
     try {
       const payload = {
@@ -662,6 +702,7 @@ wireTraining();
 wirePrediction();
 loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}));
 refreshStatus().catch(() => {});
+refreshReadiness().catch(() => {});
 refreshModels().catch(() => {});
 refreshJobs().catch(() => {});
 setInterval(refreshJobs, 5000);

@@ -132,6 +132,23 @@ def test_dashboard_controls_hydrate_from_defaults_endpoint():
     assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}))" in app_js
 
 
+def test_dashboard_surfaces_setup_readiness_state():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert 'id="readiness-badge"' in html
+    assert 'aria-live="polite"' in html
+    assert 'fetch("/api/readiness")' in app_js
+    assert "function renderReadiness(payload)" in app_js
+    assert "Setup incomplete" in app_js
+    assert "Ready for predictions" in app_js
+    assert "refreshReadiness().catch(() => {})" in app_js
+    assert "Promise.allSettled([refreshStatus(), refreshReadiness()])" in app_js
+    assert ".readiness-badge.ready" in styles
+    assert ".readiness-badge.not-ready" in styles
+
+
 def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")

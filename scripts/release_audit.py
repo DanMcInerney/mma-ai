@@ -22,6 +22,9 @@ GENERATED_DATA_FILES = {
     "data/training_data.csv",
     "data/training_data_dec.csv",
 }
+REQUIRED_TRACKED_FILES = {
+    "libs/web/static/index.html",
+}
 FORBIDDEN_PREFIXES = ("AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
 FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
 
@@ -72,6 +75,21 @@ def find_forbidden_artifacts(paths: Iterable[str]) -> list[AuditIssue]:
     return issues
 
 
+def find_missing_required_files(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
+    tracked = {path.replace("\\", "/") for path in paths}
+    issues = []
+    for required_path in sorted(REQUIRED_TRACKED_FILES):
+        if required_path not in tracked or not (root / required_path).exists():
+            issues.append(
+                AuditIssue(
+                    kind="missing_required_file",
+                    path=required_path,
+                    detail="Required public runtime file is not tracked.",
+                )
+            )
+    return issues
+
+
 def find_sensitive_text(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
     issues: list[AuditIssue] = []
     for relative_path in paths:
@@ -97,7 +115,7 @@ def _excerpt(text: str, start: int, end: int, radius: int = 32) -> str:
 
 def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
     tracked = git_ls_files(root)
-    return [*find_forbidden_artifacts(tracked), *find_sensitive_text(tracked, root)]
+    return [*find_missing_required_files(tracked, root), *find_forbidden_artifacts(tracked), *find_sensitive_text(tracked, root)]
 
 
 def main(argv: list[str] | None = None) -> int:

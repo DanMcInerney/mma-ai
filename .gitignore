@@ -86,6 +86,7 @@ experiments/
 walk_forward_test_run/
 *.csv
 *.html
+!libs/web/static/index.html
 *.ipynb
 *data.csv
 !data/
