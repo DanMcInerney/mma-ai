@@ -5,7 +5,8 @@ param(
     [switch]$NoOpen,
     [switch]$ForceDownload,
     [switch]$SkipLlmPrompt,
-    [string]$GeminiApiKey
+    [string]$GeminiApiKey,
+    [int]$PostgresPort = 0
 )
 
 Set-StrictMode -Version Latest
@@ -119,6 +120,58 @@ function Invoke-DockerCompose {
     }
 }
 
+function Get-ComposeDbPort {
+    $output = & docker compose port db 5432 2>$null
+    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($output)) {
+        $lastLine = @($output)[-1].Trim()
+        $portText = ($lastLine -split ":")[-1]
+        $parsed = 0
+        if ([int]::TryParse($portText, [ref]$parsed)) {
+            return $parsed
+        }
+    }
+    return $null
+}
+
+function Test-TcpPortAvailable {
+    param([int]$Port)
+    $listener = $null
+    try {
+        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $Port)
+        $listener.Start()
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($listener) {
+            $listener.Stop()
+        }
+    }
+}
+
+function Get-SetupPostgresPort {
+    if ($PostgresPort -gt 0) {
+        return $PostgresPort
+    }
+
+    $existingPort = Get-ComposeDbPort
+    if ($existingPort) {
+        return $existingPort
+    }
+
+    if (Test-TcpPortAvailable 5432) {
+        return 5432
+    }
+
+    for ($candidate = 55432; $candidate -le 55532; $candidate++) {
+        if (Test-TcpPortAvailable $candidate) {
+            return $candidate
+        }
+    }
+
+    throw "Could not find an available host port for PostgreSQL. Pass -PostgresPort <port> to choose one."
+}
+
 function Wait-ForPostgres {
     for ($i = 0; $i -lt 90; $i++) {
         & docker compose exec -T db pg_isready -U postgres -d postgres *> $null
@@ -140,6 +193,11 @@ if ($LASTEXITCODE -ne 0) {
 Ensure-EnvFile
 Set-EnvValue "MMA_AI_COMPOSE_DATABASE_URL" "postgresql://postgres:postgres@db:5432/mma-ai"
 Set-EnvValue "MMA_AI_COMPOSE_ODDS_DATABASE_URL" "postgresql://postgres:postgres@db:5432/odds"
+$selectedPostgresPort = Get-SetupPostgresPort
+Set-EnvValue "MMA_AI_POSTGRES_PORT" "$selectedPostgresPort"
+if ($selectedPostgresPort -ne 5432) {
+    Write-Host "Host port 5432 is unavailable; Docker Postgres will use localhost:$selectedPostgresPort."
+}
 
 if (-not $SkipDownload) {
     foreach ($artifact in $Artifacts) {

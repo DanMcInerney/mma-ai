@@ -22,7 +22,9 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 The scripts download these artifacts, verify checksums, restore the dumps into
 the Docker Postgres service, copy processed CSVs into `data/`, extract the
 starter model into `AutogluonModels/`, optionally configure LLM analytics, and
-start the web dashboard.
+start the web dashboard. If host port `5432` is already occupied, setup writes a
+free `MMA_AI_POSTGRES_PORT` value to `.env`; pass `-PostgresPort 55432` or
+`--postgres-port 55432` to force a port.
 
 ## Required Files
 

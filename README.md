@@ -30,6 +30,19 @@ The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 `.env.example` to `.env` yourself if you want to provide keys or non-default
 paths before running setup.
 
+If your machine already has Postgres on `localhost:5432`, setup automatically
+chooses another free host port for Docker Postgres and writes it to
+`MMA_AI_POSTGRES_PORT` in `.env`. The web app still reaches Postgres through
+Docker's internal `db:5432` address. To force a specific host port:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 -PostgresPort 55432
+```
+
+```bash
+bash setup.sh --postgres-port 55432
+```
+
 If you already bootstrapped artifacts and only want to start the app:
 
 ```bash

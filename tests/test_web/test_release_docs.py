@@ -26,6 +26,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Train: launch model training" in readme
     assert "Predict: choose a model" in readme
     assert "docker compose up --build web" in readme
+    assert "MMA_AI_POSTGRES_PORT" in readme
+    assert "--postgres-port 55432" in readme
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
     assert "/api/health" in read_text("Dockerfile")
@@ -66,6 +68,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "./docker/postgres-init:/docker-entrypoint-initdb.d:ro" in compose
     assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
     assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
+    assert "MMA_AI_POSTGRES_PORT:-5432" in compose
     assert "depends_on" not in compose
     assert postgres_init.strip() == "CREATE DATABASE odds;"
 
@@ -81,6 +84,7 @@ def test_env_example_lists_public_configuration_without_real_secrets():
         "MMA_AI_DATA_DIR",
         "MMA_AI_MODELS_DIR",
         "MMA_AI_UFCSTATS_DIR",
+        "MMA_AI_POSTGRES_PORT",
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
         "THE_ODDS_API_KEY",

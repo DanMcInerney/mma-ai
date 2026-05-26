@@ -26,6 +26,7 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "--if-exists" in script
         assert "--no-owner" in script
         assert "GEMINI_API_KEY" in script
+        assert "MMA_AI_POSTGRES_PORT" in script
         assert "docker compose up" in script
         assert "http://127.0.0.1:8000" in script
 
@@ -39,5 +40,6 @@ def test_setup_scripts_pin_compose_database_and_starter_model():
         assert "postgresql://postgres:postgres@db:5432/mma-ai" in script
         assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL" in script
         assert "postgresql://postgres:postgres@db:5432/odds" in script
+        assert "55432" in script
         assert "ag-20260304_110750-win-extreme" in script
         assert "AutogluonModels" in script

@@ -15,6 +15,7 @@ NO_OPEN=0
 FORCE_DOWNLOAD=0
 SKIP_LLM_PROMPT=0
 GEMINI_API_KEY_VALUE=""
+POSTGRES_PORT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
     --gemini-api-key)
       shift
       GEMINI_API_KEY_VALUE="${1:-}"
+      ;;
+    --postgres-port)
+      shift
+      POSTGRES_PORT="${1:-0}"
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -131,6 +136,48 @@ wait_for_postgres() {
   exit 1
 }
 
+compose_db_port() {
+  docker compose port db 5432 2>/dev/null | awk -F: 'NF { print $NF; exit }'
+}
+
+port_available() {
+  local port="$1"
+  if command -v nc >/dev/null 2>&1; then
+    ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1
+  else
+    ! (echo >"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
+  fi
+}
+
+setup_postgres_port() {
+  if [[ "$POSTGRES_PORT" != "0" ]]; then
+    echo "$POSTGRES_PORT"
+    return
+  fi
+
+  local existing
+  existing="$(compose_db_port || true)"
+  if [[ -n "$existing" ]]; then
+    echo "$existing"
+    return
+  fi
+
+  if port_available 5432; then
+    echo "5432"
+    return
+  fi
+
+  for candidate in $(seq 55432 55532); do
+    if port_available "$candidate"; then
+      echo "$candidate"
+      return
+    fi
+  done
+
+  echo "Could not find an available host port for PostgreSQL. Pass --postgres-port <port> to choose one." >&2
+  exit 1
+}
+
 require_command docker
 require_command curl
 require_command tar
@@ -139,6 +186,11 @@ docker compose version >/dev/null
 ensure_env_file
 set_env_value "MMA_AI_COMPOSE_DATABASE_URL" "postgresql://postgres:postgres@db:5432/mma-ai"
 set_env_value "MMA_AI_COMPOSE_ODDS_DATABASE_URL" "postgresql://postgres:postgres@db:5432/odds"
+SELECTED_POSTGRES_PORT="$(setup_postgres_port)"
+set_env_value "MMA_AI_POSTGRES_PORT" "$SELECTED_POSTGRES_PORT"
+if [[ "$SELECTED_POSTGRES_PORT" != "5432" ]]; then
+  echo "Host port 5432 is unavailable; Docker Postgres will use localhost:$SELECTED_POSTGRES_PORT."
+fi
 
 if [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
   for artifact in "${ARTIFACTS[@]}"; do
