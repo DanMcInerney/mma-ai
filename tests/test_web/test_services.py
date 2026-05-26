@@ -147,6 +147,39 @@ def test_list_upcoming_events_uses_wikipedia_scraper_adapter(monkeypatch, tmp_pa
     assert result["events"][0]["fights"][0]["fighter1"] == "fighter one"
 
 
+def test_list_upcoming_events_preserves_prediction_cli_numbers_after_date_sort(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_upcoming_event_links(self):
+            return [
+                "https://example.test/ufc-test-3",
+                "https://example.test/ufc-test-2",
+                "https://example.test/ufc-test-1",
+            ]
+
+        def get_upcoming_cards(self, links):
+            event_number = links[0].rsplit("-", 1)[1]
+            dates = {"1": "2026-06-10", "2": "2026-06-01", "3": "2026-06-20"}
+            return {
+                f"UFC Test {event_number}": [
+                    (pd.Timestamp(dates[event_number]), "fighter one", "fighter two"),
+                ]
+            }
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    result = list_upcoming_events(str(prediction_csv), limit=3)
+
+    assert [event["name"] for event in result["events"]] == ["UFC Test 2", "UFC Test 1", "UFC Test 3"]
+    assert [event["upcoming_number"] for event in result["events"]] == [2, 1, 3]
+
+
 def test_list_upcoming_events_reports_missing_prediction_csv(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     result = list_upcoming_events(str(tmp_path / "missing.csv"))

@@ -241,8 +241,6 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 20
             )
 
     events.sort(key=_upcoming_event_sort_key)
-    for index, event in enumerate(events, start=1):
-        event["upcoming_number"] = index
     return {"events": events, "warning": "; ".join(warnings) if warnings else None}
 
 

@@ -221,8 +221,9 @@ function renderUpcomingEvents(payload) {
     return;
   }
 
-  selectedUpcomingNumber = events.some((event) => Number(event.upcoming_number) === selectedUpcomingNumber)
-    ? selectedUpcomingNumber
+  const existingSelection = select?.value ? Number(select.value) : null;
+  selectedUpcomingNumber = events.some((event) => Number(event.upcoming_number) === existingSelection)
+    ? existingSelection
     : Number(events[0].upcoming_number);
   if (select) {
     select.disabled = false;

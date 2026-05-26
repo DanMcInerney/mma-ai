@@ -127,6 +127,8 @@ def test_dashboard_controls_hydrate_from_defaults_endpoint():
     assert "setValue(\"#train-model-families\", listValue(train.included_model_types))" in app_js
     assert "setChecked(\"#train-refit\", train.refit_full)" in app_js
     assert "selectedUpcomingNumber = Number(predict.upcoming_number || 1)" in app_js
+    assert "const existingSelection = select?.value ? Number(select.value) : null" in app_js
+    assert ": Number(events[0].upcoming_number)" in app_js
     assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}))" in app_js
 
 
