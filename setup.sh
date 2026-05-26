@@ -546,7 +546,7 @@ clear_database_import_marker() {
 readiness_response() {
   local web_url="$1"
   local response status body
-  if ! response="$(curl -sS -w $'\n%{http_code}' "$web_url/api/readiness" 2>&1)"; then
+  if ! response="$(curl -sS --max-time 30 -w $'\n%{http_code}' "$web_url/api/readiness" 2>&1)"; then
     printf '%s' "$response"
     return 1
   fi

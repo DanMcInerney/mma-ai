@@ -40,8 +40,8 @@ READINESS_CSV_REQUIRED_COLUMNS = {
     ("raw_csvs", "competitions"): {"event_url"},
     ("raw_csvs", "individuals"): {"url"},
     ("model_csvs", "prediction_data"): {"fighter_name"},
-    ("model_csvs", "training_data"): {"target"},
-    ("model_csvs", "training_data_dec"): {"decision_target"},
+    ("model_csvs", "training_data"): {"y_true"},
+    ("model_csvs", "training_data_dec"): {"y_true"},
 }
 _upcoming_events_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
 _upcoming_events_cache_lock = Lock()

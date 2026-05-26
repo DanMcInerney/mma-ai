@@ -448,6 +448,7 @@ def test_setup_scripts_wait_for_web_health_before_opening():
     assert "function Test-WebReady" in powershell
     assert "function Wait-ForWeb" in powershell
     assert 'Invoke-WebRequest -Uri "$WebUrl/api/readiness"' in powershell
+    assert "-TimeoutSec 30" in powershell
     assert "Get-WebReadinessStatus $WebUrl" in powershell
     assert "Last readiness response:" in powershell
     assert "docker compose logs --tail 120 web db" in powershell
@@ -460,7 +461,7 @@ def test_setup_scripts_wait_for_web_health_before_opening():
     assert "readiness_recovery_hint()" in bash
     assert "web_ready()" in bash
     assert "wait_for_web()" in bash
-    assert 'curl -sS -w' in bash
+    assert "curl -sS --max-time 30 -w" in bash
     assert "Last readiness response:" in bash
     assert "docker compose logs --tail 120 web db" in bash
     assert "--force-import" in bash

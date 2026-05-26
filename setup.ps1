@@ -705,7 +705,7 @@ function Get-WebReadinessStatus {
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Stop"
-        $response = Invoke-WebRequest -Uri "$WebUrl/api/readiness" -UseBasicParsing -TimeoutSec 5
+        $response = Invoke-WebRequest -Uri "$WebUrl/api/readiness" -UseBasicParsing -TimeoutSec 30
         return [pscustomobject]@{
             Ready = ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300)
             Detail = (Format-WebReadinessDetail $response.Content)

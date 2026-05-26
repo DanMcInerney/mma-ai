@@ -151,8 +151,8 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
     write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
-    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
-    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "decision_target": 0}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
     starter_model = models_dir / "ag-20260304_110750-win-extreme"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
@@ -226,8 +226,8 @@ def test_get_readiness_status_reports_malformed_csv_headers(monkeypatch, tmp_pat
     assert readiness["checks"]["competitions_csv"]["missing_columns"] == ["event_url"]
     assert readiness["checks"]["individuals_csv"]["missing_columns"] == ["url"]
     assert readiness["checks"]["prediction_data_csv"]["missing_columns"] == ["fighter_name"]
-    assert readiness["checks"]["training_data_csv"]["missing_columns"] == ["target"]
-    assert readiness["checks"]["training_data_dec_csv"]["missing_columns"] == ["decision_target"]
+    assert readiness["checks"]["training_data_csv"]["missing_columns"] == ["y_true"]
+    assert readiness["checks"]["training_data_dec_csv"]["missing_columns"] == ["y_true"]
 
 
 def test_get_readiness_status_requires_configured_starter_model_name(monkeypatch, tmp_path):
@@ -241,8 +241,8 @@ def test_get_readiness_status_requires_configured_starter_model_name(monkeypatch
     write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
     write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
-    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
-    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "decision_target": 0}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
     other_model = models_dir / "some-other-model"
     other_model.mkdir(parents=True)
     (other_model / "feats.txt").write_text("feature\n", encoding="utf-8")
@@ -268,8 +268,8 @@ def test_get_readiness_status_reports_missing_imported_database_tables(monkeypat
     write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
     write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
-    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
-    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "decision_target": 0}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
     starter_model = models_dir / "ag-20260304_110750-win-extreme"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
@@ -298,8 +298,8 @@ def test_get_readiness_status_requires_loadable_starter_model(monkeypatch, tmp_p
     write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
     write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
-    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
-    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "decision_target": 0}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
     starter_model = models_dir / "ag-20260304_110750-win-extreme"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
