@@ -71,6 +71,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
     dockerfile = read_text("Dockerfile")
+    assert "FROM python:3.12-slim AS runtime" in dockerfile
     assert "/api/health" in dockerfile
     assert 'CMD ["/app/.venv/bin/uvicorn"' in dockerfile
     assert 'CMD ["uv", "run"' not in dockerfile

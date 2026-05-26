@@ -487,14 +487,22 @@ class EnsemblePredictor:
         # Walk-forward format: load windows + final_model
         window_dirs.sort(key=lambda x: x[0])
         for window_num, window_path in window_dirs:
-            predictor = TabularPredictor.load(window_path)
+            predictor = TabularPredictor.load(
+                window_path,
+                require_version_match=False,
+                require_py_version_match=False,
+            )
             predictors.append(predictor)
             # Get scaler path for this window
             scaler_path = os.path.join(window_path, 'scaler.pkl')
             scaler_paths.append(scaler_path if os.path.exists(scaler_path) else None)
         
         if final_model_dir:
-            predictor = TabularPredictor.load(final_model_dir)
+            predictor = TabularPredictor.load(
+                final_model_dir,
+                require_version_match=False,
+                require_py_version_match=False,
+            )
             predictors.append(predictor)
             # Get scaler path for final model
             scaler_path = os.path.join(final_model_dir, 'scaler.pkl')

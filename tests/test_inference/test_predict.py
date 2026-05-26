@@ -528,7 +528,11 @@ class TestModelFunctions:
         
         assert model is not None
         assert calibrator is not None
-        mock_predictor.load.assert_called_once_with("/fake/path", require_version_match=False)
+        mock_predictor.load.assert_called_once_with(
+            "/fake/path",
+            require_version_match=False,
+            require_py_version_match=False,
+        )
         
         # Test without calibrator
         mock_exists.return_value = False
@@ -552,6 +556,49 @@ class TestModelFunctions:
         
         assert model is not None
         mock_predictor.load.assert_called_once_with("/fake/path")
+
+    def test_ensemble_predictor_load_bypasses_runtime_metadata_guards(self, tmp_path, monkeypatch):
+        """Walk-forward ensembles should load starter artifacts across Docker/local runtimes."""
+        from libs.modeling import train as train_module
+
+        model_dir = tmp_path / "ensemble"
+        window_dir = model_dir / "window_0"
+        final_model_dir = model_dir / "final_model"
+        window_dir.mkdir(parents=True)
+        final_model_dir.mkdir()
+
+        calls = []
+
+        class FakePredictor:
+            label = "y_true"
+            eval_metric = "log_loss"
+            problem_type = "binary"
+            model_best = "FakeModel"
+
+            def __init__(self, path):
+                self.path = path
+
+        def fake_load(path, **kwargs):
+            calls.append((path, kwargs))
+            return FakePredictor(path)
+
+        fake_tabular = MagicMock()
+        fake_tabular.load.side_effect = fake_load
+        monkeypatch.setattr(train_module, "TabularPredictor", fake_tabular)
+
+        ensemble = train_module.EnsemblePredictor.load(str(model_dir))
+
+        assert len(ensemble.predictors) == 2
+        assert calls == [
+            (
+                str(window_dir),
+                {"require_version_match": False, "require_py_version_match": False},
+            ),
+            (
+                str(final_model_dir),
+                {"require_version_match": False, "require_py_version_match": False},
+            ),
+        ]
     
     def test_get_predictions_no_calibrator(self):
         """Test get_predictions function without calibrator"""

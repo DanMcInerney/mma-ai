@@ -989,7 +989,11 @@ def load_model_and_calibrator(model_path, use_calibrated=True):
     else:
         # Old single-model format
         print(f"Detected SINGLE model at {model_path}")
-        predictor = TabularPredictor.load(model_path, require_version_match=False)
+        predictor = TabularPredictor.load(
+            model_path,
+            require_version_match=False,
+            require_py_version_match=False,
+        )
     
     # Try to load calibrator if requested
     calibrator = None
