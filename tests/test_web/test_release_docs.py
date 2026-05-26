@@ -62,7 +62,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "BFO odds/features" in release_notes
     assert "uv run pytest -q" in release_notes
 
-    assert "postgres:18" in compose
+    assert "postgres:17" in compose
     assert '"8000:8000"' in compose
     assert "MMA_AI_DATA_DIR: /app/data" in compose
     assert "./docker/postgres-init:/docker-entrypoint-initdb.d:ro" in compose

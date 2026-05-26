@@ -228,15 +228,38 @@ function Get-SetupPostgresPort {
     throw "Could not find an available host port for PostgreSQL. Pass -PostgresPort <port> to choose one."
 }
 
+function Test-PostgresReady {
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & docker compose exec -T db pg_isready -U postgres -d postgres *> $null
+        return $LASTEXITCODE -eq 0
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 function Wait-ForPostgres {
     for ($i = 0; $i -lt 90; $i++) {
-        & docker compose exec -T db pg_isready -U postgres -d postgres *> $null
-        if ($LASTEXITCODE -eq 0) {
+        if (Test-PostgresReady) {
             return
         }
         Start-Sleep -Seconds 2
     }
     throw "Postgres did not become ready in time."
+}
+
+function Start-PostgresForImport {
+    Write-Host "Starting Docker Postgres"
+    try {
+        Invoke-DockerCompose @("up", "-d", "db")
+        Wait-ForPostgres
+    } catch {
+        Write-Host "Postgres did not start cleanly; recreating the setup database volume and retrying."
+        Invoke-DockerCompose @("down", "--volumes", "--remove-orphans")
+        Invoke-DockerCompose @("up", "-d", "db")
+        Wait-ForPostgres
+    }
 }
 
 Require-Command "docker"
@@ -289,9 +312,7 @@ if (-not (Test-Path -LiteralPath $modelDir)) {
 }
 
 if (-not $SkipImport) {
-    Write-Host "Starting Docker Postgres"
-    Invoke-DockerCompose @("up", "-d", "db")
-    Wait-ForPostgres
+    Start-PostgresForImport
 
     & docker compose exec -T db createdb -U postgres "mma-ai" 2>$null
     & docker compose exec -T db createdb -U postgres "odds" 2>$null

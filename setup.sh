@@ -133,7 +133,7 @@ wait_for_postgres() {
     sleep 2
   done
   echo "Postgres did not become ready in time." >&2
-  exit 1
+  return 1
 }
 
 compose_db_port() {
@@ -189,6 +189,18 @@ setup_postgres_port() {
   exit 1
 }
 
+start_postgres_for_import() {
+  echo "Starting Docker Postgres"
+  if docker compose up -d db && wait_for_postgres; then
+    return 0
+  fi
+
+  echo "Postgres did not start cleanly; recreating the setup database volume and retrying."
+  docker compose down --volumes --remove-orphans
+  docker compose up -d db
+  wait_for_postgres
+}
+
 require_command docker
 require_command curl
 require_command tar
@@ -224,9 +236,7 @@ else
 fi
 
 if [[ "$SKIP_IMPORT" -eq 0 ]]; then
-  echo "Starting Docker Postgres"
-  docker compose up -d db
-  wait_for_postgres
+  start_postgres_for_import
 
   docker compose exec -T db createdb -U postgres "mma-ai" >/dev/null 2>&1 || true
   docker compose exec -T db createdb -U postgres "odds" >/dev/null 2>&1 || true

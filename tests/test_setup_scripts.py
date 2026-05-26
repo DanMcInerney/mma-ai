@@ -28,6 +28,7 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "GEMINI_API_KEY" in script
         assert "MMA_AI_POSTGRES_PORT" in script
         assert "docker compose up" in script
+        assert "recreating the setup database volume" in script
         assert "http://127.0.0.1:8000" in script
 
 
