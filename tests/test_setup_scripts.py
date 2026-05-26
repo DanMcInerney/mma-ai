@@ -48,6 +48,16 @@ def test_bash_setup_script_has_valid_syntax():
 
     assert result.returncode == 0, combined
 
+    result = subprocess.run(
+        [bash, "-n", "scripts/verify_hf_manifest.sh"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
 
 def test_bash_setup_script_is_tracked_executable():
     result = subprocess.run(
@@ -128,6 +138,7 @@ def test_setup_scripts_reject_invalid_arguments_before_install_work():
 def test_setup_scripts_download_restore_configure_and_start_dashboard():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")
+    bash_manifest_helper = read_text("scripts/verify_hf_manifest.sh")
 
     for script in (powershell, bash):
         assert "MMA AI setup" in script
@@ -171,8 +182,6 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "Waiting for MMA AI web dashboard readiness check" in script
         assert "Validating setup artifact cache" in script
         assert "Required setup artifact cache is incomplete or corrupt" in script
-        assert "Hugging Face manifest entry" in script
-        assert "Update setup artifact checksums before downloading large artifacts." in script
         assert "feats.txt" in script
         assert "predictor.pkl" in script
         assert "ensemble_info.txt" in script
@@ -184,11 +193,16 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "bestfightodds.bfo" in script
         assert "Using existing imported Postgres databases" in script
         assert "Database import finished but required tables were not found." in script
+    assert "Hugging Face manifest entry" in powershell
+    assert "Update setup artifact checksums before downloading large artifacts." in powershell
+    assert "Hugging Face manifest entry" in bash_manifest_helper
+    assert "Update setup artifact checksums before downloading large artifacts." in bash_manifest_helper
 
 
 def test_setup_scripts_validate_huggingface_manifest_before_large_downloads():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")
+    bash_manifest_helper = read_text("scripts/verify_hf_manifest.sh")
 
     assert "function Test-ManifestArtifactPins" in powershell
     assert "ConvertFrom-Json" in powershell
@@ -199,11 +213,75 @@ def test_setup_scripts_validate_huggingface_manifest_before_large_downloads():
     assert "Test-ManifestArtifactPins\nAssert-ArtifactCache" in powershell
 
     assert "validate_manifest_artifact_pins()" in bash
-    assert 'grep -Fq "$relative" "$manifest"' in bash
-    assert 'grep -Fq "$expected" "$manifest"' in bash
+    assert 'pins+=("$relative=$expected")' in bash
+    assert 'bash "$ROOT/scripts/verify_hf_manifest.sh" "$manifest" "${pins[@]}"' in bash
+    assert "manifest_sha_for_path()" in bash_manifest_helper
+    assert 'current_path == wanted && current_sha != ""' in bash_manifest_helper
+    assert "does not match the setup pin" in bash_manifest_helper
     assert 'download_file "manifest.json" ""\n  validate_manifest_artifact_pins' in bash
     assert '[[ "$relative" == "manifest.json" ]] && continue' in bash
     assert "validate_manifest_artifact_pins\nassert_artifact_cache" in bash
+
+
+def test_bash_huggingface_manifest_validation_pairs_paths_and_hashes():
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash is not available")
+
+    manifest = ROOT / ".pytest_cache" / "manifest-test.json"
+    manifest.parent.mkdir(exist_ok=True)
+    manifest.write_text(
+        """
+{
+  "files": [
+    {
+      "path": "dumps/mma-ai.postgres-custom",
+      "sha256": "AAA111"
+    },
+    {
+      "path": "dumps/odds.postgres-custom",
+      "sha256": "BBB222"
+    }
+  ]
+}
+""",
+        encoding="utf-8",
+    )
+
+    passing = subprocess.run(
+        [
+            bash,
+            "scripts/verify_hf_manifest.sh",
+            ".pytest_cache/manifest-test.json",
+            "dumps/mma-ai.postgres-custom=AAA111",
+            "dumps/odds.postgres-custom=BBB222",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert passing.returncode == 0, passing.stdout + passing.stderr
+
+    failing = subprocess.run(
+        [
+            bash,
+            "scripts/verify_hf_manifest.sh",
+            ".pytest_cache/manifest-test.json",
+            "dumps/mma-ai.postgres-custom=BBB222",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    combined = failing.stdout + failing.stderr
+    if failing.returncode != 0 and "Windows Subsystem for Linux has no installed distributions" in combined:
+        pytest.skip("bash is present but WSL is not configured")
+
+    assert failing.returncode == 1, combined
+    assert "dumps/mma-ai.postgres-custom" in combined
+    assert "does not match the setup pin" in combined
 
 
 def test_setup_scripts_clear_stale_llm_key_for_keyless_custom_and_local_endpoints():

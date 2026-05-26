@@ -204,16 +204,16 @@ validate_manifest_artifact_pins() {
     exit 1
   }
 
+  local pins=()
   local artifact relative expected
   for artifact in "${ARTIFACTS[@]}"; do
     relative="${artifact%%|*}"
     expected="${artifact#*|}"
     [[ "$relative" == "manifest.json" || -z "$expected" ]] && continue
-    if ! grep -Fq "$relative" "$manifest" || ! grep -Fq "$expected" "$manifest"; then
-      echo "Hugging Face manifest entry for $relative does not match the setup pin. Update setup artifact checksums before downloading large artifacts." >&2
-      exit 1
-    fi
+    pins+=("$relative=$expected")
   done
+
+  bash "$ROOT/scripts/verify_hf_manifest.sh" "$manifest" "${pins[@]}"
 }
 
 safe_remove_setup_dir() {

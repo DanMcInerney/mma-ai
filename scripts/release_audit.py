@@ -45,6 +45,7 @@ REQUIRED_TRACKED_FILES = {
     "setup.ps1",
     "setup.sh",
     "scripts/train_dashboard.py",
+    "scripts/verify_hf_manifest.sh",
     "uv.lock",
     *SEED_DATA_PATHS,
 }
