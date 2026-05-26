@@ -97,6 +97,7 @@ raw data dumps, screenshots, notebooks, or generated prediction outputs.
 ```bash
 uv lock --check
 uv run pytest -q
+uv run mma-release-audit
 docker compose config --quiet
 docker compose build web
 ```
@@ -104,7 +105,7 @@ docker compose build web
 Security and hygiene scans:
 
 ```bash
-rg -n --hidden --glob '!**/.git/**' --glob '!**/.venv/**' --glob '!uv.lock' --glob '!docs/RELEASE_READINESS.md' "C:/Users|C:\\Users|@gmail\\.com|api[_-]?key|secret|token" .
+uv run mma-release-audit --json
 git ls-files | rg '(^pics/|^data/|^visualizations/|^blogs/|^queries/|\\.(csv|png|jpg|jpeg|gif|ipynb)$)'
 ```
 

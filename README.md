@@ -98,6 +98,12 @@ uv sync
 uv run mma-web
 ```
 
+Before publishing a release, run the tracked-file hygiene audit:
+
+```bash
+uv run mma-release-audit
+```
+
 ## Seed Data And Database Bootstrap
 
 This repo ships with current seed UFCStats CSVs at

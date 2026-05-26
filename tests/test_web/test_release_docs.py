@@ -34,6 +34,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Train: launch model training" in readme
     assert "Predict: choose a model" in readme
     assert "uv run mma-evaluate" in readme
+    assert "uv run mma-release-audit" in readme
     assert "docker compose up --build web" in readme
     assert "MMA_AI_POSTGRES_PORT" in readme
     assert "--postgres-port 55432" in readme
@@ -74,6 +75,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "mma-evaluate" in release_notes
     assert "Odds are not model inputs" in release_notes
     assert "uv run pytest -q" in release_notes
+    assert "uv run mma-release-audit" in release_notes
 
     assert "postgres:17" in compose
     assert '"127.0.0.1:${MMA_AI_WEB_PORT:-8000}:8000"' in compose
