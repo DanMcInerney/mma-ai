@@ -724,10 +724,30 @@ def test_list_upcoming_events_keeps_unmatched_event_names_visible(monkeypatch, t
 
 def test_list_upcoming_events_reports_missing_prediction_csv(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.df = df
+            self.upcoming_number = upcoming_number
+
+        def get_upcoming_event_links(self):
+            return [
+                "https://example.test/UFC_Missing_Data_2",
+                "https://example.test/UFC_Missing_Data_1",
+            ]
+
+        def get_upcoming_cards(self, _links):
+            raise AssertionError("Fight matching should not run without prediction data")
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
     result = list_upcoming_events(str(tmp_path / "missing.csv"))
 
-    assert result["events"] == []
+    assert [event["name"] for event in result["events"]] == ["UFC Missing Data 1", "UFC Missing Data 2"]
+    assert [event["upcoming_number"] for event in result["events"]] == [1, 2]
+    assert result["events"][0]["fights"] == []
     assert "Prediction data CSV not found" in result["warning"]
+    assert "without matched fights" in result["warning"]
 
 
 def test_validate_matchup_request_rejects_unknown_fighter(monkeypatch, tmp_path):

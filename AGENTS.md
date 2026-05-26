@@ -26,7 +26,9 @@ model training, analytics, and fight prediction.
   dependencies.
 - Dashboard tabs:
   - Data tab: scrape raw UFCStats CSVs, rebuild PostgreSQL feature tables,
-    create finalized CSVs, and run read-only analytics.
+    recalculate odds features from the imported Hugging Face `odds` database,
+    create finalized CSVs, and run read-only analytics. Live BestFightOdds
+    refresh is opt-in, not part of the default dashboard update.
   - Train tab: launch AutoGluon training with defaults from `libs/modeling/train.py`; advanced knobs stay collapsed.
     The Evaluations subtab summarizes saved artifacts such as `evals.txt`,
     `model_stats.txt`, `test_predictions.csv`, `all_predictions.csv`, and
@@ -70,7 +72,11 @@ new rows; `--force-full` is the explicit destructive raw-CSV rebuild path.
 
 `main.py --reset-db` recreates generated schemas and finalized CSVs from the raw
 CSVs. The normal public update path after the initial Hugging Face DB import is
-`uv run mma-rebuild-db --scrape --reset-db`. Its normal outputs are:
+`uv run mma-rebuild-db --scrape --reset-db --odds-features`, which recalculates
+`features.odds` from the configured imported `ODDS_DATABASE_URL` without
+scraping BestFightOdds. Use `--odds` only when you explicitly want to refresh
+live BestFightOdds data before calculating odds features. Its normal outputs
+are:
 
 - `data/prediction_data.csv`: side-by-side fighter feature rows used for
   inference and upcoming-fight feature construction.

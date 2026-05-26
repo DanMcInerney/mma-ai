@@ -463,14 +463,18 @@ def list_fighters(prediction_data_csv: str | None = None) -> list[str]:
 
 def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | None = None) -> dict[str, Any]:
     path = resolve_data_csv(prediction_data_csv, "prediction_data.csv")
-    if not path.exists():
-        return {"events": [], "warning": f"Prediction data CSV not found: {path}"}
-
     from libs.upcoming_fights import UpcomingFights
 
-    df = pd.read_csv(path)
     events = []
     warnings = []
+    if path.exists():
+        df = pd.read_csv(path)
+        can_match_fights = True
+    else:
+        df = pd.DataFrame({"fighter_name": []})
+        can_match_fights = False
+        warnings.append(f"Prediction data CSV not found: {path}; showing Wikipedia event names without matched fights")
+
     scraper = UpcomingFights(df, 1)
     try:
         event_links = scraper.get_upcoming_event_links()
@@ -482,6 +486,15 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | No
         selected_links = selected_links[: max(1, limit)]
 
     for upcoming_number, event_link in enumerate(selected_links, start=1):
+        if not can_match_fights:
+            events.append(
+                _empty_upcoming_event(
+                    event_link,
+                    upcoming_number,
+                    "Prediction data CSV is unavailable, so fight matching is disabled.",
+                )
+            )
+            continue
         try:
             event_map = scraper.get_upcoming_cards([event_link])
         except Exception as exc:

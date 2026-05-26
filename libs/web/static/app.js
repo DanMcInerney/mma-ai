@@ -7,6 +7,7 @@ let activeDataJobId = null;
 let selectedUpcomingNumber = 1;
 let upcomingEventsCache = [];
 let predictModelsAvailable = false;
+let selectedEventHasMatchedFights = false;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -373,6 +374,8 @@ function renderUpcomingEvents(payload) {
       select.disabled = true;
     }
     selectedUpcomingNumber = null;
+    selectedEventHasMatchedFights = false;
+    updatePredictionButtons();
     qs("#event-preview").innerHTML = `<div class="muted">${escapeHtml(payload?.warning || "No upcoming UFC events found.")}</div>`;
     qs("#events-output").innerHTML = "";
     return;
@@ -400,10 +403,14 @@ function selectedUpcomingEvent() {
 function updateEventPreview() {
   const event = selectedUpcomingEvent();
   if (!event) {
+    selectedEventHasMatchedFights = false;
+    updatePredictionButtons();
     qs("#event-preview").innerHTML = `<div class="muted">Choose an upcoming event to preview the matched fights.</div>`;
     return;
   }
   const fights = event.fights || [];
+  selectedEventHasMatchedFights = fights.length > 0;
+  updatePredictionButtons();
   const preview = fights.slice(0, 6)
     .map((fight) => `<span class="fight-chip">${escapeHtml(fight.fighter1)} vs ${escapeHtml(fight.fighter2)}</span>`)
     .join("");
@@ -738,8 +745,7 @@ function modelOptions(models) {
 function renderPredictModelState(modelType, models) {
   predictModelsAvailable = models.length > 0;
   setDisabled("#predict-model", !predictModelsAvailable);
-  setDisabled("#run-event-predict", !predictModelsAvailable);
-  setDisabled("#run-matchup", !predictModelsAvailable);
+  updatePredictionButtons();
   const status = qs("#predict-model-status");
   if (!status) return;
   status.classList.remove("ready", "blocked");
@@ -747,6 +753,11 @@ function renderPredictModelState(modelType, models) {
   status.textContent = predictModelsAvailable
     ? `${models.length} ${modelType} model${models.length === 1 ? "" : "s"} available. Leave Model on Latest model to use the newest one.`
     : `No ${modelType} models found. Run setup again or train a ${modelType} model before predicting.`;
+}
+
+function updatePredictionButtons() {
+  setDisabled("#run-event-predict", !predictModelsAvailable || !selectedEventHasMatchedFights);
+  setDisabled("#run-matchup", !predictModelsAvailable);
 }
 
 function predictionDataCsv() {
@@ -767,6 +778,8 @@ async function loadUpcomingEvents() {
     select.disabled = true;
     select.innerHTML = `<option value="">Loading upcoming events...</option>`;
   }
+  selectedEventHasMatchedFights = false;
+  updatePredictionButtons();
   qs("#event-preview").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`;
   qs("#events-output").innerHTML = "";
   const params = new URLSearchParams();
@@ -783,6 +796,8 @@ function renderUpcomingEventsError(message) {
     select.innerHTML = `<option value="">Could not load upcoming events</option>`;
   }
   selectedUpcomingNumber = null;
+  selectedEventHasMatchedFights = false;
+  updatePredictionButtons();
   qs("#event-preview").innerHTML = `<div class="muted">${escapeHtml(message || "Could not load upcoming UFC events.")}</div>`;
   renderJson("#events-output", message || "Could not load upcoming UFC events.");
 }
@@ -828,6 +843,10 @@ function wirePrediction() {
       }
       if (!upcomingNumber) {
         renderJson("#events-output", "Choose an upcoming event before prediction.");
+        return;
+      }
+      if (!selectedEventHasMatchedFights) {
+        renderJson("#events-output", "The selected event has no matched fights yet. Run Update Data after setup or choose another event.");
         return;
       }
       const payload = {

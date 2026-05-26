@@ -140,7 +140,8 @@ def test_predict_model_dropdown_filters_with_selected_target():
     assert "function renderPredictModelState(modelType, models)" in app_js
     assert "No models found" in app_js
     assert "No model is available for this target" in app_js
-    assert 'setDisabled("#run-event-predict", !predictModelsAvailable)' in app_js
+    assert "function updatePredictionButtons()" in app_js
+    assert 'setDisabled("#run-event-predict", !predictModelsAvailable || !selectedEventHasMatchedFights)' in app_js
     assert 'setDisabled("#run-matchup", !predictModelsAvailable)' in app_js
     assert 'api("/api/predict/models")' in app_js
     assert ".model-status.blocked" in styles
@@ -206,6 +207,8 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     assert 'qs("#predict-event").addEventListener("change"' in app_js
     assert 'upcoming_number: upcomingNumber' in app_js
     assert "Choose an upcoming event before prediction." in app_js
+    assert "The selected event has no matched fights yet" in app_js
+    assert "selectedEventHasMatchedFights = fights.length > 0" in app_js
     assert 'qs("#event-preview").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`' in app_js
     assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEventsWithStatus())" in app_js
 

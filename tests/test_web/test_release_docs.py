@@ -86,6 +86,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "MMA_AI_DATA_DIR" in agents
     assert "output directory" in agents
     assert "YYYY-MM-DD" in agents
+    assert "--odds-features" in agents
+    assert "BestFightOdds" in agents
     assert "prediction_data.csv" in claude
     assert "./setup.sh" in claude
     assert "training_data.csv" in claude
@@ -97,6 +99,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "YYYY-MM-DD" in claude
     assert "read-only transaction" in claude
     assert "SQLite query-only mode" in claude
+    assert "--odds-features" in claude
+    assert "without scraping BestFightOdds" in claude
 
     assert "dashboard release candidate" in release_notes
     assert "setup.ps1" in release_notes

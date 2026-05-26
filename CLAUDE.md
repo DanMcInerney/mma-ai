@@ -25,8 +25,11 @@ Train, and Predict dashboard.
 ## Dashboard Tabs
 
 - Data: scrape `competitions.csv` and `individuals.csv`, rebuild the Postgres
-  feature store, create `prediction_data.csv`, `training_data.csv`, and
-  `training_data_dec.csv`, then support read-only analytics.
+  feature store, recalculate odds features from the imported Hugging Face
+  `odds` database, create `prediction_data.csv`, `training_data.csv`, and
+  `training_data_dec.csv`, then support read-only analytics. Live
+  BestFightOdds refresh is opt-in rather than part of the default dashboard
+  update.
 - Train: expose defaults from `libs/modeling/train.py`; keep advanced knobs in
   collapsed UI controls. The Evaluations subtab reads saved model artifacts and
   charts holdout prediction metrics including accuracy, log loss, Brier score,
@@ -94,7 +97,10 @@ Generated finalized CSVs, model artifacts, logs, and database dumps are ignored.
 The UFCStats scraper is incremental by default: it skips existing fighter URLs
 and event URLs, merges only new rows, and requires `--force-full` for a raw CSV
 rebuild from scratch. After the initial Hugging Face database import, the normal
-update command is `uv run mma-rebuild-db --scrape --reset-db`.
+update command is `uv run mma-rebuild-db --scrape --reset-db --odds-features`.
+That recalculates `features.odds` from the configured imported
+`ODDS_DATABASE_URL` without scraping BestFightOdds; add `--odds` only when you
+explicitly want a live BestFightOdds refresh before odds feature calculation.
 
 Core tables live in the `features` schema:
 
