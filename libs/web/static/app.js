@@ -741,10 +741,11 @@ async function loadUpcomingEvents() {
   }
   qs("#event-preview").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`;
   qs("#events-output").innerHTML = "";
-  const params = new URLSearchParams({ limit: "20" });
+  const params = new URLSearchParams();
   const predictionCsv = predictionDataCsv();
   if (predictionCsv) params.set("prediction_data_csv", predictionCsv);
-  renderUpcomingEvents(await api(`/api/predict/upcoming?${params.toString()}`));
+  const query = params.toString();
+  renderUpcomingEvents(await api(`/api/predict/upcoming${query ? `?${query}` : ""}`));
 }
 
 function wirePrediction() {

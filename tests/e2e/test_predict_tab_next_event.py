@@ -181,7 +181,7 @@ def test_predict_tab_browser_predicts_next_ufc_event(monkeypatch, tmp_path):
 
     captured = {}
 
-    def fake_upcoming(prediction_data_csv=None, limit=20):
+    def fake_upcoming(prediction_data_csv=None, limit=None):
         captured["upcoming"] = {"prediction_data_csv": prediction_data_csv, "limit": limit}
         return {
             "events": [
@@ -277,7 +277,7 @@ def test_predict_tab_browser_predicts_next_ufc_event(monkeypatch, tmp_path):
         assert "fighter one" in result.text
         assert "Value Side" in result.text
         assert "Confidence" in result.text
-        assert captured["upcoming"]["limit"] == 20
+        assert captured["upcoming"]["limit"] is None
         assert captured["prediction_request"]["upcoming_number"] == 1
         assert captured["prediction_request"]["manual_odds"] == {"fighter one": -120, "fighter two": 100}
     finally:

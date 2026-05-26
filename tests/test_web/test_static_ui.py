@@ -192,7 +192,8 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     assert "Odds are not included in the model" in html
     assert "async function loadUpcomingEvents()" in app_js
     assert "function updateEventPreview()" in app_js
-    assert 'new URLSearchParams({ limit: "20" })' in app_js
+    assert "const params = new URLSearchParams();" in app_js
+    assert 'api(`/api/predict/upcoming${query ? `?${query}` : ""}`)' in app_js
     assert 'qs("#predict-event").addEventListener("change"' in app_js
     assert 'upcoming_number: upcomingNumber' in app_js
     assert "Choose an upcoming event before prediction." in app_js

@@ -420,7 +420,7 @@ def list_fighters(prediction_data_csv: str | None = None) -> list[str]:
     return sorted(names, key=str.lower)
 
 
-def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 20) -> dict[str, Any]:
+def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | None = None) -> dict[str, Any]:
     path = resolve_data_csv(prediction_data_csv, "prediction_data.csv")
     if not path.exists():
         return {"events": [], "warning": f"Prediction data CSV not found: {path}"}
@@ -436,7 +436,11 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 20
     except Exception as exc:
         return {"events": [], "warning": f"Could not load upcoming UFC events from Wikipedia: {exc}"}
 
-    for upcoming_number, event_link in enumerate(list(reversed(event_links))[: max(1, limit)], start=1):
+    selected_links = list(reversed(event_links))
+    if limit is not None:
+        selected_links = selected_links[: max(1, limit)]
+
+    for upcoming_number, event_link in enumerate(selected_links, start=1):
         try:
             event_map = scraper.get_upcoming_cards([event_link])
         except Exception as exc:

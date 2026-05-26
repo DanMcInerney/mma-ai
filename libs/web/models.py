@@ -61,7 +61,7 @@ class EventPredictionRequest(BaseModel):
     prediction_data_csv: str | None = None
     training_data_csv: str | None = None
     output_dir: str | None = None
-    upcoming_number: int = Field(default=1, ge=1, le=20)
+    upcoming_number: int = Field(default=1, ge=1)
     odds: bool = True
     manual_odds: dict[str, int] | None = None
     use_calibrated: bool = False

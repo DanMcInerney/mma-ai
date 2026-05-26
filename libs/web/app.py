@@ -130,7 +130,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/predict/upcoming")
-    def upcoming(prediction_data_csv: str | None = None, limit: int = 20) -> dict:
+    def upcoming(prediction_data_csv: str | None = None, limit: int | None = None) -> dict:
         try:
             return list_upcoming_events(prediction_data_csv, limit)
         except ValueError as exc:
