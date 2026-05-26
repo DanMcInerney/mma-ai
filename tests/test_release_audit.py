@@ -34,6 +34,7 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
             "data/raw/ufcstats/competitions.csv",
             "data/raw/ufcstats/individuals.csv",
             "data/prediction_data.csv",
+            "AutoGluonModels/ag-test/predictor.pkl",
             "AutogluonModels/ag-test/predictor.pkl",
             "pics/picks/example.png",
         ]
@@ -41,6 +42,7 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
 
     assert [issue.path for issue in issues] == [
         "data/prediction_data.csv",
+        "AutoGluonModels/ag-test/predictor.pkl",
         "AutogluonModels/ag-test/predictor.pkl",
         "pics/picks/example.png",
     ]

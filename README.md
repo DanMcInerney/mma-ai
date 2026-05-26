@@ -167,7 +167,7 @@ unset and import the Hugging Face dumps into the Compose Postgres volume. The
 Data tab defaults to incremental UFCStats scrape plus generated-schema
 recreation, so future raw CSV updates rebuild the local feature store without
 requiring another dump import. Train/Predict also need generated CSVs and model
-artifacts in the mounted `data/` and `AutoGluonModels/` folders, or you need to
+artifacts in the mounted `data/` and `AutogluonModels/` folders, or you need to
 run the Data and Train tabs to create them.
 
 ## Dashboard

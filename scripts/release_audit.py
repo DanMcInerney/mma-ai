@@ -25,7 +25,7 @@ GENERATED_DATA_FILES = {
 REQUIRED_TRACKED_FILES = {
     "libs/web/static/index.html",
 }
-FORBIDDEN_PREFIXES = ("AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
+FORBIDDEN_PREFIXES = ("AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
 FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
 
 SENSITIVE_PATTERNS = {

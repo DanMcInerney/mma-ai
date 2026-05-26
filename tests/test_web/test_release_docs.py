@@ -110,6 +110,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "artifacts" in dockerignore
     assert ".env" in dockerignore
     assert ".env.local" in dockerignore
+    assert "AutogluonModels" in dockerignore
+    assert "AutoGluonModels" in dockerignore
     assert "AutogluonModels/" in gitignore
     assert "AutoGluonModels/" in gitignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
@@ -172,7 +174,7 @@ def test_public_repo_tracks_seed_raw_csvs_and_no_heavy_generated_artifacts():
         assert row_count > 1000
         assert len(header) > 5
 
-    forbidden_prefixes = ("AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
+    forbidden_prefixes = ("AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
     forbidden_suffixes = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
     generated_data_files = {
         "data/prediction_data.csv",
