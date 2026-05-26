@@ -1,4 +1,8 @@
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -6,6 +10,43 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def read_text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def test_powershell_setup_script_has_valid_syntax():
+    shell = shutil.which("powershell") or shutil.which("pwsh")
+    if not shell:
+        pytest.skip("PowerShell is not available")
+
+    args = [shell, "-NoProfile"]
+    if Path(shell).name.lower().startswith("powershell"):
+        args.extend(["-ExecutionPolicy", "Bypass"])
+    args.extend(
+        [
+            "-Command",
+            (
+                "$tokens = $null; $errors = $null; "
+                "$path = (Resolve-Path './setup.ps1').Path; "
+                "[System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errors) | Out-Null; "
+                "if ($errors.Count -gt 0) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }"
+            ),
+        ]
+    )
+    result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=False)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_bash_setup_script_has_valid_syntax():
+    bash = shutil.which("bash")
+    if not bash:
+        pytest.skip("bash is not available")
+
+    result = subprocess.run([bash, "-n", "setup.sh"], cwd=ROOT, text=True, capture_output=True, check=False)
+    combined = result.stdout + result.stderr
+    if result.returncode != 0 and "Windows Subsystem for Linux has no installed distributions" in combined:
+        pytest.skip("bash is present but WSL is not configured")
+
+    assert result.returncode == 0, combined
 
 
 def test_setup_scripts_download_restore_configure_and_start_dashboard():
