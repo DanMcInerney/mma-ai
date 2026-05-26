@@ -31,6 +31,17 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "http://127.0.0.1:8000" in script
 
 
+def test_setup_scripts_detect_existing_postgres_host_port():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    assert "Test-DockerPublishedPortInUse" in powershell
+    assert "Get-NetTCPConnection" in powershell
+    assert "docker ps --format" in powershell
+    assert "docker_published_port_in_use" in bash
+    assert "docker ps --format" in bash
+
+
 def test_setup_scripts_pin_compose_database_and_starter_model():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")

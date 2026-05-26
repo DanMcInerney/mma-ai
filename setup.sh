@@ -142,11 +142,22 @@ compose_db_port() {
 
 port_available() {
   local port="$1"
+  if docker_published_port_in_use "$port"; then
+    return 1
+  fi
+
   if command -v nc >/dev/null 2>&1; then
     ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1
   else
     ! (echo >"/dev/tcp/127.0.0.1/$port") >/dev/null 2>&1
   fi
+}
+
+docker_published_port_in_use() {
+  local port="$1"
+  docker ps --format '{{.Ports}}' 2>/dev/null \
+    | tr ',' '\n' \
+    | grep -Eq "(^|[^0-9])${port}->"
 }
 
 setup_postgres_port() {

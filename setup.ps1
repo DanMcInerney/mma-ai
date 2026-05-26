@@ -143,6 +143,15 @@ function Get-ComposeDbPort {
 
 function Test-TcpPortAvailable {
     param([int]$Port)
+
+    if (Test-DockerPublishedPortInUse $Port) {
+        return $false
+    }
+
+    if (Test-LocalTcpListenerInUse $Port) {
+        return $false
+    }
+
     $listener = $null
     try {
         $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Any, $Port)
@@ -155,6 +164,45 @@ function Test-TcpPortAvailable {
             $listener.Stop()
         }
     }
+}
+
+function Test-DockerPublishedPortInUse {
+    param([int]$Port)
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & docker ps --format "{{.Ports}}" 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -ne 0) {
+        return $false
+    }
+
+    foreach ($line in @($output)) {
+        foreach ($publishedPort in ($line -split ",")) {
+            $portMapping = $publishedPort.Trim()
+            if ($portMapping -match "(^|[^0-9])$Port->") {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Test-LocalTcpListenerInUse {
+    param([int]$Port)
+
+    if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+        $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+        return $listeners.Count -gt 0
+    }
+
+    return $false
 }
 
 function Get-SetupPostgresPort {
