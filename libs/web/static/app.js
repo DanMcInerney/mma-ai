@@ -171,7 +171,7 @@ function renderPredictionGraphic(target, predictions) {
               <span>${formatPercent(row.Fighter1_AI_Prob)}</span>
             </div>
             <div class="probability-track"><span style="width: ${f1Prob}%"></span></div>
-            <div class="market-line">Market ${formatPercent(row.Fighter1_Market_Prob)} · Odds ${escapeHtml(row.Fighter1_Odds || "N/A")}</div>
+            <div class="market-line">Market ${formatPercent(row.Fighter1_Market_Prob)} | Odds ${escapeHtml(row.Fighter1_Odds || "N/A")}</div>
           </div>
           <div class="fighter-prob-card${f2Winner ? " picked" : ""}">
             <div class="fighter-prob-top">
@@ -179,7 +179,7 @@ function renderPredictionGraphic(target, predictions) {
               <span>${formatPercent(row.Fighter2_AI_Prob)}</span>
             </div>
             <div class="probability-track"><span style="width: ${f2Prob}%"></span></div>
-            <div class="market-line">Market ${formatPercent(row.Fighter2_Market_Prob)} · Odds ${escapeHtml(row.Fighter2_Odds || "N/A")}</div>
+            <div class="market-line">Market ${formatPercent(row.Fighter2_Market_Prob)} | Odds ${escapeHtml(row.Fighter2_Odds || "N/A")}</div>
           </div>
         </div>
         <div class="prediction-callout">
