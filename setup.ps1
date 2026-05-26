@@ -120,6 +120,17 @@ function Invoke-DockerCompose {
     }
 }
 
+function Invoke-DockerComposeOptional {
+    param([string[]]$ComposeArgs)
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        & docker compose @ComposeArgs *> $null
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 function Get-ComposeDbPort {
     $previousErrorActionPreference = $ErrorActionPreference
     try {
@@ -314,8 +325,8 @@ if (-not (Test-Path -LiteralPath $modelDir)) {
 if (-not $SkipImport) {
     Start-PostgresForImport
 
-    & docker compose exec -T db createdb -U postgres "mma-ai" 2>$null
-    & docker compose exec -T db createdb -U postgres "odds" 2>$null
+    Invoke-DockerComposeOptional @("exec", "-T", "db", "createdb", "-U", "postgres", "mma-ai")
+    Invoke-DockerComposeOptional @("exec", "-T", "db", "createdb", "-U", "postgres", "odds")
 
     Write-Host "Copying database dumps into the Postgres container"
     Invoke-DockerCompose @("cp", (Join-ArtifactPath "dumps/mma-ai.postgres-custom"), "db:/tmp/mma-ai.postgres-custom")
@@ -327,7 +338,7 @@ if (-not $SkipImport) {
     Write-Host "Restoring odds database"
     Invoke-DockerCompose @("exec", "-T", "db", "pg_restore", "--clean", "--if-exists", "--no-owner", "--jobs", "4", "-U", "postgres", "-d", "odds", "/tmp/odds.postgres-custom")
 
-    & docker compose exec -T db rm -f /tmp/mma-ai.postgres-custom /tmp/odds.postgres-custom *> $null
+    Invoke-DockerComposeOptional @("exec", "-T", "db", "rm", "-f", "/tmp/mma-ai.postgres-custom", "/tmp/odds.postgres-custom")
 }
 
 if ($GeminiApiKey) {

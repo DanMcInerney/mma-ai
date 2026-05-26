@@ -37,6 +37,7 @@ def test_setup_scripts_detect_existing_postgres_host_port():
     bash = read_text("setup.sh")
 
     assert "Test-DockerPublishedPortInUse" in powershell
+    assert "Invoke-DockerComposeOptional" in powershell
     assert "Get-NetTCPConnection" in powershell
     assert "docker ps --format" in powershell
     assert "docker_published_port_in_use" in bash
