@@ -22,11 +22,11 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1
 macOS/Linux:
 
 ```bash
-bash setup.sh
+./setup.sh
 ```
 
 Run `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Help` or
-`bash setup.sh --help` to see all non-interactive setup options before starting
+`./setup.sh --help` to see all non-interactive setup options before starting
 Docker, downloads, or database imports.
 
 Open the dashboard at http://localhost:8000, or the alternate port printed by
@@ -63,7 +63,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -PostgresPort 55432
 ```
 
 ```bash
-bash setup.sh --postgres-port 55432
+./setup.sh --postgres-port 55432
 ```
 
 Setup also writes `MMA_AI_WEB_PORT` to `.env`. If another local web server is
@@ -77,7 +77,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -WebPort 18000
 ```
 
 ```bash
-bash setup.sh --web-port 18000
+./setup.sh --web-port 18000
 ```
 
 If you already bootstrapped artifacts and only want to start the app:
@@ -105,7 +105,7 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 `
 ```
 
 ```bash
-bash setup.sh --llm-provider local --llm-model llama3.1 --llm-base-url http://host.docker.internal:11434/v1
+./setup.sh --llm-provider local --llm-model llama3.1 --llm-base-url http://host.docker.internal:11434/v1
 ```
 
 For local development without Docker:

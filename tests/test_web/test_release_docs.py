@@ -29,6 +29,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "docker compose up --build" in readme
     assert "setup.ps1" in readme
     assert "setup.sh" in readme
+    assert "./setup.sh" in readme
     assert "ag-20260304_110750-win-extreme" in readme
     assert "auxiliary `odds` database" in readme
     assert "Python 3.10-3.12" in readme
@@ -91,6 +92,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "dashboard release candidate" in release_notes
     assert "setup.ps1" in release_notes
     assert "setup.sh" in release_notes
+    assert "./setup.sh" in release_notes
     assert "uv run mma-web" in release_notes
     assert "docker compose up --build" in release_notes
     assert "Data tab" in release_notes
@@ -152,6 +154,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert postgres_init.strip() == "CREATE DATABASE odds;"
 
     assert "matching local `DATABASE_URL` and" in huggingface_docs
+    assert "./setup.sh" in huggingface_docs
     assert "Local `uv run ...` commands load this" in huggingface_docs
     assert "--force-import" in huggingface_docs
     assert "processed/training_data_dec.csv" in huggingface_docs

@@ -49,6 +49,18 @@ def test_bash_setup_script_has_valid_syntax():
     assert result.returncode == 0, combined
 
 
+def test_bash_setup_script_is_tracked_executable():
+    result = subprocess.run(
+        ["git", "ls-files", "--stage", "setup.sh"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert result.stdout.startswith("100755 ")
+
+
 def test_setup_scripts_help_exits_before_install_work():
     shell = shutil.which("powershell") or shutil.which("pwsh")
     if shell:
@@ -72,6 +84,7 @@ def test_setup_scripts_help_exits_before_install_work():
 
         assert result.returncode == 0, combined
         assert "MMA AI setup" in result.stdout
+        assert "./setup.sh" in result.stdout
         assert "--force-import" in result.stdout
         assert "docker compose" not in result.stderr.lower()
 

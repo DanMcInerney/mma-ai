@@ -75,7 +75,7 @@ show_usage() {
 MMA AI setup
 
 Usage:
-  bash setup.sh [options]
+  ./setup.sh [options]
 
 First-time setup downloads verified Hugging Face artifacts, restores the main
 and odds databases into Docker Postgres, extracts the starter model, optionally
@@ -98,10 +98,10 @@ Options:
   --llm-base-url <url>    Configure custom/OpenAI-compatible API base URL.
 
 Examples:
-  bash setup.sh
-  bash setup.sh --force-import
-  bash setup.sh --postgres-port 55432 --web-port 18000
-  bash setup.sh --skip-llm-prompt
+  ./setup.sh
+  ./setup.sh --force-import
+  ./setup.sh --postgres-port 55432 --web-port 18000
+  ./setup.sh --skip-llm-prompt
 EOF
 }
 

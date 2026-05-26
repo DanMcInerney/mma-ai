@@ -22,7 +22,7 @@ Docker smoke path:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
-bash setup.sh
+./setup.sh
 docker compose config --quiet
 docker compose up --build
 ```

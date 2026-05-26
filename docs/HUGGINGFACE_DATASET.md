@@ -10,7 +10,7 @@ and trained model artifacts live in the Hugging Face Dataset repository.
 For first-time app setup, prefer the code repo bootstrap scripts:
 
 ```bash
-bash setup.sh
+./setup.sh
 ```
 
 or on Windows:
