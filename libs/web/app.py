@@ -21,6 +21,7 @@ from libs.web.models import (
     TrainingRequest,
 )
 from libs.web.services import (
+    get_analytics_status,
     get_dashboard_defaults,
     get_data_status,
     get_readiness_status,
@@ -94,6 +95,10 @@ def create_app() -> FastAPI:
             return run_analytics(request.question, request.sql, request.max_rows)
         except (RuntimeError, ValueError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/data/analytics/status")
+    def analytics_status() -> dict:
+        return get_analytics_status()
 
     @app.get("/api/train/defaults")
     def train_defaults() -> dict:

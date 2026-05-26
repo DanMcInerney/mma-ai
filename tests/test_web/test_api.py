@@ -102,6 +102,23 @@ def test_analytics_endpoint_reports_query_runtime_errors(monkeypatch):
     assert "Database query failed" in response.json()["detail"]
 
 
+def test_analytics_status_endpoint_reports_non_secret_llm_status(monkeypatch):
+    monkeypatch.setenv("LLM_PROVIDER", "local")
+    monkeypatch.setenv("LLM_MODEL", "llama3.1")
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get("/api/data/analytics/status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["configured"] is True
+    assert payload["provider"] == "local"
+    assert payload["model"] == "llama3.1"
+    assert payload["mode"] == "llm"
+    assert "api_key" not in payload
+
+
 def test_data_refresh_endpoint_starts_background_job(monkeypatch):
     def fake_refresh(request):
         print("fake refresh stdout")

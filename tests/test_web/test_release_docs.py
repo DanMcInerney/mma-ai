@@ -33,6 +33,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "auxiliary `odds` database" in readme
     assert "Python 3.10-3.12" in readme
     assert "Data: update the shipped raw UFCStats CSVs" in readme
+    assert "SQL-only analytics mode" in readme
     assert "Train: launch model training" in readme
     assert "Predict: choose a model" in readme
     assert "uv run mma-evaluate" in readme
@@ -94,6 +95,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "read-only Postgres" in release_notes
     assert "transaction with a statement timeout" in release_notes
     assert "SQLite query-only mode" in release_notes
+    assert "SQL-only mode" in release_notes
     assert "Train tab" in release_notes
     assert "Predict tab" in release_notes
     assert "mma-evaluate" in release_notes

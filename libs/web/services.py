@@ -24,6 +24,7 @@ import pandas as pd
 
 from libs.paths import PROJECT_ROOT, data_dir, data_file, database_url, models_dir, odds_database_url, raw_ufcstats_dir
 from libs.web.evaluations import summarize_model_evaluation, write_model_evaluation_report
+from libs.web.llm import llm_config, llm_config_hint
 from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupPredictionRequest, TrainingRequest
 from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, resolve_model_dir
 
@@ -171,6 +172,21 @@ def get_readiness_status() -> dict[str, Any]:
         "status": "ok" if ready else "not_ready",
         "ready": ready,
         "checks": checks,
+    }
+
+
+def get_analytics_status() -> dict[str, Any]:
+    """Return non-secret analytics LLM configuration status for the dashboard."""
+    config = llm_config()
+    configured = bool(config and config.is_configured)
+    return {
+        "configured": configured,
+        "provider": config.provider if config else None,
+        "model": config.model if config else None,
+        "base_url": config.base_url if config and config.provider in {"local", "custom"} else None,
+        "needs_api_key": config.needs_api_key if config else None,
+        "mode": "llm" if configured else "sql_only",
+        "hint": None if configured else llm_config_hint(),
     }
 
 

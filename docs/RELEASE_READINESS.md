@@ -51,7 +51,8 @@ badge.
   how many raw and finalized rows changed during the refresh. Analytics SQL is
   constrained to one read-only query, runs inside a read-only Postgres
   transaction with a statement timeout, and uses SQLite query-only mode for
-  finalized CSV fallbacks.
+  finalized CSV fallbacks. The Analytics panel exposes a non-secret LLM status
+  line so users know whether Ask is in LLM-backed or SQL-only mode.
 - Train tab: run `libs/modeling/train.py` defaults through a compact UI, keep
   advanced knobs collapsed, and summarize saved model evaluation artifacts with
   metrics and charts. Completed dashboard training jobs write

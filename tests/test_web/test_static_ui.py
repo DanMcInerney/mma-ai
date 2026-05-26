@@ -177,7 +177,7 @@ def test_dashboard_surfaces_setup_readiness_state():
     assert "Setup incomplete" in app_js
     assert "Ready for predictions" in app_js
     assert "refreshReadiness().catch(() => {})" in app_js
-    assert "Promise.allSettled([refreshStatus(), refreshReadiness()])" in app_js
+    assert "Promise.allSettled([refreshStatus(), refreshReadiness(), refreshAnalyticsStatus()])" in app_js
     assert ".readiness-badge.ready" in styles
     assert ".readiness-badge.not-ready" in styles
 
@@ -202,13 +202,20 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
 def test_analytics_options_expose_bounded_row_limit():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="analytics-max-rows" type="number" min="1" max="1000" value="100"' in html
+    assert 'id="analytics-status"' in html
     assert "max_rows: Number(qs(\"#analytics-max-rows\").value || 100)" in app_js
     assert "function renderPlotlyChart(target, chart)" in app_js
+    assert "function refreshAnalyticsStatus()" in app_js
+    assert 'api("/api/data/analytics/status")' in app_js
+    assert "LLM analytics ready" in app_js
     assert "Plotly.purge(element)" in app_js
     assert 'renderPlotlyChart("#analytics-chart", result.chart)' in app_js
     assert 'renderPlotlyChart("#analytics-chart", null)' in app_js
+    assert ".analytics-status.ready" in styles
+    assert ".analytics-status.blocked" in styles
 
 
 def test_debug_logs_and_manual_event_odds_are_wired():

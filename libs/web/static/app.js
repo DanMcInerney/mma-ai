@@ -213,6 +213,28 @@ function renderReadiness(payload) {
     : `Missing or unavailable: ${failures.join(", ") || "readiness checks"}`;
 }
 
+function renderAnalyticsStatus(payload) {
+  const status = qs("#analytics-status");
+  if (!status) return;
+  status.classList.remove("ready", "blocked");
+  status.classList.add(payload?.configured ? "ready" : "blocked");
+  if (payload?.configured) {
+    const endpoint = payload.base_url ? ` at ${payload.base_url}` : "";
+    status.textContent = `LLM analytics ready: ${payload.provider}/${payload.model}${endpoint}.`;
+  } else {
+    status.textContent = "LLM analytics is not configured. You can still run read-only SQL analytics.";
+    status.title = payload?.hint || "";
+  }
+}
+
+async function refreshAnalyticsStatus() {
+  try {
+    renderAnalyticsStatus(await api("/api/data/analytics/status"));
+  } catch (error) {
+    renderAnalyticsStatus({ configured: false, hint: error.message });
+  }
+}
+
 async function refreshReadiness() {
   const badge = qs("#readiness-badge");
   if (badge) {
@@ -580,7 +602,7 @@ function wireTabs() {
 
 function wireData() {
   qs("#refresh-status").addEventListener("click", async () => {
-    await Promise.allSettled([refreshStatus(), refreshReadiness()]);
+    await Promise.allSettled([refreshStatus(), refreshReadiness(), refreshAnalyticsStatus()]);
   });
   qs("#run-data").addEventListener("click", async () => {
     try {
@@ -830,6 +852,7 @@ wirePrediction();
 loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}));
 refreshStatus().catch(() => {});
 refreshReadiness().catch(() => {});
+refreshAnalyticsStatus().catch(() => {});
 refreshModels().catch(() => {});
 refreshJobs().catch(() => {});
 setInterval(refreshJobs, 5000);

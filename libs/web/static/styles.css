@@ -752,6 +752,14 @@ summary {
   color: #991b1b;
 }
 
+.analytics-status.ready {
+  color: #166534;
+}
+
+.analytics-status.blocked {
+  color: #92400e;
+}
+
 .fighter-row span {
   min-width: 110px;
 }

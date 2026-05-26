@@ -14,6 +14,7 @@ from libs.web.services import (
     _database_ready,
     _data_status_row_deltas,
     _run_logged_subprocess,
+    get_analytics_status,
     get_data_status,
     get_readiness_status,
     list_fighters,
@@ -59,6 +60,38 @@ def test_get_data_status_counts_configured_csvs(monkeypatch, tmp_path):
     assert status["raw_csvs"]["individuals"]["rows"] == 1
     assert status["model_csvs"]["training_data"]["rows"] == 3
     assert "secret" not in status["database_url"]
+
+
+def test_get_analytics_status_reports_llm_configuration_without_secrets(monkeypatch):
+    for key in ("LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "OPENAI_API_KEY", "LLM_BASE_URL"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("LLM_MODEL", "analytics-model")
+    monkeypatch.setenv("LLM_API_KEY", "secret-token")
+
+    status = get_analytics_status()
+
+    assert status == {
+        "configured": True,
+        "provider": "openai",
+        "model": "analytics-model",
+        "base_url": None,
+        "needs_api_key": True,
+        "mode": "llm",
+        "hint": None,
+    }
+    assert "secret-token" not in str(status)
+
+
+def test_get_analytics_status_reports_sql_only_mode_when_unconfigured(monkeypatch):
+    for key in ("LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "OPENAI_API_KEY", "LLM_BASE_URL"):
+        monkeypatch.delenv(key, raising=False)
+
+    status = get_analytics_status()
+
+    assert status["configured"] is False
+    assert status["mode"] == "sql_only"
+    assert "LLM_PROVIDER" in status["hint"]
 
 
 def test_data_status_row_deltas_compare_before_and_after_counts():
