@@ -3,6 +3,7 @@ from pathlib import Path
 from scripts.release_audit import (
     audit_repository,
     find_forbidden_artifacts,
+    find_hardcoded_local_database_urls,
     find_legacy_runtime_identifiers,
     find_missing_required_files,
     find_seed_data_issues,
@@ -118,4 +119,29 @@ def test_release_audit_rejects_legacy_runtime_project_names(tmp_path):
 
     assert [(issue.kind, issue.path) for issue in issues] == [
         ("legacy_mma_ai_db_name", "libs/scraping/ufcstats.py"),
+    ]
+
+
+def test_release_audit_rejects_hardcoded_runtime_database_urls(tmp_path):
+    runtime_file = tmp_path / "scripts" / "debug.py"
+    docs_file = tmp_path / "docs" / "HUGGINGFACE_DATASET.md"
+    paths_file = tmp_path / "libs" / "paths.py"
+    runtime_file.parent.mkdir(parents=True)
+    docs_file.parent.mkdir(parents=True)
+    paths_file.parent.mkdir(parents=True)
+    runtime_file.write_text("DB_URL = 'postgresql://postgres@localhost:5432/mma-ai'", encoding="utf-8")
+    docs_file.write_text("psql postgresql://postgres@localhost:5432/mma-ai", encoding="utf-8")
+    paths_file.write_text("DEFAULT_DATABASE_URL = 'postgresql://postgres@localhost:5432/mma-ai'", encoding="utf-8")
+
+    issues = find_hardcoded_local_database_urls(
+        [
+            "scripts/debug.py",
+            "docs/HUGGINGFACE_DATASET.md",
+            "libs/paths.py",
+        ],
+        tmp_path,
+    )
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("hardcoded_local_postgres_url", "scripts/debug.py"),
     ]

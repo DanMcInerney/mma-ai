@@ -41,6 +41,7 @@ from config.parameters import (
     CACHE_PATH,
     BASELINE_ADJPERF_PARAMS
 )
+from libs.paths import database_url
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -322,7 +323,7 @@ def main():
     parser = argparse.ArgumentParser(description='Optimize adjperf parameters')
     parser.add_argument(
         '--db-url',
-        default='postgresql://postgres@localhost:5432/mma-ai',
+        default=database_url(),
         help='Database connection string'
     )
     parser.add_argument(

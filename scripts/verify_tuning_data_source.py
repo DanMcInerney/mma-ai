@@ -11,10 +11,11 @@ This script checks:
 
 import pandas as pd
 from sqlalchemy import create_engine, text
+from libs.paths import database_url
 
 def main():
     # Connect to the same database the tuning script uses
-    engine = create_engine('postgresql://postgres@localhost:5432/mma-ai')
+    engine = create_engine(database_url())
 
     print("=" * 80)
     print("TUNING DATA SOURCE VERIFICATION")
@@ -194,7 +195,7 @@ def main():
     # 6. Check that tuning script parameters match
     print(f"6. TUNING SCRIPT CONFIGURATION")
     print(f"   Expected configuration:")
-    print(f"     Database: postgresql://postgres@localhost:5432/mma-ai")
+    print(f"     Database: {database_url()}")
     print(f"     Schema: features")
     print(f"     Table: fight_stats_fe")
     print(f"     Date range: 2014-01-01 to 2023-01-01")

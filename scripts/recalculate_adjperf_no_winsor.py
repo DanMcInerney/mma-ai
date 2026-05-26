@@ -14,6 +14,7 @@ import subprocess
 import os
 from pathlib import Path
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy_utils import database_exists, create_database, drop_database
 from contextlib import contextmanager
 import pandas as pd
@@ -35,9 +36,10 @@ from libs.feature_store.calculators.time_dec_avg_calc import TimedecAvgCalculato
 from libs.feature_store.calculators.avg_calc import AverageCalculator
 from libs.feature_store.calculators.minimum_mad_calc import MinimumMadCalculator
 from config.decay import DECAY_HALF_LIFE_YEARS
+from libs.paths import database_url, no_winsor_database_url
 
-SOURCE_DB_URL = 'postgresql://postgres@localhost:5432/mma-ai'
-TARGET_DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+SOURCE_DB_URL = database_url()
+TARGET_DB_URL = no_winsor_database_url()
 
 def create_db_engine(db_url):
     """Create and configure the database engine"""
@@ -85,6 +87,20 @@ def find_pg_bin_path():
     
     return None
 
+
+def pg_cli_parts(db_url: str) -> dict[str, str]:
+    """Return pg_dump/pg_restore connection parts from a SQLAlchemy database URL."""
+    url = make_url(db_url)
+    if not url.database:
+        raise ValueError(f"Database URL must include a database name: {db_url}")
+    return {
+        "user": url.username or "postgres",
+        "password": url.password or "",
+        "host": url.host or "localhost",
+        "port": str(url.port or 5432),
+        "database": url.database,
+    }
+
 def copy_database():
     """Copy the source database to target database using pg_dump/pg_restore"""
     print("=" * 80)
@@ -115,18 +131,10 @@ def copy_database():
     # Use pg_dump and pg_restore to copy the database
     print("Copying database structure and data...")
     
-    # Extract connection details
-    # Format: postgresql://user:password@host:port/database
-    import re
-    import os
-    match = re.match(r'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', SOURCE_DB_URL)
-    if not match:
-        raise ValueError(f"Invalid database URL format: {SOURCE_DB_URL}")
-    
-    user, password, host, port, source_db = match.groups()
-    
-    # Set PGPASSWORD environment variable
-    os.environ['PGPASSWORD'] = password
+    source = pg_cli_parts(SOURCE_DB_URL)
+    target = pg_cli_parts(TARGET_DB_URL)
+    if source["password"]:
+        os.environ['PGPASSWORD'] = source["password"]
     
     # Build paths to pg_dump and pg_restore
     pg_dump_exe = os.path.join(pg_bin, "pg_dump.exe")
@@ -135,10 +143,10 @@ def copy_database():
     # Run pg_dump to dump the source database
     dump_cmd = [
         pg_dump_exe,
-        '-h', host,
-        '-p', port,
-        '-U', user,
-        '-d', source_db,
+        '-h', source["host"],
+        '-p', source["port"],
+        '-U', source["user"],
+        '-d', source["database"],
         '-F', 'c',  # Custom format
         '-f', 'temp_dump.dump'
     ]
@@ -149,17 +157,15 @@ def copy_database():
         print(f"Error dumping database: {result.stderr}")
         raise RuntimeError(f"pg_dump failed: {result.stderr}")
     
-    # Extract target database name
-    match_target = re.match(r'postgresql://([^:]+):([^@]+)@([^:]+):(\d+)/(.+)', TARGET_DB_URL)
-    target_db = match_target.groups()[4]
-    
     # Run pg_restore to restore to target database
+    if target["password"]:
+        os.environ['PGPASSWORD'] = target["password"]
     restore_cmd = [
         pg_restore_exe,
-        '-h', host,
-        '-p', port,
-        '-U', user,
-        '-d', target_db,
+        '-h', target["host"],
+        '-p', target["port"],
+        '-U', target["user"],
+        '-d', target["database"],
         '--no-owner',
         '--no-acl',
         'temp_dump.dump'

@@ -16,10 +16,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import pandas as pd
 from sqlalchemy import create_engine, text
 from libs.feature_store.calculators.acc_calc import AccuracyCalculator
+from libs.paths import database_url
 
 def main():
     # Connect to database
-    engine = create_engine('postgresql://postgres@localhost:5432/mma-ai')
+    engine = create_engine(database_url())
 
     # Query Kazama's fight data
     query = text("""
@@ -116,11 +117,11 @@ def main():
 
         # Analyze whether this is still over-smoothing
         if smoothed_defense_pct > actual_defense + 10:
-            print(f"\n⚠️  WARNING: Still significant over-smoothing (>{actual_defense + 10:.1f}%)")
+            print(f"\n[WARNING] Still significant over-smoothing (>{actual_defense + 10:.1f}%)")
         elif smoothed_defense_pct > actual_defense + 5:
-            print(f"\n⚠️  CAUTION: Moderate over-smoothing (>{actual_defense + 5:.1f}%)")
+            print(f"\n[CAUTION] Moderate over-smoothing (>{actual_defense + 5:.1f}%)")
         else:
-            print(f"\n✓ Smoothing is reasonable (within 5% of actual)")
+            print(f"\n[OK] Smoothing is reasonable (within 5% of actual)")
 
 if __name__ == "__main__":
     main()

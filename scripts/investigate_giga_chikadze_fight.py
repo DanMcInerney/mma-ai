@@ -6,11 +6,12 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy_utils import database_exists
 from pathlib import Path
+from libs.paths import database_url, no_winsor_database_url
 
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 
 engine = create_engine(DB_URL)
 conn = engine.connect()
@@ -158,7 +159,7 @@ if not giga_row_td.empty:
     print(f"  td_land_per_ctrl (smoothed): {giga_td_per_ctrl:.4f}")
     print(f"  td_land_per_ctrl_dec_adjperf_dec_avg: {giga_row_td.iloc[0]['td_land_per_ctrl_dec_adjperf_dec_avg']:.4f}")
     
-    print(f"\n  ⚠️ CRITICAL ISSUE:")
+    print(f"\n  [CRITICAL] Issue:")
     print(f"  Giga had 0 takedowns and 0 control time in this fight!")
     print(f"  The high adjperf score (115.17) is entirely from Bayesian smoothing")
     print(f"  creating non-zero values from zeros. This stat is misleading!")
@@ -166,7 +167,7 @@ if not giga_row_td.empty:
     print(f"\n  Calculation:")
     print(f"  Smoothed td_land: {giga_td_land_smoothed:.4f} / Smoothed ctrl: {giga_ctrl_smoothed:.4f}")
     print(f"  = {giga_td_land_smoothed / giga_ctrl_smoothed:.4f} (when ctrl is tiny, ratio becomes huge)")
-    print(f"  Then adjusted for opponent quality → 115.17")
+    print(f"  Then adjusted for opponent quality -> 115.17")
 
 conn.close()
 

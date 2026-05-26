@@ -9,12 +9,13 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import create_engine, text
 from sqlalchemy_utils import database_exists
+from libs.paths import database_url, no_winsor_database_url
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 
 def create_db_engine(db_url=DB_URL):
     """Create and configure the database engine"""

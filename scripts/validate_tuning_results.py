@@ -10,6 +10,7 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
 from pathlib import Path
+from libs.paths import database_url
 
 def load_tuning_results():
     """Load optimized parameters."""
@@ -86,7 +87,7 @@ def test_smoothing_on_real_fights(results):
     print()
 
     # Connect to database
-    engine = create_engine('postgresql://postgres@localhost:5432/mma-ai')
+    engine = create_engine(database_url())
 
     # Get sample fights from each weight class
     query = text("""

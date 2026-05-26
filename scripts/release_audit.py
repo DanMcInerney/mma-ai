@@ -71,6 +71,13 @@ LEGACY_RUNTIME_PATTERNS = {
 LEGACY_IDENTIFIER_ALLOWED_PREFIXES = ("docs/", "tests/")
 LEGACY_IDENTIFIER_ALLOWED_FILES = {"AGENTS.md", "CLAUDE.md", "README.md"}
 
+HARDCODED_LOCAL_DB_PATTERN = re.compile(
+    r"postgresql://postgres(?::[^@\s\"'`<>]+)?@localhost:5432/(?:mma-ai|odds|mma-ai-no-winsor|mma|ufc_fights)\b",
+    re.IGNORECASE,
+)
+HARDCODED_LOCAL_DB_ALLOWED_PREFIXES = ("docs/", "tests/")
+HARDCODED_LOCAL_DB_ALLOWED_FILES = {".env.example", "README.md", "libs/paths.py"}
+
 
 @dataclass(frozen=True)
 class AuditIssue:
@@ -193,6 +200,33 @@ def find_legacy_runtime_identifiers(paths: Iterable[str], root: Path = ROOT) -> 
     return issues
 
 
+def find_hardcoded_local_database_urls(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
+    issues: list[AuditIssue] = []
+    for relative_path in paths:
+        normalized = relative_path.replace("\\", "/")
+        if normalized in HARDCODED_LOCAL_DB_ALLOWED_FILES or normalized.startswith(HARDCODED_LOCAL_DB_ALLOWED_PREFIXES):
+            continue
+
+        path = root / relative_path
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            issues.append(AuditIssue("unreadable_file", relative_path, str(exc)))
+            continue
+        if b"\0" in raw[:4096]:
+            continue
+        text = raw.decode("utf-8", errors="ignore")
+        for match in HARDCODED_LOCAL_DB_PATTERN.finditer(text):
+            issues.append(
+                AuditIssue(
+                    kind="hardcoded_local_postgres_url",
+                    path=normalized,
+                    detail=_excerpt(text, match.start(), match.end()),
+                )
+            )
+    return issues
+
+
 def _excerpt(text: str, start: int, end: int, radius: int = 32) -> str:
     snippet = text[max(0, start - radius) : min(len(text), end + radius)]
     return " ".join(snippet.split())
@@ -206,6 +240,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_forbidden_artifacts(tracked),
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),
+        *find_hardcoded_local_database_urls(tracked, root),
     ]
 
 

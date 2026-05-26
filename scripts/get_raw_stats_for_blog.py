@@ -5,11 +5,12 @@ import sys
 import pandas as pd
 from sqlalchemy import create_engine, text
 from pathlib import Path
+from libs.paths import no_winsor_database_url
 
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 
 engine = create_engine(DB_URL)
 conn = engine.connect()

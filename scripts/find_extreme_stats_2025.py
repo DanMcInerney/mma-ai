@@ -19,10 +19,11 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from libs.feature_store.features import vSeven_testing2
+from libs.paths import database_url, no_winsor_database_url
 
 # Database connection URL
 # Change this to 'mma-ai-no-winsor' if you want to query the non-winsorized database
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 
 def create_db_engine(db_url=DB_URL):
     """Create and configure the database engine"""

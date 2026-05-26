@@ -60,6 +60,7 @@ from scipy.stats import binom, nbinom
 from sklearn.model_selection import TimeSeriesSplit
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
+from libs.paths import database_url
 
 # Configure logging
 logging.basicConfig(
@@ -1443,7 +1444,7 @@ Examples:
 
     parser.add_argument(
         '--db',
-        default='postgresql://postgres@localhost:5432/mma-ai',
+        default=database_url(),
         help='Database connection string'
     )
 

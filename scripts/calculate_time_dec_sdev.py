@@ -8,8 +8,8 @@ Usage:
 
 Options:
     --table_pattern PATTERN   Filter tables by pattern (e.g., 'sig_str' or 'td')
-    --sample                  Run in sample mode (process only 5% of data for faster testing)
-    --db_uri DB_URI           Database URI (default: postgresql://postgres@localhost:5432/ufc_fights)
+    --sample                  Run in sample mode (process only 5%% of data for faster testing)
+    --db_uri DB_URI           Database URI (default: DATABASE_URL from .env or repo default)
 """
 
 import argparse
@@ -18,6 +18,7 @@ import sys
 import time
 from sqlalchemy import create_engine
 from libs.feature_store.calculators.time_dec_sdev_calc import TimedecStdDevCalculator
+from libs.paths import database_url
 
 # Configure logging
 logging.basicConfig(
@@ -31,8 +32,8 @@ def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='Calculate time-decayed standard deviations for UFC fight statistics')
     parser.add_argument('--table_pattern', type=str, default='', help='Filter tables by pattern (e.g., "sig_str" or "td")')
-    parser.add_argument('--sample', action='store_true', help='Run in sample mode (process only 5% of data)')
-    parser.add_argument('--db_uri', type=str, default='postgresql://postgres@localhost:5432/ufc_fights', 
+    parser.add_argument('--sample', action='store_true', help='Run in sample mode (process only 5%% of data)')
+    parser.add_argument('--db_uri', type=str, default=database_url(),
                         help='Database URI')
     args = parser.parse_args()
     

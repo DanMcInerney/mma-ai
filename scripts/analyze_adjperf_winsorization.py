@@ -18,8 +18,9 @@ import pandas as pd
 import numpy as np
 from sqlalchemy import create_engine, text
 from collections import defaultdict
+from libs.paths import database_url
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai'
+DB_URL = database_url()
 engine = create_engine(DB_URL)
 
 print("="*80)

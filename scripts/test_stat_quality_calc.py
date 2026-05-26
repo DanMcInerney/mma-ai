@@ -18,8 +18,9 @@ sys.path.append(str(project_root))
 
 from libs.feature_store.calculators.stat_quality_calc import StatQualityCalculator
 from libs.feature_store.calculator_context import CalculatorContext
+from libs.paths import database_url, no_winsor_database_url
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 
 
 def main():
@@ -44,25 +45,25 @@ def main():
         print("\n1. Creating quality metrics for 'td' table...")
         try:
             calc._create_quality_metrics_table('td')
-            print("   ✓ Quality metrics table created")
+            print("   [OK] Quality metrics table created")
         except Exception as e:
-            print(f"   ✗ Error: {e}")
+            print(f"   [ERROR] {e}")
             raise
 
         # Validate the results
         print("\n2. Validating quality metrics...")
         try:
             calc._validate_quality_metrics('td')
-            print("   ✓ Validation complete")
+            print("   [OK] Validation complete")
         except Exception as e:
-            print(f"   ✗ Error: {e}")
+            print(f"   [ERROR] {e}")
             raise
 
         # Load and display results
         print("\n3. Loading results...")
         try:
             df = pd.read_sql("SELECT * FROM features.td_quality_metrics", conn)
-            print(f"   ✓ Loaded {len(df)} quality metrics")
+            print(f"   [OK] Loaded {len(df)} quality metrics")
 
             # Show summary statistics
             print("\n" + "=" * 80)
@@ -89,7 +90,7 @@ def main():
                 for _, row in degenerate.iterrows():
                     print(f"  {row['stat_name']:20s} ({row['weightclass']:15s}): "
                           f"MAD={row['wc_mad']:.6f}, mode_freq={row['mode_frequency']:.1%}, "
-                          f"winsor_limit=±{row['recommended_winsor_limit']:.1f}")
+                          f"winsor_limit=+/-{row['recommended_winsor_limit']:.1f}")
 
             # Show sparse cases
             sparse = df[df['quality_tier'] == 'sparse'].sort_values('wc_mad')
@@ -99,7 +100,7 @@ def main():
                 for _, row in sparse.head(10).iterrows():
                     print(f"  {row['stat_name']:20s} ({row['weightclass']:15s}): "
                           f"MAD={row['wc_mad']:.6f}, "
-                          f"winsor_limit=±{row['recommended_winsor_limit']:.2f}")
+                          f"winsor_limit=+/-{row['recommended_winsor_limit']:.2f}")
 
             # Verify heavyweight TD defense is marked as degenerate
             print("\n" + "=" * 80)
@@ -114,25 +115,25 @@ def main():
                 print(f"wc_mad: {row['wc_mad']:.6f}")
                 print(f"Mode frequency: {row['mode_frequency']:.1%}")
                 print(f"Quality tier: {row['quality_tier']}")
-                print(f"Recommended winsor limit: ±{row['recommended_winsor_limit']:.1f}")
+                print(f"Recommended winsor limit: +/-{row['recommended_winsor_limit']:.1f}")
                 print(f"Reliability score: {row['reliability_score']:.1f}")
                 print(f"Effective N: {row['effective_n']}")
 
                 # Verify it's classified as degenerate
                 if row['quality_tier'] == 'degenerate':
-                    print("\n✓ PASS: Heavyweight TD defense correctly classified as degenerate")
+                    print("\n[PASS] Heavyweight TD defense correctly classified as degenerate")
                 else:
-                    print(f"\n✗ FAIL: Expected 'degenerate', got '{row['quality_tier']}'")
+                    print(f"\n[FAIL] Expected 'degenerate', got '{row['quality_tier']}'")
             else:
-                print("\n✗ FAIL: Heavyweight TD defense not found in results")
+                print("\n[FAIL] Heavyweight TD defense not found in results")
 
             # Save sample to CSV for inspection
             output_file = project_root / 'data' / 'test_td_quality_metrics.csv'
             df.to_csv(output_file, index=False)
-            print(f"\n✓ Full results saved to: {output_file}")
+            print(f"\n[OK] Full results saved to: {output_file}")
 
         except Exception as e:
-            print(f"   ✗ Error: {e}")
+            print(f"   [ERROR] {e}")
             raise
 
     print("\n" + "=" * 80)

@@ -14,20 +14,17 @@ This folder contains the comprehensive likelihood-based tuning system for optimi
 
 **Basic command (recommended):**
 ```bash
-uv run python tuning/comprehensive_likelihood_tuner.py --db postgresql://postgres@localhost:5432/mma-ai
+uv run python tuning/comprehensive_likelihood_tuner.py
 ```
 
 **With verbose logging:**
 ```bash
-uv run python tuning/comprehensive_likelihood_tuner.py \
-  --db postgresql://postgres@localhost:5432/mma-ai \
-  --verbose
+uv run python tuning/comprehensive_likelihood_tuner.py --verbose
 ```
 
 **Custom date range:**
 ```bash
 uv run python tuning/comprehensive_likelihood_tuner.py \
-  --db postgresql://postgres@localhost:5432/mma-ai \
   --start-date 2015-01-01 \
   --end-date 2024-01-01
 ```
@@ -35,13 +32,12 @@ uv run python tuning/comprehensive_likelihood_tuner.py \
 **Custom output directory:**
 ```bash
 uv run python tuning/comprehensive_likelihood_tuner.py \
-  --db postgresql://postgres@localhost:5432/mma-ai \
   --output-dir data/tuning_results_2025
 ```
 
 ### Command Line Options
 
-- `--db`: Database connection string (required, no default that works)
+- `--db`: Database connection string (default: `DATABASE_URL` from `.env` or the repo default)
 - `--output-dir`: Output directory for results (default: `data/comprehensive_tuning`)
 - `--start-date`: Training start date in YYYY-MM-DD format (default: `2014-01-01`)
 - `--end-date`: Training end date in YYYY-MM-DD format (default: `2023-01-01`)

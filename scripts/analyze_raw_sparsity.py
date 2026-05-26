@@ -22,6 +22,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Any
 import logging
+from libs.paths import database_url, no_winsor_database_url
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -34,7 +35,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 ANALYSIS_DATE_RANGE = ('2014-01-01', '2023-01-01')
 
 # Map feature tables to fight_stats_fe columns and their attempt columns

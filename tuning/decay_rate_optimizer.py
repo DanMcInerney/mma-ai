@@ -79,6 +79,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from libs.feature_store.features import vSeven_testing2
+from libs.paths import database_url
 
 # Configure logging
 logging.basicConfig(
@@ -90,7 +91,7 @@ logger = logging.getLogger(__name__)
 # Constants
 EPS = 1e-10
 MIN_HISTORICAL_FIGHTS = 3  # Minimum fights needed for decayed average
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai'
+DB_URL = database_url()
 
 # ============================================================================
 # DATA LOADING
@@ -731,7 +732,7 @@ def main():
     parser.add_argument(
         '--db',
         default=DB_URL,
-        help='Database URL (default: postgresql://postgres@localhost:5432/mma-ai)'
+        help='Database URL (default: DATABASE_URL from .env or repo default)'
     )
     parser.add_argument(
         '--output-dir',

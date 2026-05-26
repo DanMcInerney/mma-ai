@@ -2,8 +2,9 @@
 """Quick check of fight_stats_derived table"""
 from sqlalchemy import create_engine, text
 import pandas as pd
+from libs.paths import database_url, no_winsor_database_url
 
-engine = create_engine('postgresql://postgres@localhost:5432/mma-ai-no-winsor')
+engine = create_engine(no_winsor_database_url())
 
 with engine.connect() as conn:
     # Check basic stats

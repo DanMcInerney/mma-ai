@@ -26,6 +26,7 @@ from libs.parameter_optimization.loaders import ParameterLoader
 from libs.parameter_optimization.storage import JSONParameterStore
 from libs.feature_store.calculators.beta_binomial_calc import BetaBinomialCalculator
 from libs.feature_store.calculators.poisson_gamma_smoothing_calc import PoissonGammaCalculator
+from libs.paths import database_url
 
 
 def test_baseline_mode():
@@ -121,7 +122,7 @@ def test_cache_validation():
     print("="*60)
 
     # Get database connection
-    db_url = os.getenv('DATABASE_URL', 'postgresql://postgres@localhost:5432/mma')
+    db_url = os.getenv('DATABASE_URL', database_url())
     engine = create_engine(db_url)
 
     with engine.connect() as conn:
@@ -145,7 +146,7 @@ def test_calculator_integration():
     print("="*60)
 
     # Get database connection
-    db_url = os.getenv('DATABASE_URL', 'postgresql://postgres@localhost:5432/mma')
+    db_url = os.getenv('DATABASE_URL', database_url())
     engine = create_engine(db_url)
 
     # Force baseline mode for testing

@@ -30,6 +30,7 @@ project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
 from libs.feature_store.feature_utils import FeatureUtils
+from libs.paths import database_url, no_winsor_database_url
 
 # Setup logging
 logging.basicConfig(
@@ -38,7 +39,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 ANALYSIS_DATE_RANGE = ('2014-01-01', '2023-01-01')  # Training period
 
 

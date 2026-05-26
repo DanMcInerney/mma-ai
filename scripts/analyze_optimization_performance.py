@@ -22,9 +22,10 @@ import json
 from collections import defaultdict
 
 from config.parameters import TRAINING_START_DATE, TRAINING_END_DATE
+from libs.paths import database_url
 
 # Database connection
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai'
+DB_URL = database_url()
 engine = create_engine(DB_URL)
 
 print("="*80)

@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, text
 import pandas as pd
 import numpy as np
 import io
+from libs.paths import database_url, no_winsor_database_url
 
 # Set UTF-8 encoding for output
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
@@ -25,7 +26,7 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='repla
 project_root = Path(__file__).parent.parent
 sys.path.append(str(project_root))
 
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai-no-winsor'
+DB_URL = no_winsor_database_url()
 
 # ============================================================================
 # PART 1: Compare Current vs Optimized Parameters
@@ -226,7 +227,7 @@ def test_smoothing_impact():
         smoothed_def = 1 - smoothed_opp_acc
 
         if tau == 18:
-            interp = "← CURRENT (over-smoothing!)"
+            interp = "<- CURRENT (over-smoothing!)"
         elif tau <= 5:
             interp = "More responsive"
         elif tau >= 50:

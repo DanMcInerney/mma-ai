@@ -26,9 +26,10 @@ sys.path.append(str(project_root))
 from libs.feature_store.calculators.beta_binomial_calc import BetaBinomialCalculator
 from libs.feature_store.calculators.poisson_gamma_smoothing_calc import PoissonGammaCalculator
 from libs.feature_store.calculators.acc_calc import AccuracyCalculator
+from libs.paths import database_url
 
 # Database connection
-DB_URL = 'postgresql://postgres@localhost:5432/mma-ai'
+DB_URL = database_url()
 
 EPS = 1e-6
 
