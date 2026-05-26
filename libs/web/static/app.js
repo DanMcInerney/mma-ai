@@ -93,6 +93,14 @@ function pickedEdge(row) {
   return null;
 }
 
+function bestPickEdge(rows) {
+  const edges = rows
+    .map((row) => pickedEdge(row))
+    .filter((edge) => edge !== null);
+  if (!edges.length) return null;
+  return edges.reduce((best, edge) => (edge > best ? edge : best), edges[0]);
+}
+
 function eventDate(event) {
   const raw = event?.fights?.[0]?.date;
   if (!raw) return null;
@@ -257,7 +265,24 @@ function renderPredictionGraphic(target, predictions) {
     qs(target).innerHTML = `<div class="muted">No prediction rows were produced.</div>`;
     return;
   }
-  qs(target).innerHTML = `<div class="prediction-set">${predictions.map((row) => {
+  const positiveEvCount = predictions.filter((row) => String(row.EV) === "1").length;
+  const bestEdge = bestPickEdge(predictions);
+  qs(target).innerHTML = `
+    <div class="prediction-summary-strip">
+      <div>
+        <span>Fights</span>
+        <strong>${predictions.length}</strong>
+      </div>
+      <div>
+        <span>Positive EV Sides</span>
+        <strong>${positiveEvCount}</strong>
+      </div>
+      <div>
+        <span>Best Pick Edge</span>
+        <strong>${escapeHtml(formatEdge(bestEdge))}</strong>
+      </div>
+    </div>
+    <div class="prediction-set">${predictions.map((row) => {
     const evPositive = String(row.EV) === "1";
     const confidence = numberOrNull(row.Confidence);
     const f1Prob = probabilityWidth(row.Fighter1_AI_Prob);
@@ -532,6 +557,7 @@ async function refreshJobs() {
   if (activeTrainingJobId) await renderJobLog("#train-log", activeTrainingJobId);
   if (trainingJob?.state === "succeeded") {
     renderEvaluation(trainingJob.result?.evaluation || { available: false, message: "Training finished without evaluation artifacts." });
+    await refreshModels().catch(() => {});
     activateSubtab("train-evals");
     activeTrainingJobId = null;
   } else if (trainingJob?.state === "failed") {
@@ -546,6 +572,7 @@ async function refreshJobs() {
     activeDataJobId = null;
     await refreshStatus().catch(() => {});
     await refreshReadiness().catch(() => {});
+    await loadUpcomingEvents().catch(() => {});
   } else if (dataJob?.state === "failed") {
     renderJson("#data-output", dataJob.error || "Data pipeline failed");
     activeDataJobId = null;

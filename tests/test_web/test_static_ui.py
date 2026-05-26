@@ -17,6 +17,9 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert "Model Pick" in app_js
     assert "Model Edge" in app_js
     assert "Pick Edge" in app_js
+    assert "Positive EV Sides" in app_js
+    assert "Best Pick Edge" in app_js
+    assert "function bestPickEdge(rows)" in app_js
     assert "function formatOdds(value)" in app_js
     assert "confidence-pill" in app_js
     assert "Fighter1_Market_Prob" in app_js
@@ -26,6 +29,7 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert 'id="events-output" class="prediction-output"' in html
     assert 'id="prediction-output" class="prediction-output"' in html
     assert ".prediction-output" in styles
+    assert ".prediction-summary-strip" in styles
     assert ".edge-positive" in styles
     assert ".value-strip" in styles
 
@@ -239,3 +243,10 @@ def test_sticky_job_footer_does_not_cover_lower_predict_controls():
 
     assert "main {\n  padding: 24px 24px 72px;\n}" in styles
     assert "footer {\n  position: sticky;" in styles
+
+
+def test_successful_background_jobs_refresh_dependent_dashboard_state():
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert "await refreshModels().catch(() => {});" in app_js
+    assert "await loadUpcomingEvents().catch(() => {});" in app_js

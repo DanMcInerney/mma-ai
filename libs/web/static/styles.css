@@ -448,6 +448,34 @@ summary {
   white-space: normal;
 }
 
+.prediction-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+  color: var(--ink);
+  white-space: normal;
+}
+
+.prediction-summary-strip div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.prediction-summary-strip span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.prediction-summary-strip strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 22px;
+}
+
 .event-preview {
   display: grid;
   gap: 10px;
@@ -839,6 +867,7 @@ footer {
   .form-grid,
   .controls,
   .metrics,
+  .prediction-summary-strip,
   .eval-grid,
   .eval-chart-grid {
     grid-template-columns: 1fr;
