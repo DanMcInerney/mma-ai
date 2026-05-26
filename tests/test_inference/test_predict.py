@@ -1040,11 +1040,31 @@ def test_latest_model_path_uses_configured_models_dir_for_starter_model(monkeypa
     starter = models_dir / "ag-20260304_110750-win-extreme"
     older.mkdir(parents=True)
     starter.mkdir()
+    (older / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (older / "predictor.pkl").write_text("predictor", encoding="utf-8")
+    (starter / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (starter / "predictor.pkl").write_text("predictor", encoding="utf-8")
     os.utime(older, (1, 1))
     os.utime(starter, (2, 2))
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
 
     assert latest_model_path("win") == starter
+
+
+def test_latest_model_path_ignores_newer_incomplete_model_dirs(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    usable = models_dir / "ag-20260304_110750-win-extreme"
+    incomplete = models_dir / "ag-20260401_120000-win-extreme"
+    usable.mkdir(parents=True)
+    incomplete.mkdir()
+    (usable / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (usable / "predictor.pkl").write_text("predictor", encoding="utf-8")
+    (incomplete / "feats.txt").write_text("feature\n", encoding="utf-8")
+    os.utime(usable, (1, 1))
+    os.utime(incomplete, (2, 2))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    assert latest_model_path("win") == usable
 
 
 def test_latest_model_path_reports_configured_models_dir_when_missing(monkeypatch, tmp_path):

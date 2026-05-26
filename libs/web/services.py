@@ -22,6 +22,7 @@ from urllib.parse import unquote
 
 import pandas as pd
 
+from libs.modeling.discovery import is_loadable_prediction_model_dir
 from libs.paths import PROJECT_ROOT, data_dir, data_file, database_url, models_dir, odds_database_url, raw_ufcstats_dir
 from libs.web.evaluations import summarize_model_evaluation, write_model_evaluation_report
 from libs.web.llm import llm_config, llm_config_hint
@@ -380,16 +381,6 @@ def _parse_scrape_counts(stdout: str) -> dict[str, int]:
     return counts
 
 
-def _is_loadable_prediction_model_dir(path: Path) -> bool:
-    if not path.is_dir() or not (path / "feats.txt").exists():
-        return False
-    if (path / "predictor.pkl").exists():
-        return True
-    if not (path / "ensemble_info.txt").exists():
-        return False
-    return (path / "final_model").is_dir() or any(child.is_dir() for child in path.glob("window_*"))
-
-
 def list_models(model_type: str | None = None) -> list[dict[str, Any]]:
     root = models_dir()
     if not root.exists():
@@ -399,7 +390,7 @@ def list_models(model_type: str | None = None) -> list[dict[str, Any]]:
     for path in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
         if model_type and f"-{model_type}-" not in path.name:
             continue
-        if not _is_loadable_prediction_model_dir(path):
+        if not is_loadable_prediction_model_dir(path):
             continue
         summaries.append(
             {

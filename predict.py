@@ -18,6 +18,7 @@ from bs4 import BeautifulSoup
 import urllib3
 import warnings
 from libs.bfo_scraper import BFOScraper
+from libs.modeling.discovery import is_loadable_prediction_model_dir
 from libs.paths import data_file, models_dir, picks_dir
 
 # Disable SSL warnings
@@ -1243,10 +1244,13 @@ def has_positive_ev(ai_odds_str, bookie_odds_str):
 
 
 def latest_model_path(model_type):
-    candidates = [path for path in models_dir().glob(f"ag-*-{model_type}-*") if path.is_dir()]
+    candidates = [
+        path for path in models_dir().glob(f"ag-*-{model_type}-*")
+        if is_loadable_prediction_model_dir(path)
+    ]
     if not candidates:
         raise FileNotFoundError(
-            f"No {model_type} model found in {models_dir()}. "
+            f"No loadable {model_type} model found in {models_dir()}. "
             "Pass --model-path or run `uv run python -m libs.modeling.train` first."
         )
     return max(candidates, key=lambda path: path.stat().st_mtime)
