@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Test script for StatQualityCalculator
+Manual validation script for StatQualityCalculator
 
-Tests the calculator on a single table (td) to verify it works correctly
+Runs the calculator on a single table (td) to verify it works correctly
 before running on all tables.
 """
 

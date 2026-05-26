@@ -8,7 +8,7 @@ from libs.modeling.data_utils import (
     apply_robust_normalization, apply_zscore_normalization, apply_no_normalization,
     calculate_recency_weights, split_data_three_way, split_data_simple
 )
-from libs.modeling.test_date_utils import write_test_start_date
+from libs.modeling.split_date_utils import write_test_start_date
 from libs.paths import data_file
 
 

@@ -5,6 +5,7 @@ from scripts.release_audit import (
     find_forbidden_artifacts,
     find_hardcoded_local_database_urls,
     find_legacy_runtime_identifiers,
+    find_misplaced_test_scripts,
     find_missing_required_files,
     find_seed_data_issues,
     find_sensitive_text,
@@ -68,6 +69,20 @@ def test_release_audit_requires_public_entrypoints_and_seed_data():
     assert "CLAUDE.md" in missing_paths
     assert "data/raw/ufcstats/competitions.csv" in missing_paths
     assert "data/raw/ufcstats/individuals.csv" in missing_paths
+
+
+def test_release_audit_rejects_pytest_named_scripts_outside_tests():
+    issues = find_misplaced_test_scripts(
+        [
+            "scripts/test_parameter_optimization.py",
+            "tests/test_release_audit.py",
+            "scripts/validate_stat_quality_calc.py",
+        ]
+    )
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("misplaced_test_script", "scripts/test_parameter_optimization.py")
+    ]
 
 
 def test_release_audit_rejects_tiny_or_malformed_seed_csvs(tmp_path):

@@ -12,7 +12,7 @@ from libs.feature_store.features import FEATS_MAD, LAYERED_TEST_FEATS, TEST_FEAT
 import joblib
 from datetime import datetime
 from libs.modeling.model_utils import ModelUtils
-from libs.modeling.test_date_utils import write_test_start_date
+from libs.modeling.split_date_utils import write_test_start_date
 from libs.modeling.data_preparation import DataPreparation
 import numpy as np
 from libs.modeling.autogluon_wrapper import AutoGluonWrapper

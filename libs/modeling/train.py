@@ -999,7 +999,7 @@ class FileManager:
         if len(holdout_df) == 0:
             return
         
-        from libs.modeling.test_date_utils import write_test_start_date
+        from libs.modeling.split_date_utils import write_test_start_date
         holdout_start_date = holdout_df['event_date'].min()
         test_start_path = os.path.join(model_dir, 'test_start_date.txt')
         write_test_start_date(holdout_start_date, test_start_path)
@@ -2113,7 +2113,7 @@ class WalkForwardTrainer:
             print(f"Saved {len(self.holdout_data)} holdout fight IDs to {holdout_fight_ids_path}")
             
             # Also save test start date for backward compatibility
-            from libs.modeling.test_date_utils import write_test_start_date
+            from libs.modeling.split_date_utils import write_test_start_date
             holdout_start_date = self.holdout_data['event_date'].min()
             test_start_path = os.path.join(self.model_dir, 'test_start_date.txt')
             write_test_start_date(holdout_start_date, test_start_path)
@@ -2586,7 +2586,7 @@ class ModelTrainer:
                 print(f"Saved {len(holdout_df)} holdout fight IDs to {holdout_fight_ids_path}")
                 
                 # Also save test start date for backward compatibility
-                from libs.modeling.test_date_utils import write_test_start_date
+                from libs.modeling.split_date_utils import write_test_start_date
                 holdout_start_date = holdout_df['event_date'].min()
                 test_start_path = os.path.join(self.model_dir, 'test_start_date.txt')
                 write_test_start_date(holdout_start_date, test_start_path)
@@ -2648,7 +2648,7 @@ class ModelTrainer:
                 print(f"Saved {len(holdout_df)} holdout fight IDs to {holdout_fight_ids_path}")
                 
                 # Also save test start date for backward compatibility
-                from libs.modeling.test_date_utils import write_test_start_date
+                from libs.modeling.split_date_utils import write_test_start_date
                 holdout_start_date = holdout_df['event_date'].min()
                 test_start_path = os.path.join(self.model_dir, 'test_start_date.txt')
                 write_test_start_date(holdout_start_date, test_start_path)

@@ -112,6 +112,23 @@ def find_forbidden_artifacts(paths: Iterable[str]) -> list[AuditIssue]:
     return issues
 
 
+def find_misplaced_test_scripts(paths: Iterable[str]) -> list[AuditIssue]:
+    issues: list[AuditIssue] = []
+    for path in paths:
+        normalized = path.replace("\\", "/")
+        if normalized.startswith("tests/"):
+            continue
+        if Path(normalized).name.startswith("test_") and normalized.endswith(".py"):
+            issues.append(
+                AuditIssue(
+                    kind="misplaced_test_script",
+                    path=normalized,
+                    detail="Pytest-style test files must live under tests/ so release checks and packaging boundaries stay clear.",
+                )
+            )
+    return issues
+
+
 def find_missing_required_files(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
     tracked = {path.replace("\\", "/") for path in paths}
     issues = []
@@ -238,6 +255,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_missing_required_files(tracked, root),
         *find_seed_data_issues(tracked, root),
         *find_forbidden_artifacts(tracked),
+        *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),
         *find_hardcoded_local_database_urls(tracked, root),

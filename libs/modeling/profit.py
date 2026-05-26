@@ -13,7 +13,7 @@ if project_root not in sys.path:
 import pandas as pd
 import joblib
 from autogluon.tabular import TabularPredictor
-from libs.modeling.test_date_utils import read_test_start_date
+from libs.modeling.split_date_utils import read_test_start_date
 from libs.paths import data_file, models_dir
 import numpy as np
 from decimal import Decimal, ROUND_HALF_UP # For precise financial calculations

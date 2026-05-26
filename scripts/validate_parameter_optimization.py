@@ -1,5 +1,5 @@
 """
-Test script for parameter optimization library.
+Manual validation script for the parameter optimization library.
 
 Tests:
 1. Parameter loader can load baseline parameters
@@ -180,7 +180,7 @@ def test_calculator_integration():
 def main():
     """Run all validation tests"""
     print("="*60)
-    print("PARAMETER OPTIMIZATION LIBRARY TEST")
+    print("PARAMETER OPTIMIZATION LIBRARY VALIDATION")
     print("="*60)
 
     try:

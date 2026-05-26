@@ -10,7 +10,7 @@ import joblib
 from typing import Dict, Tuple
 #from libs.modeling.train import split_data, load_training_data, filter_fights, apply_robust_normalization
 from libs.modeling.profit import prepare_features
-from libs.modeling.test_date_utils import get_test_start_date_as_timestamp
+from libs.modeling.split_date_utils import get_test_start_date_as_timestamp
 from sklearn.calibration import calibration_curve
 import matplotlib.pyplot as plt
 import json
