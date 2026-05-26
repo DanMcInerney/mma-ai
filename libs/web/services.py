@@ -25,6 +25,9 @@ from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupP
 from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, resolve_model_dir
 
 
+STARTER_MODEL_NAME = "ag-20260304_110750-win-extreme"
+
+
 @dataclass(frozen=True)
 class DashboardDefaults:
     train: dict[str, Any]
@@ -136,6 +139,7 @@ def get_readiness_status() -> dict[str, Any]:
         ("raw_csvs", "individuals"),
         ("model_csvs", "prediction_data"),
         ("model_csvs", "training_data"),
+        ("model_csvs", "training_data_dec"),
     ):
         entry = status[group][key]
         rows = entry["rows"]
@@ -146,10 +150,13 @@ def get_readiness_status() -> dict[str, Any]:
         }
 
     models = list_models()
+    starter_model = next((model for model in models if model["name"] == STARTER_MODEL_NAME), None)
     checks["starter_model"] = {
-        "ok": bool(models),
+        "ok": bool(starter_model),
+        "expected": STARTER_MODEL_NAME,
         "count": len(models),
         "models": [model["name"] for model in models[:5]],
+        "path": starter_model["path"] if starter_model else None,
     }
     checks["database"] = _database_ready(database_url())
     checks["odds_database"] = _database_ready(odds_database_url())
