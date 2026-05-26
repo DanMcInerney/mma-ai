@@ -44,6 +44,7 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
             "data/prediction_data.csv",
             "AutoGluonModels/ag-test/predictor.pkl",
             "AutogluonModels/ag-test/predictor.pkl",
+            ".cursor/rules/project-description.mdc",
             "pics/picks/example.png",
         ]
     )
@@ -52,6 +53,7 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
         "data/prediction_data.csv",
         "AutoGluonModels/ag-test/predictor.pkl",
         "AutogluonModels/ag-test/predictor.pkl",
+        ".cursor/rules/project-description.mdc",
         "pics/picks/example.png",
     ]
 

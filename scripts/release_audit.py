@@ -47,7 +47,7 @@ REQUIRED_TRACKED_FILES = {
     "uv.lock",
     *SEED_DATA_PATHS,
 }
-FORBIDDEN_PREFIXES = ("AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
+FORBIDDEN_PREFIXES = (".cursor/", "AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
 FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
 MIN_SEED_ROWS = 1000
 MIN_SEED_COLUMNS = 6

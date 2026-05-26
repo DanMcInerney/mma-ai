@@ -118,6 +118,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}" in compose
     assert "depends_on" not in compose
     assert "artifacts" in dockerignore
+    assert ".cursor" in dockerignore
     assert ".env" in dockerignore
     assert ".env.local" in dockerignore
     assert ".webapp*.log" in dockerignore
@@ -188,7 +189,7 @@ def test_public_repo_tracks_seed_raw_csvs_and_no_heavy_generated_artifacts():
         assert row_count > 1000
         assert len(header) > 5
 
-    forbidden_prefixes = ("AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
+    forbidden_prefixes = (".cursor/", "AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
     forbidden_suffixes = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
     generated_data_files = {
         "data/prediction_data.csv",

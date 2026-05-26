@@ -1,4 +1,5 @@
 .git
+.cursor
 .env
 .env.local
 .webapp*.log
