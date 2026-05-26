@@ -206,7 +206,7 @@
             <div id="event-preview" class="event-preview">Upcoming events load automatically.</div>
             <details>
               <summary>Manual Event Odds</summary>
-              <textarea id="event-manual-odds" rows="5" placeholder="fighter name=-150"></textarea>
+              <textarea id="event-manual-odds" rows="5" placeholder="fighter name=-150&#10;other fighter=+200"></textarea>
             </details>
             <button id="run-event-predict" class="primary wide" disabled><i data-lucide="badge-dollar-sign"></i><span>Predict Event</span></button>
             <div id="events-output" class="prediction-output"></div>
@@ -225,8 +225,8 @@
               <label>Fighter 1 <input id="fighter1" list="fighters-list" /></label>
               <label>Fighter 2 <input id="fighter2" list="fighters-list" /></label>
               <label>Fight Date <input id="fight-date" type="date" /></label>
-              <label>Fighter 1 Odds <input id="fighter1-odds" type="number" /></label>
-              <label>Fighter 2 Odds <input id="fighter2-odds" type="number" /></label>
+              <label>Fighter 1 Odds <input id="fighter1-odds" type="number" placeholder="-150" /></label>
+              <label>Fighter 2 Odds <input id="fighter2-odds" type="number" placeholder="+200" /></label>
               <label><input id="matchup-odds" type="checkbox" checked /> Fetch odds when blank</label>
               <p class="field-note span-two">Odds are not included in the model. They are only used to calculate market-implied probability and expected value.</p>
             </div>

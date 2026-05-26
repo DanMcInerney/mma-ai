@@ -232,6 +232,18 @@ def test_event_prediction_endpoint_rejects_unsafe_output_dir(monkeypatch, tmp_pa
     assert "output directory must be under" in response.json()["detail"]
 
 
+def test_event_prediction_endpoint_rejects_invalid_manual_odds_before_job():
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/api/predict/event",
+        json={"upcoming_number": 1, "manual_odds": {"fighter one": 0}},
+    )
+
+    assert response.status_code == 400
+    assert "American odds" in response.json()["detail"]
+
+
 def test_matchup_prediction_endpoint_rejects_unsafe_training_csv_path(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))

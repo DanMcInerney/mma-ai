@@ -705,6 +705,23 @@ def _append_common_prediction_args(command: list[str], request: EventPredictionR
         command.append("--no-shap")
 
 
+def _validate_american_odds_value(value: int | None, label: str) -> None:
+    if value is None:
+        return
+    if abs(value) < 100:
+        raise ValueError(f"{label} must be American odds at +100 or longer, or -100 or shorter.")
+
+
+def _validate_manual_odds_mapping(manual_odds: dict[str, int] | None) -> None:
+    if not manual_odds:
+        return
+    for fighter_name, value in manual_odds.items():
+        name = str(fighter_name).strip()
+        if not name:
+            raise ValueError("Manual odds fighter names cannot be blank.")
+        _validate_american_odds_value(value, f"Manual odds for {name}")
+
+
 def run_event_prediction(request: EventPredictionRequest) -> dict[str, Any]:
     validate_event_prediction_request(request)
     output_dir = resolve_data_output_dir(request.output_dir, "predictions/latest")
@@ -721,6 +738,7 @@ def validate_event_prediction_request(request: EventPredictionRequest) -> dict[s
         resolve_data_csv(request.prediction_data_csv, "prediction_data.csv")
     if request.training_data_csv:
         resolve_data_csv(request.training_data_csv, "training_data.csv")
+    _validate_manual_odds_mapping(request.manual_odds)
     output_dir = resolve_data_output_dir(request.output_dir, "predictions/latest")
     return {
         "model_type": request.model_type,
@@ -738,6 +756,9 @@ def validate_matchup_request(request: MatchupPredictionRequest) -> dict[str, Any
         resolve_data_csv(request.prediction_data_csv, "prediction_data.csv")
     if request.training_data_csv:
         resolve_data_csv(request.training_data_csv, "training_data.csv")
+    _validate_american_odds_value(request.odds_fighter1, "Fighter 1 odds")
+    _validate_american_odds_value(request.odds_fighter2, "Fighter 2 odds")
+    _validate_manual_odds_mapping(request.manual_odds)
     output_dir = resolve_data_output_dir(request.output_dir, "predictions/manual")
 
     fighter1 = request.fighter1.strip()

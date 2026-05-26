@@ -25,6 +25,7 @@ from libs.web.services import (
     run_matchup_prediction,
     run_training,
     run_training_impl,
+    validate_event_prediction_request,
     validate_matchup_request,
 )
 
@@ -741,6 +742,50 @@ def test_validate_matchup_request_rejects_invalid_fight_date(monkeypatch, tmp_pa
     )
 
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
+        validate_matchup_request(request)
+
+
+def test_validate_event_prediction_request_rejects_invalid_manual_odds():
+    request = EventPredictionRequest(
+        upcoming_number=1,
+        odds=True,
+        manual_odds={"fighter one": 0},
+    )
+
+    with pytest.raises(ValueError, match=r"Manual odds for fighter one.*American odds"):
+        validate_event_prediction_request(request)
+
+
+def test_validate_matchup_request_rejects_invalid_fighter_odds(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    request = MatchupPredictionRequest(
+        prediction_data_csv=str(prediction_csv),
+        fighter1="fighter one",
+        fighter2="fighter two",
+        odds_fighter1=50,
+        odds_fighter2=-120,
+    )
+
+    with pytest.raises(ValueError, match=r"Fighter 1 odds.*American odds"):
+        validate_matchup_request(request)
+
+
+def test_validate_matchup_request_rejects_invalid_manual_odds(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    request = MatchupPredictionRequest(
+        prediction_data_csv=str(prediction_csv),
+        fighter1="fighter one",
+        fighter2="fighter two",
+        manual_odds={"fighter two": -99},
+    )
+
+    with pytest.raises(ValueError, match=r"Manual odds for fighter two.*American odds"):
         validate_matchup_request(request)
 
 
