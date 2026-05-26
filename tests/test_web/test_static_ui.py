@@ -198,3 +198,10 @@ def test_debug_logs_and_manual_event_odds_are_wired():
     assert "async function renderJobLog(target, jobId)" in app_js
     assert "/api/jobs/${jobId}/log" in app_js
     assert ".debug-log" in styles
+
+
+def test_sticky_job_footer_does_not_cover_lower_predict_controls():
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "main {\n  padding: 24px 24px 72px;\n}" in styles
+    assert "footer {\n  position: sticky;" in styles
