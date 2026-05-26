@@ -252,21 +252,21 @@ def _run_logged_subprocess(
     stdout_chunks: list[str] = []
     stderr_chunks: list[str] = []
 
-    def drain_stream(stream: Any, chunks: list[str], label: str) -> None:
+    def drain_stream(stream: Any, chunks: list[str], label: str, destination: Any) -> None:
         began = False
         try:
             for line in iter(stream.readline, ""):
                 if not began:
-                    print(f"[{log_prefix}] {label} begin")
+                    print(f"[{log_prefix}] {label} begin", file=destination)
                     began = True
                 chunks.append(line)
-                print(line, end="", flush=True)
+                print(line, end="", file=destination, flush=True)
         finally:
             if began:
-                print(f"[{log_prefix}] {label} end")
+                print(f"[{log_prefix}] {label} end", file=destination)
 
-    stdout_thread = Thread(target=drain_stream, args=(process.stdout, stdout_chunks, stdout_label), daemon=True)
-    stderr_thread = Thread(target=drain_stream, args=(process.stderr, stderr_chunks, stderr_label), daemon=True)
+    stdout_thread = Thread(target=drain_stream, args=(process.stdout, stdout_chunks, stdout_label, sys.stdout), daemon=True)
+    stderr_thread = Thread(target=drain_stream, args=(process.stderr, stderr_chunks, stderr_label, sys.stderr), daemon=True)
     stdout_thread.start()
     stderr_thread.start()
 

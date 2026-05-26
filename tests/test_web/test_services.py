@@ -259,13 +259,13 @@ def test_run_logged_subprocess_streams_output_and_returns_completed_process(caps
     assert completed.returncode == 0
     assert completed.stdout == "hello stdout\n"
     assert completed.stderr == "hello stderr\n"
-    output = capsys.readouterr().out
-    assert "[unit-test] command:" in output
-    assert "[unit-test] stdout begin" in output
-    assert "hello stdout" in output
-    assert "[unit-test] stderr begin" in output
-    assert "hello stderr" in output
-    assert "[unit-test] exit_code=0" in output
+    captured = capsys.readouterr()
+    assert "[unit-test] command:" in captured.out
+    assert "[unit-test] stdout begin" in captured.out
+    assert "hello stdout" in captured.out
+    assert "[unit-test] exit_code=0" in captured.out
+    assert "[unit-test] stderr begin" in captured.err
+    assert "hello stderr" in captured.err
 
 
 @pytest.mark.parametrize("odds_enabled", [False, True])
