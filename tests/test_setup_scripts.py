@@ -40,6 +40,8 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "setup-complete" in script
         assert "extracting" in script
         assert "http://localhost:" in script
+        assert "Validating setup artifact cache" in script
+        assert "Required setup artifact cache is incomplete or corrupt" in script
 
 
 def test_setup_scripts_detect_existing_postgres_host_port():
@@ -51,10 +53,12 @@ def test_setup_scripts_detect_existing_postgres_host_port():
     assert "Get-NetTCPConnection" in powershell
     assert "docker ps --format" in powershell
     assert "Remove-SetupDirectory" in powershell
+    assert "Assert-ArtifactCache" in powershell
     assert "Test-LocalhostPortOwnedByNonDocker" in powershell
     assert "docker_published_port_in_use" in bash
     assert "docker ps --format" in bash
     assert "safe_remove_setup_dir" in bash
+    assert "assert_artifact_cache" in bash
 
 
 def test_setup_scripts_pin_compose_database_and_starter_model():

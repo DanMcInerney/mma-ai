@@ -103,6 +103,29 @@ hash_matches() {
   [[ -n "$actual" && "$actual" == "$expected" ]]
 }
 
+assert_artifact_cache() {
+  local missing=()
+  local artifact relative expected target
+  for artifact in "${ARTIFACTS[@]}"; do
+    relative="${artifact%%|*}"
+    expected="${artifact#*|}"
+    target="$ARTIFACTS_ROOT/$relative"
+    if ! hash_matches "$target" "$expected"; then
+      missing+=("$relative")
+    fi
+  done
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    printf 'Required setup artifact cache is incomplete or corrupt: %s. ' "${missing[*]}" >&2
+    if [[ "$SKIP_DOWNLOAD" -eq 1 ]]; then
+      echo "Rerun setup without --skip-download, or pass --force-download to refresh the cache." >&2
+    else
+      echo "Rerun setup with --force-download to refresh the cache." >&2
+    fi
+    exit 1
+  fi
+}
+
 safe_remove_setup_dir() {
   local target="$1"
   local parent="$2"
@@ -512,6 +535,9 @@ if [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
     download_file "$relative" "$expected"
   done
 fi
+
+echo "Validating setup artifact cache"
+assert_artifact_cache
 
 mkdir -p "$ROOT/data" "$ROOT/AutogluonModels"
 cp -f "$ARTIFACTS_ROOT/processed/prediction_data.csv" "$ROOT/data/prediction_data.csv"

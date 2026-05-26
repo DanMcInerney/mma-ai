@@ -32,6 +32,13 @@ The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 `.env.example` to `.env` yourself if you want to provide keys or non-default
 paths before running setup.
 
+Setup is safe to rerun after an interrupted install. It reuses verified cached
+artifacts, re-extracts incomplete starter models, and restores the databases
+again if needed. Use `-SkipDownload` or `--skip-download` only when the artifact
+cache already exists; the scripts validate the cache before copying CSVs,
+extracting the model, or importing dumps. Use `-ForceDownload` or
+`--force-download` to repair a corrupt cache.
+
 If your machine already has Postgres on `localhost:5432`, setup automatically
 chooses another free host port for Docker Postgres and writes it to
 `MMA_AI_POSTGRES_PORT` in `.env`. The web app still reaches Postgres through

@@ -62,6 +62,25 @@ function Test-ExpectedHash {
     return $actual -eq $ExpectedHash.ToUpperInvariant()
 }
 
+function Assert-ArtifactCache {
+    $missingOrInvalid = @()
+    foreach ($artifact in $Artifacts) {
+        $target = Join-ArtifactPath $artifact.Path
+        if (-not (Test-ExpectedHash $target $artifact.Sha256)) {
+            $missingOrInvalid += $artifact.Path
+        }
+    }
+
+    if ($missingOrInvalid.Count -gt 0) {
+        $advice = if ($SkipDownload) {
+            "Rerun setup without -SkipDownload, or pass -ForceDownload to refresh the cache."
+        } else {
+            "Rerun setup with -ForceDownload to refresh the cache."
+        }
+        throw "Required setup artifact cache is incomplete or corrupt: $($missingOrInvalid -join ', '). $advice"
+    }
+}
+
 function Remove-SetupDirectory {
     param([string]$Path, [string]$Parent)
 
@@ -615,6 +634,9 @@ if (-not $SkipDownload) {
         }
     }
 }
+
+Write-Host "Validating setup artifact cache"
+Assert-ArtifactCache
 
 New-Item -ItemType Directory -Force (Join-Path $Root "data") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $Root "AutogluonModels") | Out-Null

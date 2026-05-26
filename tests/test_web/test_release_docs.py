@@ -37,6 +37,9 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "docker compose up --build web" in readme
     assert "MMA_AI_POSTGRES_PORT" in readme
     assert "--postgres-port 55432" in readme
+    assert "Setup is safe to rerun after an interrupted install" in readme
+    assert "--skip-download" in readme
+    assert "--force-download" in readme
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
     assert "/api/health" in read_text("Dockerfile")
