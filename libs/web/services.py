@@ -447,6 +447,7 @@ def _safe_evaluation(model_path: str) -> dict[str, Any] | None:
             print(f"[training] evaluation report written: {report_paths}")
         return summary
     except Exception as exc:
+        print(f"[training] evaluation summary failed: {type(exc).__name__}: {exc}")
         return {"available": False, "message": str(exc), "model_path": model_path}
 
 

@@ -831,6 +831,30 @@ def test_run_training_uses_custom_config_when_script_defaults_are_overridden(mon
     assert captured["config"].walkforward_n_windows == 8
 
 
+def test_run_training_logs_evaluation_summary_failures(monkeypatch, tmp_path, capsys):
+    def fake_main(**_kwargs):
+        return SimpleNamespace(path=str(tmp_path / "AutogluonModels" / "script-default"))
+
+    fake_train_module = ModuleType("libs.modeling.train")
+    fake_train_module.main = fake_main
+    monkeypatch.setitem(sys.modules, "libs.modeling.train", fake_train_module)
+
+    def fail_summary(_model_path):
+        raise RuntimeError("missing evals.txt")
+
+    monkeypatch.setattr("libs.web.services.summarize_model_evaluation", fail_summary)
+
+    result = run_training(TrainingRequest())
+
+    captured = capsys.readouterr()
+    assert result["evaluation"] == {
+        "available": False,
+        "message": "missing evals.txt",
+        "model_path": str(tmp_path / "AutogluonModels" / "script-default"),
+    }
+    assert "[training] evaluation summary failed: RuntimeError: missing evals.txt" in captured.out
+
+
 def test_list_fighters_rejects_csv_outside_data_dir(monkeypatch, tmp_path):
     data_root = tmp_path / "data"
     outside = tmp_path / "outside" / "prediction_data.csv"
