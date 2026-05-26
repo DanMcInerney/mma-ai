@@ -61,7 +61,7 @@ class LlmConfig:
 
     @property
     def needs_api_key(self) -> bool:
-        return self.provider not in {"local"}
+        return self.provider not in {"local", "custom"}
 
     @property
     def is_configured(self) -> bool:
@@ -100,8 +100,9 @@ def llm_config() -> LlmConfig | None:
 
 def llm_config_hint() -> str:
     return (
-        "Configure LLM_PROVIDER and LLM_MODEL with LLM_API_KEY, or use provider keys like "
-        "OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY."
+        "Configure LLM_PROVIDER and LLM_MODEL with LLM_API_KEY, provider keys like "
+        "OPENAI_API_KEY, ANTHROPIC_API_KEY, XAI_API_KEY, GEMINI_API_KEY, or GOOGLE_API_KEY, "
+        "or set LLM_BASE_URL for a local/custom OpenAI-compatible endpoint."
     )
 
 
