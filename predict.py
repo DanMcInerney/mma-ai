@@ -807,6 +807,22 @@ def build_manual_odds(fight_list, fighter1_odds=None, fighter2_odds=None):
     return odds
 
 
+def manual_odds_cover_fight_list(fight_list, manual_odds):
+    """Return True when supplied fighter odds cover every fighter in the fights."""
+    if not manual_odds:
+        return False
+    supplied = {
+        str(name).strip().lower()
+        for name, value in manual_odds.items()
+        if str(name).strip() and value not in (None, "")
+    }
+    required = set()
+    for fight in fight_list:
+        required.add(str(fight[1]).strip().lower())
+        required.add(str(fight[2]).strip().lower())
+    return bool(required) and required.issubset(supplied)
+
+
 def parse_manual_odds_json(raw_value):
     """Parse CLI/UI supplied fighter odds as a JSON object of fighter name to American odds."""
     if not raw_value:
@@ -874,6 +890,33 @@ def apply_manual_odds(fight_list, odds, manual_odds):
         resolved_odds[fighter1] = {"original": int(fighter1_odds), "vigless": int(fair1)}
         resolved_odds[fighter2] = {"original": int(fighter2_odds), "vigless": int(fair2)}
     return resolved_odds
+
+
+def resolve_prediction_odds(
+    fight_list,
+    *,
+    odds_enabled,
+    manual_odds=None,
+    fighter1_odds=None,
+    fighter2_odds=None,
+    allow_manual_input=True,
+):
+    """Resolve event or matchup odds without doing avoidable interactive/network work."""
+    manual_odds = manual_odds or {}
+
+    if fighter1_odds is not None or fighter2_odds is not None:
+        bfo_odds = build_manual_odds(fight_list, fighter1_odds, fighter2_odds)
+    elif odds_enabled and manual_odds_cover_fight_list(fight_list, manual_odds):
+        print("\nManual odds supplied for every fighter; skipping BFO odds lookup.")
+        bfo_odds = _empty_odds_for_fights(fight_list)
+    elif odds_enabled:
+        bfo_odds = get_bfo_odds(fight_list, allow_manual_input=allow_manual_input)
+    else:
+        bfo_odds = _empty_odds_for_fights(fight_list)
+
+    if manual_odds:
+        bfo_odds = apply_manual_odds(fight_list, bfo_odds, manual_odds)
+    return bfo_odds
 
 
 def convert_american_to_decimal(american_odds):
@@ -1356,15 +1399,14 @@ def cli():
     
     os.makedirs(ss_output_dir, exist_ok=True)
     
-    if args.fighter1_odds is not None or args.fighter2_odds is not None:
-        bfo_odds = build_manual_odds(fight_list, args.fighter1_odds, args.fighter2_odds)
-    elif odds:
-        # Get latest odds from BFO with vig removal
-        bfo_odds = get_bfo_odds(fight_list, allow_manual_input=not args.no_manual_odds)
-    else:
-        bfo_odds = _empty_odds_for_fights(fight_list)
-    if manual_odds:
-        bfo_odds = apply_manual_odds(fight_list, bfo_odds, manual_odds)
+    bfo_odds = resolve_prediction_odds(
+        fight_list,
+        odds_enabled=odds,
+        manual_odds=manual_odds,
+        fighter1_odds=args.fighter1_odds,
+        fighter2_odds=args.fighter2_odds,
+        allow_manual_input=not args.no_manual_odds,
+    )
     
     # Get inference data using the prediction_data.csv file
     # New refactored system: generates all features (fighter1_*, fighter2_*, *_diff)
