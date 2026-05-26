@@ -15,6 +15,7 @@ NO_START=0
 NO_OPEN=0
 FORCE_DOWNLOAD=0
 SKIP_LLM_PROMPT=0
+HELP=0
 GEMINI_API_KEY_VALUE=""
 LLM_PROVIDER_VALUE=""
 LLM_MODEL_VALUE=""
@@ -25,6 +26,7 @@ WEB_PORT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -h|--help) HELP=1 ;;
     --skip-download) SKIP_DOWNLOAD=1 ;;
     --skip-import) SKIP_IMPORT=1 ;;
     --force-import) FORCE_IMPORT=1 ;;
@@ -67,6 +69,46 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
+
+show_usage() {
+  cat <<'EOF'
+MMA AI setup
+
+Usage:
+  bash setup.sh [options]
+
+First-time setup downloads verified Hugging Face artifacts, restores the main
+and odds databases into Docker Postgres, extracts the starter model, optionally
+configures LLM analytics, starts the dashboard, and waits for /api/readiness.
+
+Options:
+  -h, --help              Show this help and exit before Docker or downloads.
+  --skip-download         Reuse the existing artifact cache after validating it.
+  --force-download        Re-download artifacts and verify checksums.
+  --skip-import           Do not restore database dumps into Docker Postgres.
+  --force-import          Restore database dumps even if required tables exist.
+  --no-start              Prepare files/imports but do not start the dashboard.
+  --no-open               Start the dashboard but do not open a browser.
+  --skip-llm-prompt       Do not prompt for analytics LLM configuration.
+  --postgres-port <port>  Force the Docker Postgres host port.
+  --web-port <port>       Force the dashboard host port.
+  --llm-provider <name>   Configure analytics LLM provider non-interactively.
+  --llm-model <name>      Configure analytics LLM model.
+  --llm-api-key <token>   Configure analytics LLM API key or token.
+  --llm-base-url <url>    Configure custom/OpenAI-compatible API base URL.
+
+Examples:
+  bash setup.sh
+  bash setup.sh --force-import
+  bash setup.sh --postgres-port 55432 --web-port 18000
+  bash setup.sh --skip-llm-prompt
+EOF
+}
+
+if [[ "$HELP" -eq 1 ]]; then
+  show_usage
+  exit 0
+fi
 
 ARTIFACTS=(
   "manifest.json|"

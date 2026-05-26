@@ -49,11 +49,43 @@ def test_bash_setup_script_has_valid_syntax():
     assert result.returncode == 0, combined
 
 
+def test_setup_scripts_help_exits_before_install_work():
+    shell = shutil.which("powershell") or shutil.which("pwsh")
+    if shell:
+        args = [shell, "-NoProfile"]
+        if Path(shell).name.lower().startswith("powershell"):
+            args.extend(["-ExecutionPolicy", "Bypass"])
+        args.extend(["-File", ".\\setup.ps1", "-Help"])
+        result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=False)
+
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "MMA AI setup" in result.stdout
+        assert "-ForceImport" in result.stdout
+        assert "docker compose" not in result.stderr.lower()
+
+    bash = shutil.which("bash")
+    if bash:
+        result = subprocess.run([bash, "setup.sh", "--help"], cwd=ROOT, text=True, capture_output=True, check=False)
+        combined = result.stdout + result.stderr
+        if result.returncode != 0 and "Windows Subsystem for Linux has no installed distributions" in combined:
+            pytest.skip("bash is present but WSL is not configured")
+
+        assert result.returncode == 0, combined
+        assert "MMA AI setup" in result.stdout
+        assert "--force-import" in result.stdout
+        assert "docker compose" not in result.stderr.lower()
+
+    if not shell and not bash:
+        pytest.skip("Neither PowerShell nor bash is available")
+
+
 def test_setup_scripts_download_restore_configure_and_start_dashboard():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")
 
     for script in (powershell, bash):
+        assert "MMA AI setup" in script
+        assert "Show this help and exit before Docker or downloads" in script
         assert "https://huggingface.co/datasets/DanMcInerney/mma-ai/resolve/main" in script
         assert "dumps/mma-ai.postgres-custom" in script
         assert "dumps/odds.postgres-custom" in script

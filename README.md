@@ -25,6 +25,10 @@ macOS/Linux:
 bash setup.sh
 ```
 
+Run `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Help` or
+`bash setup.sh --help` to see all non-interactive setup options before starting
+Docker, downloads, or database imports.
+
 Open the dashboard at http://localhost:8000, or the alternate port printed by
 setup if port 8000 is already in use. The top bar shows a `Ready` badge when
 the imported database tables, processed CSVs, and starter model are available.

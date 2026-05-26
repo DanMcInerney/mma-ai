@@ -1,4 +1,5 @@
 param(
+    [switch]$Help,
     [switch]$SkipDownload,
     [switch]$SkipImport,
     [switch]$ForceImport,
@@ -34,6 +35,46 @@ $Artifacts = @(
     [pscustomobject]@{ Path = "processed/prediction_data.csv"; Sha256 = "1C28D3B04DA412980777D38032E95A5B695C4B53BEA0014192D4D6C07413F754" },
     [pscustomobject]@{ Path = "models/ag-20260304_110750-win-extreme.tar.gz"; Sha256 = "248511976D55895BE2C167F2F8FA8C4013E635B39A9BAB0D5F28C0916B5AAD74" }
 )
+
+function Show-SetupHelp {
+    Write-Host @'
+MMA AI setup
+
+Usage:
+  powershell -ExecutionPolicy Bypass -File .\setup.ps1 [options]
+
+First-time setup downloads verified Hugging Face artifacts, restores the main
+and odds databases into Docker Postgres, extracts the starter model, optionally
+configures LLM analytics, starts the dashboard, and waits for /api/readiness.
+
+Options:
+  -Help                 Show this help and exit before Docker or downloads.
+  -SkipDownload         Reuse the existing artifact cache after validating it.
+  -ForceDownload        Re-download artifacts and verify checksums.
+  -SkipImport           Do not restore database dumps into Docker Postgres.
+  -ForceImport          Restore database dumps even if required tables exist.
+  -NoStart              Prepare files/imports but do not start the dashboard.
+  -NoOpen               Start the dashboard but do not open a browser.
+  -SkipLlmPrompt        Do not prompt for analytics LLM configuration.
+  -PostgresPort <port>  Force the Docker Postgres host port.
+  -WebPort <port>       Force the dashboard host port.
+  -LlmProvider <name>   Configure analytics LLM provider non-interactively.
+  -LlmModel <name>      Configure analytics LLM model.
+  -LlmApiKey <token>    Configure analytics LLM API key or token.
+  -LlmBaseUrl <url>     Configure custom/OpenAI-compatible API base URL.
+
+Examples:
+  powershell -ExecutionPolicy Bypass -File .\setup.ps1
+  powershell -ExecutionPolicy Bypass -File .\setup.ps1 -ForceImport
+  powershell -ExecutionPolicy Bypass -File .\setup.ps1 -PostgresPort 55432 -WebPort 18000
+  powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipLlmPrompt
+'@
+}
+
+if ($Help) {
+    Show-SetupHelp
+    return
+}
 
 function Require-Command {
     param([string]$Name)
