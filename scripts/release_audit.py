@@ -65,6 +65,12 @@ SENSITIVE_PATTERNS = {
     "google_api_key": re.compile(r"\bAIza[A-Za-z0-9_-]{20,}\b"),
 }
 
+LEGACY_RUNTIME_PATTERNS = {
+    "legacy_mma_ai_db_name": re.compile(r"\bmma-ai-db\b", re.IGNORECASE),
+}
+LEGACY_IDENTIFIER_ALLOWED_PREFIXES = ("docs/", "tests/")
+LEGACY_IDENTIFIER_ALLOWED_FILES = {"AGENTS.md", "CLAUDE.md", "README.md"}
+
 
 @dataclass(frozen=True)
 class AuditIssue:
@@ -165,6 +171,28 @@ def find_sensitive_text(paths: Iterable[str], root: Path = ROOT) -> list[AuditIs
     return issues
 
 
+def find_legacy_runtime_identifiers(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
+    issues: list[AuditIssue] = []
+    for relative_path in paths:
+        normalized = relative_path.replace("\\", "/")
+        if normalized in LEGACY_IDENTIFIER_ALLOWED_FILES or normalized.startswith(LEGACY_IDENTIFIER_ALLOWED_PREFIXES):
+            continue
+
+        path = root / relative_path
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            issues.append(AuditIssue("unreadable_file", relative_path, str(exc)))
+            continue
+        if b"\0" in raw[:4096]:
+            continue
+        text = raw.decode("utf-8", errors="ignore")
+        for kind, pattern in LEGACY_RUNTIME_PATTERNS.items():
+            for match in pattern.finditer(text):
+                issues.append(AuditIssue(kind=kind, path=normalized, detail=_excerpt(text, match.start(), match.end())))
+    return issues
+
+
 def _excerpt(text: str, start: int, end: int, radius: int = 32) -> str:
     snippet = text[max(0, start - radius) : min(len(text), end + radius)]
     return " ".join(snippet.split())
@@ -177,6 +205,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_seed_data_issues(tracked, root),
         *find_forbidden_artifacts(tracked),
         *find_sensitive_text(tracked, root),
+        *find_legacy_runtime_identifiers(tracked, root),
     ]
 
 

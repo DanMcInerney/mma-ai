@@ -1,2 +1,2 @@
-"""Command modules for mma-ai-db."""
+"""Command modules for the MMA AI dashboard."""
 

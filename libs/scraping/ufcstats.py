@@ -356,7 +356,7 @@ def scrape_ufcstats(
 
     process = CrawlerProcess(
         settings={
-            "BOT_NAME": "mma-ai-db",
+            "BOT_NAME": "mma-ai",
             "ROBOTSTXT_OBEY": True,
             "DOWNLOAD_DELAY": 0.25,
             "FEED_EXPORT_ENCODING": "utf-8",

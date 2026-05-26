@@ -3,6 +3,7 @@ from pathlib import Path
 from scripts.release_audit import (
     audit_repository,
     find_forbidden_artifacts,
+    find_legacy_runtime_identifiers,
     find_missing_required_files,
     find_seed_data_issues,
     find_sensitive_text,
@@ -98,3 +99,23 @@ def test_release_audit_detects_realistic_secret_and_local_path(tmp_path):
     issues = find_sensitive_text(["README.md"], tmp_path)
 
     assert {issue.kind for issue in issues} == {"local_windows_path", "openai_api_key"}
+
+
+def test_release_audit_rejects_legacy_runtime_project_names(tmp_path):
+    runtime_file = tmp_path / "libs" / "scraping" / "ufcstats.py"
+    docs_file = tmp_path / "README.md"
+    runtime_file.parent.mkdir(parents=True)
+    runtime_file.write_text('settings = {"BOT_NAME": "mma-ai-db"}', encoding="utf-8")
+    docs_file.write_text("This public repo combines mma-ai-db with UFCScraper.", encoding="utf-8")
+
+    issues = find_legacy_runtime_identifiers(
+        [
+            "libs/scraping/ufcstats.py",
+            "README.md",
+        ],
+        tmp_path,
+    )
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("legacy_mma_ai_db_name", "libs/scraping/ufcstats.py"),
+    ]
