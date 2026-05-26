@@ -138,6 +138,8 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "Waiting for MMA AI web dashboard readiness check" in script
         assert "Validating setup artifact cache" in script
         assert "Required setup artifact cache is incomplete or corrupt" in script
+        assert "Hugging Face manifest entry" in script
+        assert "Update setup artifact checksums before downloading large artifacts." in script
         assert "feats.txt" in script
         assert "predictor.pkl" in script
         assert "ensemble_info.txt" in script
@@ -149,6 +151,26 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "bestfightodds.bfo" in script
         assert "Using existing imported Postgres databases" in script
         assert "Database import finished but required tables were not found." in script
+
+
+def test_setup_scripts_validate_huggingface_manifest_before_large_downloads():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    assert "function Test-ManifestArtifactPins" in powershell
+    assert "ConvertFrom-Json" in powershell
+    assert 'Where-Object { $_.Path -ne "manifest.json" }' in powershell
+    manifest_validation = powershell.index("Test-ManifestArtifactPins\n\n    foreach ($artifact")
+    large_download_loop = powershell.index('foreach ($artifact in ($Artifacts | Where-Object { $_.Path -ne "manifest.json" }))')
+    assert manifest_validation < large_download_loop
+    assert "Test-ManifestArtifactPins\nAssert-ArtifactCache" in powershell
+
+    assert "validate_manifest_artifact_pins()" in bash
+    assert 'grep -Fq "$relative" "$manifest"' in bash
+    assert 'grep -Fq "$expected" "$manifest"' in bash
+    assert 'download_file "manifest.json" ""\n  validate_manifest_artifact_pins' in bash
+    assert '[[ "$relative" == "manifest.json" ]] && continue' in bash
+    assert "validate_manifest_artifact_pins\nassert_artifact_cache" in bash
 
 
 def test_setup_scripts_clear_stale_llm_key_for_keyless_custom_and_local_endpoints():

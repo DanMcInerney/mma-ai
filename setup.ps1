@@ -123,6 +123,28 @@ function Assert-ArtifactCache {
     }
 }
 
+function Test-ManifestArtifactPins {
+    $manifestPath = Join-ArtifactPath "manifest.json"
+    if (-not (Test-Path -LiteralPath $manifestPath)) {
+        throw "Hugging Face manifest is missing from the setup artifact cache."
+    }
+
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $manifestFiles = @{}
+    foreach ($file in @($manifest.files)) {
+        $manifestFiles[$file.path] = ($file.sha256.ToUpperInvariant())
+    }
+
+    foreach ($artifact in $Artifacts) {
+        if ($artifact.Path -eq "manifest.json" -or [string]::IsNullOrWhiteSpace($artifact.Sha256)) {
+            continue
+        }
+        if (-not $manifestFiles.ContainsKey($artifact.Path) -or $manifestFiles[$artifact.Path] -ne $artifact.Sha256.ToUpperInvariant()) {
+            throw "Hugging Face manifest entry for $($artifact.Path) does not match the setup pin. Update setup artifact checksums before downloading large artifacts."
+        }
+    }
+}
+
 function Remove-SetupDirectory {
     param([string]$Path, [string]$Parent)
 
@@ -834,7 +856,20 @@ if ($selectedWebPort -ne 8000) {
 }
 
 if (-not $SkipDownload) {
-    foreach ($artifact in $Artifacts) {
+    $manifestArtifact = $Artifacts | Where-Object { $_.Path -eq "manifest.json" } | Select-Object -First 1
+    $manifestTarget = Join-ArtifactPath $manifestArtifact.Path
+    if (-not $ForceDownload -and (Test-ExpectedHash $manifestTarget $manifestArtifact.Sha256)) {
+        Write-Host "Using cached $($manifestArtifact.Path)"
+    } else {
+        Write-Host "Downloading $($manifestArtifact.Path)"
+        Download-File "$DatasetBaseUrl/$($manifestArtifact.Path)" $manifestTarget
+        if (-not (Test-ExpectedHash $manifestTarget $manifestArtifact.Sha256)) {
+            throw "Checksum verification failed for $($manifestArtifact.Path)"
+        }
+    }
+    Test-ManifestArtifactPins
+
+    foreach ($artifact in ($Artifacts | Where-Object { $_.Path -ne "manifest.json" })) {
         $target = Join-ArtifactPath $artifact.Path
         if (-not $ForceDownload -and (Test-ExpectedHash $target $artifact.Sha256)) {
             Write-Host "Using cached $($artifact.Path)"
@@ -850,6 +885,7 @@ if (-not $SkipDownload) {
 }
 
 Write-Host "Validating setup artifact cache"
+Test-ManifestArtifactPins
 Assert-ArtifactCache
 
 New-Item -ItemType Directory -Force (Join-Path $Root "data") | Out-Null

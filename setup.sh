@@ -170,6 +170,25 @@ assert_artifact_cache() {
   fi
 }
 
+validate_manifest_artifact_pins() {
+  local manifest="$ARTIFACTS_ROOT/manifest.json"
+  [[ -f "$manifest" ]] || {
+    echo "Hugging Face manifest is missing from the setup artifact cache." >&2
+    exit 1
+  }
+
+  local artifact relative expected
+  for artifact in "${ARTIFACTS[@]}"; do
+    relative="${artifact%%|*}"
+    expected="${artifact#*|}"
+    [[ "$relative" == "manifest.json" || -z "$expected" ]] && continue
+    if ! grep -Fq "$relative" "$manifest" || ! grep -Fq "$expected" "$manifest"; then
+      echo "Hugging Face manifest entry for $relative does not match the setup pin. Update setup artifact checksums before downloading large artifacts." >&2
+      exit 1
+    fi
+  done
+}
+
 safe_remove_setup_dir() {
   local target="$1"
   local parent="$2"
@@ -701,14 +720,18 @@ if [[ "$SELECTED_WEB_PORT" != "8000" ]]; then
 fi
 
 if [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
+  download_file "manifest.json" ""
+  validate_manifest_artifact_pins
   for artifact in "${ARTIFACTS[@]}"; do
     relative="${artifact%%|*}"
     expected="${artifact#*|}"
+    [[ "$relative" == "manifest.json" ]] && continue
     download_file "$relative" "$expected"
   done
 fi
 
 echo "Validating setup artifact cache"
+validate_manifest_artifact_pins
 assert_artifact_cache
 
 mkdir -p "$ROOT/data" "$ROOT/AutogluonModels"
