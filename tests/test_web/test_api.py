@@ -148,6 +148,7 @@ def test_data_refresh_endpoint_starts_background_job(monkeypatch):
     assert job["state"] == "succeeded"
     assert job["result"]["scrape_counts"] == {"fighters": 2}
     assert job["result"]["request"]["force_full"] is True
+    assert job["result"]["request"]["odds_features"] is True
     assert job["result"]["request"]["odds"] is True
     log_response = client.get(f"/api/jobs/{job_id}/log")
     assert log_response.status_code == 200

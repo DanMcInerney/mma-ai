@@ -109,6 +109,7 @@ def get_dashboard_defaults() -> dict[str, Any]:
             "rebuild": True,
             "force_full": False,
             "reset_db": True,
+            "odds_features": True,
             "odds": False,
             "log_level": "INFO",
             "analytics_max_rows": 100,
@@ -266,7 +267,8 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
     print(
         "[data-refresh] "
         f"scrape={request.scrape} rebuild={request.rebuild} reset_db={request.reset_db} "
-        f"force_full={request.force_full} odds={request.odds} raw_dir={raw_dir} data_dir={app_data_dir}"
+        f"force_full={request.force_full} odds_features={request.odds_features} "
+        f"odds={request.odds} raw_dir={raw_dir} data_dir={app_data_dir}"
     )
 
     if request.scrape:
@@ -396,6 +398,8 @@ def _run_rebuild_command(request: DataRefreshRequest, raw_dir: Path, app_data_di
     ]
     if request.reset_db:
         command.append("--reset-db")
+    if request.odds_features:
+        command.append("--odds-features")
     if request.odds:
         command.append("--odds")
 

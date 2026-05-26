@@ -638,6 +638,7 @@ function wireData() {
         rebuild: true,
         reset_db: true,
         force_full: false,
+        odds_features: true,
         odds: false,
       };
       const job = await api("/api/data/refresh", { method: "POST", body: JSON.stringify(payload) });

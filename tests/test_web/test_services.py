@@ -42,6 +42,8 @@ def test_data_refresh_defaults_recreate_generated_schemas():
     assert request.rebuild is True
     assert request.reset_db is True
     assert request.force_full is False
+    assert request.odds_features is True
+    assert request.odds is False
 
 
 def test_get_data_status_counts_configured_csvs(monkeypatch, tmp_path):
@@ -367,8 +369,11 @@ def test_run_logged_subprocess_streams_output_and_returns_completed_process(caps
     assert "hello stderr" in captured.err
 
 
-@pytest.mark.parametrize("odds_enabled", [False, True])
-def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds_enabled):
+@pytest.mark.parametrize(
+    ("odds_features_enabled", "odds_enabled"),
+    [(False, False), (True, False), (True, True)],
+)
+def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds_features_enabled, odds_enabled):
     raw_dir = tmp_path / "raw"
     data_dir = tmp_path / "data"
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
@@ -389,6 +394,7 @@ def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds
             scrape=False,
             rebuild=True,
             reset_db=True,
+            odds_features=odds_features_enabled,
             odds=odds_enabled,
         )
     )
@@ -403,6 +409,7 @@ def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds
     assert command[command.index("--raw-data-dir") + 1] == str(raw_dir)
     assert command[command.index("--output-data-dir") + 1] == str(data_dir)
     assert "--reset-db" in command
+    assert ("--odds-features" in command) is odds_features_enabled
     assert ("--odds" in command) is odds_enabled
     assert "--db-url" not in command
     assert captured["log_prefix"] == "data-refresh"

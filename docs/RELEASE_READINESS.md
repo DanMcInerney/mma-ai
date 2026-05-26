@@ -50,9 +50,11 @@ badge.
 - Data tab: refresh UFCStats CSVs, rebuild PostgreSQL feature tables, write
   `prediction_data.csv`, `training_data.csv`, and `training_data_dec.csv`, run
   read-only analytics. The default data run incrementally merges new UFCStats
-  rows into the shipped seed CSVs and recreates generated schemas from those
-  CSVs. Completed data jobs return before/after row deltas so users can verify
-  how many raw and finalized rows changed during the refresh. Analytics SQL is
+  rows into the shipped seed CSVs, recreates generated schemas from those CSVs,
+  and recalculates odds features from the imported Hugging Face `odds` database
+  without refreshing BestFightOdds. Completed data jobs return before/after row
+  deltas so users can verify how many raw and finalized rows changed during the
+  refresh. Analytics SQL is
   constrained to one read-only query, runs inside a read-only Postgres
   transaction with a statement timeout, and uses SQLite query-only mode for
   finalized CSV fallbacks. The Analytics panel exposes a non-secret LLM status

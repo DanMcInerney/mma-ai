@@ -544,24 +544,30 @@ def merge_raw_fighter_odds(df, conn):
         return df # Return the original DataFrame if merge fails
 
 
-def refresh_odds_features(conn, enabled=False):
-    """Refresh BFO odds and derived odds features when requested."""
-    if not enabled:
+def refresh_odds_features(conn, enabled=False, refresh_bfo=None):
+    """Calculate odds features, optionally refreshing BestFightOdds first."""
+    refresh_bfo = enabled if refresh_bfo is None else refresh_bfo
+    calculate_features = enabled or refresh_bfo
+    if not calculate_features:
         print("\nSkipping BFO odds refresh and odds feature calculation.")
-        return {"enabled": False, "records_scraped": None}
+        return {"enabled": False, "refresh_bfo": False, "records_scraped": None, "calculated": False}
 
-    print("\nStarting BFO Odds Scraping...")
-    bfo_scraper = BFOScraper(conn)
-    records_scraped = bfo_scraper.scrape_all_fighters()
-    print(f"Finished BFO Odds Scraping. Records saved: {records_scraped}\n")
+    records_scraped = None
+    if refresh_bfo:
+        print("\nStarting BFO Odds Scraping...")
+        bfo_scraper = BFOScraper(conn)
+        records_scraped = bfo_scraper.scrape_all_fighters()
+        print(f"Finished BFO Odds Scraping. Records saved: {records_scraped}\n")
+    else:
+        print("\nSkipping BFO odds web refresh; calculating features from the configured odds database.")
 
     print("Calculating odds features...")
     OddsCalculator(conn).run()
     print("Finished calculating odds features.")
-    return {"enabled": True, "records_scraped": records_scraped}
+    return {"enabled": True, "refresh_bfo": bool(refresh_bfo), "records_scraped": records_scraped, "calculated": True}
 
 
-def main(odds=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrape=False, reset_db=False):
+def main(odds=False, odds_features=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrape=False, reset_db=False):
     from libs.feature_store.config import DECAY_HALF_LIFE_YEARS
     decay_rate_years = DECAY_HALF_LIFE_YEARS
     raw_data_dir = Path(raw_data_dir or raw_ufcstats_dir()).expanduser().resolve()
@@ -826,7 +832,7 @@ def main(odds=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrap
         #print("Calculating style...")
         #StyleCalculator(conn).run()
 
-        refresh_odds_features(conn, enabled=odds)
+        refresh_odds_features(conn, enabled=odds_features or odds, refresh_bfo=odds)
 
         # print("Calculating slope...")
         # TimedecSlopeCalculator(conn, decay_rate_years).run()  # Uses centralized config
@@ -922,6 +928,7 @@ def parse_args():
     parser.add_argument("--scrape", action="store_true", help="Scrape UFCStats before rebuilding.")
     parser.add_argument("--reset-db", action="store_true", help="Drop generated schemas before rebuilding.")
     parser.add_argument("--odds", action="store_true", help="Refresh BFO odds and calculate odds features.")
+    parser.add_argument("--odds-features", action="store_true", help="Calculate odds features from the configured odds database without scraping BFO.")
     return parser.parse_args()
 
 
@@ -934,6 +941,7 @@ def cli():
         output_data_dir=args.output_data_dir,
         scrape=args.scrape,
         reset_db=args.reset_db,
+        odds_features=args.odds_features,
     )
 
 

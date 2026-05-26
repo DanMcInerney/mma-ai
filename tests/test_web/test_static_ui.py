@@ -73,6 +73,7 @@ def test_data_and_training_ui_are_simplified():
     assert "scrape: true" in app_js
     assert "rebuild: true" in app_js
     assert "reset_db: true" in app_js
+    assert "odds_features: true" in app_js
     assert "row_deltas" in app_js
     assert "function renderDataMetrics(status, deltas = {})" in app_js
     assert "this run" in app_js

@@ -34,6 +34,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "auxiliary `odds` database" in readme
     assert "Python 3.10-3.12" in readme
     assert "Data: update the shipped raw UFCStats CSVs" in readme
+    assert "recalculate odds features from the imported" in readme
     assert "SQL-only analytics mode" in readme
     assert "Train: launch model training" in readme
     assert "Predict: choose a model" in readme
@@ -104,6 +105,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "uv run mma-web" in release_notes
     assert "docker compose up --build" in release_notes
     assert "Data tab" in release_notes
+    assert "recalculates odds features from the imported" in release_notes
     assert "read-only Postgres" in release_notes
     assert "transaction with a statement timeout" in release_notes
     assert "SQLite query-only mode" in release_notes

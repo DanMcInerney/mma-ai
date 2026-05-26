@@ -18,6 +18,7 @@ class DataRefreshRequest(BaseModel):
     rebuild: bool = True
     force_full: bool = False
     reset_db: bool = True
+    odds_features: bool = True
     odds: bool = False
     log_level: str = "INFO"
 

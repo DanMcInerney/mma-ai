@@ -192,11 +192,12 @@ run the Data and Train tabs to create them.
 ## Dashboard
 
 - Data: update the shipped raw UFCStats CSVs incrementally, rebuild the
-  PostgreSQL feature store, write finalized CSVs, and run read-only AI analytics
-  over Postgres or finalized CSV fallbacks. Completed refreshes report before
-  and after row deltas so new fights/fighters are visible without opening CSVs.
-  The Analytics panel shows whether an LLM provider is ready or the dashboard is
-  currently in SQL-only analytics mode.
+  PostgreSQL feature store, recalculate odds features from the imported
+  Hugging Face `odds` database, write finalized CSVs, and run read-only AI
+  analytics over Postgres or finalized CSV fallbacks. Completed refreshes report
+  before and after row deltas so new fights/fighters are visible without
+  opening CSVs. The Analytics panel shows whether an LLM provider is ready or
+  the dashboard is currently in SQL-only analytics mode.
 - Train: launch model training with the existing `libs/modeling/train.py`
   defaults, keep all training knobs collapsed under Advanced Training Knobs, and
   inspect saved evaluation artifacts with accuracy, log loss, Brier score, ROC
@@ -394,7 +395,7 @@ This system transforms raw UFC fight statistics into high-quality machine learni
 │                 │  └─ AdjustedPerformanceCalculator: _adjperf, _dec_adjperf
 │                 │      └─ Opponent-adjusted z-scores with reliability weighting
 └────────┬────────┘
-         │ Lines 772-786: Scrape BFO odds & calculate odds features
+         │ Lines 772-786: Calculate odds features (optional BFO refresh)
          │
          ▼
 ┌─────────────────┐
