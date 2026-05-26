@@ -194,6 +194,22 @@ def test_list_models_discovers_huggingface_starter_model_shape(monkeypatch, tmp_
     assert models[0]["has_scaler"] is True
 
 
+def test_list_models_can_filter_by_prediction_target(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    for model_name in ("ag-20260304_110750-win-extreme", "ag-20260304_110750-decision-best"):
+        model_dir = models_dir / model_name
+        model_dir.mkdir(parents=True)
+        (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    assert [model["name"] for model in list_models("win")] == ["ag-20260304_110750-win-extreme"]
+    assert [model["name"] for model in list_models("decision")] == ["ag-20260304_110750-decision-best"]
+    assert {model["name"] for model in list_models()} == {
+        "ag-20260304_110750-win-extreme",
+        "ag-20260304_110750-decision-best",
+    }
+
+
 def test_list_upcoming_events_uses_wikipedia_scraper_adapter(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"

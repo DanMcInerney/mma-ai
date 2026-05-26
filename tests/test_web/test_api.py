@@ -301,6 +301,30 @@ def test_predict_models_endpoint_returns_starter_model(monkeypatch, tmp_path):
     assert models[0]["has_scaler"] is True
 
 
+def test_predict_models_endpoint_filters_by_model_type(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    for model_name in ("ag-20260304_110750-win-extreme", "ag-20260304_110750-decision-best"):
+        model_dir = models_dir / model_name
+        model_dir.mkdir(parents=True)
+        (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+    client = TestClient(create_app())
+
+    response = client.get("/api/predict/models?model_type=decision")
+
+    assert response.status_code == 200
+    assert [model["name"] for model in response.json()["models"]] == ["ag-20260304_110750-decision-best"]
+
+
+def test_predict_models_endpoint_rejects_unknown_model_type():
+    client = TestClient(create_app())
+
+    response = client.get("/api/predict/models?model_type=style")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "model_type must be win or decision."
+
+
 def test_matchup_prediction_endpoint_rejects_missing_model_before_job(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     models_dir = tmp_path / "models"

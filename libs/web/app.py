@@ -112,8 +112,10 @@ def create_app() -> FastAPI:
         return JobResponse(job_id=job.id, state=job.state.value, message=job.message)
 
     @app.get("/api/predict/models")
-    def models() -> dict:
-        return {"models": list_models()}
+    def models(model_type: str | None = None) -> dict:
+        if model_type not in {None, "win", "decision"}:
+            raise HTTPException(status_code=400, detail="model_type must be win or decision.")
+        return {"models": list_models(model_type)}
 
     @app.get("/api/predict/fighters")
     def fighters(prediction_data_csv: str | None = None) -> dict:

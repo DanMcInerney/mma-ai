@@ -228,13 +228,15 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
     return {"scrape_counts": counts, "status": get_data_status()}
 
 
-def list_models() -> list[dict[str, Any]]:
+def list_models(model_type: str | None = None) -> list[dict[str, Any]]:
     root = models_dir()
     if not root.exists():
         return []
 
     summaries = []
     for path in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
+        if model_type and f"-{model_type}-" not in path.name:
+            continue
         marker_files = ["predictor.pkl", "learner.pkl", "metadata.json", "feats.txt"]
         if not any((path / marker).exists() for marker in marker_files):
             continue

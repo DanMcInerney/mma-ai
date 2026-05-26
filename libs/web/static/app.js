@@ -587,11 +587,18 @@ function wireTraining() {
 }
 
 async function refreshModels() {
-  const { models } = await api("/api/predict/models");
-  const options = `<option value="">Latest ${models.length ? "" : "(none found)"}</option>` +
+  const modelType = qs("#predict-model-type").value || "win";
+  const [predictPayload, allPayload] = await Promise.all([
+    api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`),
+    api("/api/predict/models"),
+  ]);
+  qs("#predict-model").innerHTML = modelOptions(predictPayload.models || []);
+  qs("#train-eval-model").innerHTML = modelOptions(allPayload.models || []);
+}
+
+function modelOptions(models) {
+  return `<option value="">Latest ${models.length ? "" : "(none found)"}</option>` +
     models.map((model) => `<option value="${escapeHtml(model.path)}">${escapeHtml(model.name)}</option>`).join("");
-  qs("#predict-model").innerHTML = options;
-  qs("#train-eval-model").innerHTML = options;
 }
 
 function predictionDataCsv() {
@@ -621,6 +628,9 @@ async function loadUpcomingEvents() {
 }
 
 function wirePrediction() {
+  qs("#predict-model-type").addEventListener("change", () => {
+    refreshModels().catch(() => {});
+  });
   qs("#predict-event").addEventListener("change", () => {
     selectedUpcomingNumber = Number(qs("#predict-event").value || 0) || null;
     updateEventPreview();

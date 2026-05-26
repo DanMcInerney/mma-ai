@@ -111,6 +111,15 @@ def test_prediction_advanced_csv_controls_are_wired():
     assert "/api/predict/upcoming" in app_js
 
 
+def test_predict_model_dropdown_filters_with_selected_target():
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`)' in app_js
+    assert 'qs("#predict-model-type").addEventListener("change"' in app_js
+    assert "function modelOptions(models)" in app_js
+    assert 'api("/api/predict/models")' in app_js
+
+
 def test_dynamic_select_options_escape_backend_values():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
