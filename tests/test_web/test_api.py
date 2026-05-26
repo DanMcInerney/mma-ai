@@ -307,6 +307,7 @@ def test_predict_models_endpoint_filters_by_model_type(monkeypatch, tmp_path):
         model_dir = models_dir / model_name
         model_dir.mkdir(parents=True)
         (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
+        (model_dir / "predictor.pkl").write_text("predictor", encoding="utf-8")
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
     client = TestClient(create_app())
 

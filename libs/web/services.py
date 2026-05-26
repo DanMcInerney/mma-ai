@@ -239,6 +239,16 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
     return {"scrape_counts": counts, "status": get_data_status()}
 
 
+def _is_loadable_prediction_model_dir(path: Path) -> bool:
+    if not path.is_dir() or not (path / "feats.txt").exists():
+        return False
+    if (path / "predictor.pkl").exists():
+        return True
+    if not (path / "ensemble_info.txt").exists():
+        return False
+    return (path / "final_model").is_dir() or any(child.is_dir() for child in path.glob("window_*"))
+
+
 def list_models(model_type: str | None = None) -> list[dict[str, Any]]:
     root = models_dir()
     if not root.exists():
@@ -248,8 +258,7 @@ def list_models(model_type: str | None = None) -> list[dict[str, Any]]:
     for path in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True):
         if model_type and f"-{model_type}-" not in path.name:
             continue
-        marker_files = ["predictor.pkl", "learner.pkl", "metadata.json", "feats.txt"]
-        if not any((path / marker).exists() for marker in marker_files):
+        if not _is_loadable_prediction_model_dir(path):
             continue
         summaries.append(
             {
@@ -257,6 +266,8 @@ def list_models(model_type: str | None = None) -> list[dict[str, Any]]:
                 "path": str(path),
                 "modified_at": path.stat().st_mtime,
                 "has_features": (path / "feats.txt").exists(),
+                "has_predictor": (path / "predictor.pkl").exists(),
+                "is_ensemble": (path / "ensemble_info.txt").exists(),
                 "has_scaler": (path / "scaler.pkl").exists(),
                 "has_calibrator": (path / "calibrator.pkl").exists(),
             }

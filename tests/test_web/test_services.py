@@ -174,6 +174,32 @@ def test_get_readiness_status_reports_missing_imported_database_tables(monkeypat
     assert readiness["checks"]["odds_database"]["missing_tables"] == ["bestfightodds.bfo"]
 
 
+def test_get_readiness_status_requires_loadable_starter_model(monkeypatch, tmp_path):
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    models_dir = tmp_path / "AutogluonModels"
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
+    write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
+    write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "decision_target": 0}])
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": True, "url": url})
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is False
+    assert readiness["checks"]["starter_model"]["ok"] is False
+    assert readiness["checks"]["starter_model"]["models"] == []
+    assert readiness["checks"]["starter_model"]["path"] is None
+
+
 def test_database_ready_requires_postgres_tables(monkeypatch):
     captured_queries = []
 
@@ -277,7 +303,41 @@ def test_list_models_discovers_huggingface_starter_model_shape(monkeypatch, tmp_
     assert [model["name"] for model in models] == ["ag-20260304_110750-win-extreme"]
     assert models[0]["path"] == str(starter_model)
     assert models[0]["has_features"] is True
+    assert models[0]["has_predictor"] is True
+    assert models[0]["is_ensemble"] is False
     assert models[0]["has_scaler"] is True
+
+
+def test_list_models_discovers_ensemble_model_shape(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    ensemble_model = models_dir / "ag-20260304_110750-win-ensemble"
+    (ensemble_model / "final_model").mkdir(parents=True)
+    (ensemble_model / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (ensemble_model / "ensemble_info.txt").write_text("ensemble", encoding="utf-8")
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    models = list_models()
+
+    assert [model["name"] for model in models] == ["ag-20260304_110750-win-ensemble"]
+    assert models[0]["has_predictor"] is False
+    assert models[0]["is_ensemble"] is True
+
+
+def test_list_models_ignores_incomplete_model_directories(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    features_only = models_dir / "ag-20260304_110750-win-features-only"
+    empty_ensemble = models_dir / "ag-20260304_110750-win-empty-ensemble"
+    valid_model = models_dir / "ag-20260304_110750-win-valid"
+    for model_dir in (features_only, empty_ensemble, valid_model):
+        model_dir.mkdir(parents=True)
+        (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (empty_ensemble / "ensemble_info.txt").write_text("ensemble", encoding="utf-8")
+    (valid_model / "predictor.pkl").write_text("predictor", encoding="utf-8")
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    models = list_models("win")
+
+    assert [model["name"] for model in models] == ["ag-20260304_110750-win-valid"]
 
 
 def test_list_models_can_filter_by_prediction_target(monkeypatch, tmp_path):
@@ -286,6 +346,7 @@ def test_list_models_can_filter_by_prediction_target(monkeypatch, tmp_path):
         model_dir = models_dir / model_name
         model_dir.mkdir(parents=True)
         (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
+        (model_dir / "predictor.pkl").write_text("predictor", encoding="utf-8")
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
 
     assert [model["name"] for model in list_models("win")] == ["ag-20260304_110750-win-extreme"]
