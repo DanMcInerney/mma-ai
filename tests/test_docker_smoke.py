@@ -59,6 +59,38 @@ def test_docker_smoke_runs_container_checks_health_deps_and_stops(monkeypatch, c
     assert "passed" in output
 
 
+def test_docker_smoke_uses_configured_timeout_for_first_container_start(monkeypatch):
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        if args[:3] == ["docker", "run", "-d"]:
+            captured["docker_run_timeout"] = kwargs["timeout"]
+            return completed(args, stdout="container-id\n")
+        if args[:4] == ["docker", "exec", "smoke-test", "curl"]:
+            url = args[-1]
+            if url.endswith("/api/health"):
+                return completed(args, stdout='{"status":"ok"}')
+            if url.endswith("/vendor/plotly.min.js"):
+                return completed(args, stdout="window.Plotly = Plotly;")
+            if url.endswith("/static/icons.js"):
+                return completed(args, stdout="window.lucide = { createIcons };")
+            if url.endswith("/"):
+                return completed(args, stdout="<title>MMA AI</title>")
+        if args[:4] == ["docker", "exec", "smoke-test", "/app/.venv/bin/python"]:
+            return completed(args, stdout="runtime dependency check ok\n")
+        if args[:5] == ["docker", "exec", "smoke-test", "sh", "-lc"]:
+            return completed(args)
+        if args == ["docker", "stop", "smoke-test"]:
+            return completed(args)
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(docker_smoke.subprocess, "run", fake_run)
+
+    docker_smoke.run_smoke("mma-ai-web:test", timeout_seconds=180, container_name="smoke-test")
+
+    assert captured["docker_run_timeout"] == 180
+
+
 def test_docker_smoke_stops_container_when_asset_check_fails(monkeypatch):
     calls = []
 

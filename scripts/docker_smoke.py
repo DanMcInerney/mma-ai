@@ -159,7 +159,7 @@ def run_smoke(image: str = DEFAULT_IMAGE, timeout_seconds: int = 90, container_n
     """Run the Docker smoke test and clean up the container."""
     name = container_name or f"mma-ai-smoke-{uuid.uuid4().hex[:12]}"
     print(f"[docker-smoke] starting {image} as {name}")
-    _run(["docker", "run", "-d", "--rm", "--name", name, image], timeout=30)
+    _run(["docker", "run", "-d", "--rm", "--name", name, image], timeout=timeout_seconds)
     try:
         wait_for_health(name, timeout_seconds)
         check_dashboard_assets(name)
