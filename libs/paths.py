@@ -32,8 +32,16 @@ load_project_env()
 
 
 def env_path(name: str, default: Path) -> Path:
-    """Return an absolute path from an environment variable or repo default."""
-    return Path(os.getenv(name, str(default))).expanduser().resolve()
+    """Return an absolute path from an environment variable or repo default.
+
+    Relative paths from the repo `.env` are resolved from the project root so
+    `uv run ...` commands behave the same even when launched from another
+    working directory.
+    """
+    raw_value = Path(os.getenv(name, str(default))).expanduser()
+    if raw_value.is_absolute():
+        return raw_value.resolve()
+    return (PROJECT_ROOT / raw_value).resolve()
 
 
 def data_dir() -> Path:
