@@ -849,6 +849,18 @@ def _validate_manual_odds_mapping(manual_odds: dict[str, int] | None) -> None:
         _validate_american_odds_value(value, f"Manual odds for {name}")
 
 
+def _require_prediction_model_available(model_type: str, model_path: str | None) -> None:
+    if model_path:
+        resolve_model_dir(model_path)
+        return
+    if list_models(model_type):
+        return
+    raise FileNotFoundError(
+        f"No loadable {model_type} model found in {models_dir()}. "
+        f"Run setup again or train a {model_type} model before predicting."
+    )
+
+
 def run_event_prediction(request: EventPredictionRequest) -> dict[str, Any]:
     validate_event_prediction_request(request)
     output_dir = resolve_data_output_dir(request.output_dir, "predictions/latest")
@@ -859,14 +871,13 @@ def run_event_prediction(request: EventPredictionRequest) -> dict[str, Any]:
 
 
 def validate_event_prediction_request(request: EventPredictionRequest) -> dict[str, Any]:
-    if request.model_path:
-        resolve_model_dir(request.model_path)
     if request.prediction_data_csv:
         resolve_data_csv(request.prediction_data_csv, "prediction_data.csv")
     if request.training_data_csv:
         resolve_data_csv(request.training_data_csv, "training_data.csv")
     _validate_manual_odds_mapping(request.manual_odds)
     output_dir = resolve_data_output_dir(request.output_dir, "predictions/latest")
+    _require_prediction_model_available(request.model_type, request.model_path)
     return {
         "model_type": request.model_type,
         "model_path": request.model_path,
@@ -877,8 +888,6 @@ def validate_event_prediction_request(request: EventPredictionRequest) -> dict[s
 
 
 def validate_matchup_request(request: MatchupPredictionRequest) -> dict[str, Any]:
-    if request.model_path:
-        resolve_model_dir(request.model_path)
     if request.prediction_data_csv:
         resolve_data_csv(request.prediction_data_csv, "prediction_data.csv")
     if request.training_data_csv:
@@ -906,6 +915,7 @@ def validate_matchup_request(request: MatchupPredictionRequest) -> dict[str, Any
     if missing:
         raise ValueError(f"Fighter not found in prediction data: {', '.join(missing)}")
 
+    _require_prediction_model_available(request.model_type, request.model_path)
     return {
         "fighter1": fighter1,
         "fighter2": fighter2,

@@ -35,6 +35,14 @@ def write_csv(path: Path, rows: list[dict]):
     pd.DataFrame(rows).to_csv(path, index=False)
 
 
+def write_prediction_model(models_dir: Path, model_type: str = "win") -> Path:
+    model_dir = models_dir / f"ag-20260304_110750-{model_type}-extreme"
+    model_dir.mkdir(parents=True, exist_ok=True)
+    (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (model_dir / "predictor.pkl").write_text("predictor", encoding="utf-8")
+    return model_dir
+
+
 def test_data_refresh_defaults_recreate_generated_schemas():
     request = DataRefreshRequest()
 
@@ -858,6 +866,8 @@ def test_validate_matchup_request_rejects_blank_fighters(monkeypatch, tmp_path):
 
 def test_validate_matchup_request_accepts_known_fighters(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
     prediction_csv = tmp_path / "prediction_data.csv"
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
 
@@ -872,6 +882,8 @@ def test_validate_matchup_request_accepts_known_fighters(monkeypatch, tmp_path):
 
 def test_validate_matchup_request_trims_known_fighters(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
     prediction_csv = tmp_path / "prediction_data.csv"
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
 
@@ -916,6 +928,29 @@ def test_validate_event_prediction_request_rejects_invalid_manual_odds():
         validate_event_prediction_request(request)
 
 
+def test_validate_event_prediction_request_rejects_missing_latest_model(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+
+    with pytest.raises(FileNotFoundError, match=r"No loadable win model found"):
+        validate_event_prediction_request(EventPredictionRequest())
+
+
+def test_validate_matchup_request_rejects_missing_latest_model(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    request = MatchupPredictionRequest(
+        prediction_data_csv=str(prediction_csv),
+        fighter1="fighter one",
+        fighter2="fighter two",
+    )
+
+    with pytest.raises(FileNotFoundError, match=r"No loadable win model found"):
+        validate_matchup_request(request)
+
+
 def test_validate_matchup_request_rejects_invalid_fighter_odds(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"
@@ -951,6 +986,8 @@ def test_validate_matchup_request_rejects_invalid_manual_odds(monkeypatch, tmp_p
 
 def test_run_matchup_prediction_uses_predict_cli_without_interactive_odds(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
     prediction_csv = tmp_path / "prediction_data.csv"
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
@@ -996,6 +1033,8 @@ def test_run_matchup_prediction_uses_predict_cli_without_interactive_odds(monkey
 
 def test_run_matchup_prediction_can_fetch_odds_noninteractively(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
     prediction_csv = tmp_path / "prediction_data.csv"
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
@@ -1034,6 +1073,8 @@ def test_run_matchup_prediction_can_fetch_odds_noninteractively(monkeypatch, tmp
 
 def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels", model_type="decision")
     prediction_csv = tmp_path / "prediction_data.csv"
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
@@ -1080,6 +1121,8 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
 
 def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
     prediction_csv = tmp_path / "prediction_data.csv"
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}

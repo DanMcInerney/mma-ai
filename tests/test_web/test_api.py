@@ -379,3 +379,15 @@ def test_matchup_prediction_endpoint_rejects_missing_model_before_job(monkeypatc
 
     assert response.status_code == 400
     assert "Model directory not found" in response.json()["detail"]
+
+
+def test_event_prediction_endpoint_rejects_missing_latest_model_before_job(monkeypatch, tmp_path):
+    models_dir = tmp_path / "models"
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+    models_dir.mkdir()
+    client = TestClient(create_app())
+
+    response = client.post("/api/predict/event", json={"model_type": "win", "upcoming_number": 1})
+
+    assert response.status_code == 400
+    assert "No loadable win model found" in response.json()["detail"]
