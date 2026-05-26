@@ -200,6 +200,7 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     assert "function renderUpcomingEventsError(message)" in app_js
     assert "async function loadUpcomingEventsWithStatus()" in app_js
     assert "function updateEventPreview()" in app_js
+    assert "const raw = event?.date || event?.fights?.[0]?.date;" in app_js
     assert "const params = new URLSearchParams();" in app_js
     assert 'api(`/api/predict/upcoming${query ? `?${query}` : ""}`)' in app_js
     assert "Could not load upcoming events" in app_js

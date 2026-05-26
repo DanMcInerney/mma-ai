@@ -664,6 +664,82 @@ def test_list_upcoming_events_defaults_to_all_scheduled_events(monkeypatch, tmp_
     assert [event["name"] for event in result["events"]] == ["UFC Test 1", "UFC Test 2", "UFC Test 3"]
 
 
+def test_list_upcoming_events_uses_scheduled_event_dates_before_link_order(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_scheduled_events(self):
+            return [
+                {
+                    "url": "https://example.test/UFC_Later",
+                    "name": "UFC Later",
+                    "date": pd.Timestamp("2026-07-01"),
+                },
+                {
+                    "url": "https://example.test/UFC_Next",
+                    "name": "UFC Next",
+                    "date": pd.Timestamp("2026-06-01"),
+                },
+            ]
+
+        def get_upcoming_event_links(self):
+            raise AssertionError("scheduled metadata should drive the dashboard order")
+
+        def get_upcoming_cards(self, links):
+            event_name = links[0].rsplit("/", 1)[1].replace("_", " ")
+            return {
+                event_name: [
+                    (pd.Timestamp("2026-06-01"), "fighter one", "fighter two"),
+                ]
+            }
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    result = list_upcoming_events(str(prediction_csv), limit=1)
+
+    assert result["warning"] is None
+    assert [event["name"] for event in result["events"]] == ["UFC Next"]
+    assert result["events"][0]["upcoming_number"] == 1
+    assert result["events"][0]["date"] == "2026-06-01T00:00:00"
+    assert result["events"][0]["source_url"] == "https://example.test/UFC_Next"
+
+
+def test_list_upcoming_events_falls_back_when_scheduled_metadata_fails(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_scheduled_events(self):
+            raise RuntimeError("metadata parse failed")
+
+        def get_upcoming_event_links(self):
+            return ["https://example.test/UFC_Fallback_2", "https://example.test/UFC_Fallback_1"]
+
+        def get_upcoming_cards(self, links):
+            event_number = links[0].rsplit("_", 1)[1]
+            return {
+                f"UFC Fallback {event_number}": [
+                    (pd.Timestamp(f"2026-06-0{event_number}"), "fighter one", "fighter two"),
+                ]
+            }
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    result = list_upcoming_events(str(prediction_csv), limit=1)
+
+    assert [event["name"] for event in result["events"]] == ["UFC Fallback 1"]
+    assert "metadata parse failed" in result["warning"]
+
+
 def test_list_upcoming_events_preserves_prediction_cli_numbers_after_date_sort(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"

@@ -477,21 +477,32 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | No
 
     scraper = UpcomingFights(df, 1)
     try:
-        event_links = scraper.get_upcoming_event_links()
+        scheduled_events = _scheduled_events_from_scraper(scraper)
     except Exception as exc:
-        return {"events": [], "warning": f"Could not load upcoming UFC events from Wikipedia: {exc}"}
+        scheduled_events = []
+        warnings.append(f"Could not load scheduled event metadata from Wikipedia: {exc}")
 
-    selected_links = list(reversed(event_links))
+    if scheduled_events:
+        selected_events = scheduled_events
+    else:
+        try:
+            event_links = scraper.get_upcoming_event_links()
+        except Exception as exc:
+            return {"events": [], "warning": f"Could not load upcoming UFC events from Wikipedia: {exc}"}
+        selected_events = [{"url": link, "name": _event_name_from_url(link), "date": None} for link in reversed(event_links)]
     if limit is not None:
-        selected_links = selected_links[: max(1, limit)]
+        selected_events = selected_events[: max(1, limit)]
 
-    for upcoming_number, event_link in enumerate(selected_links, start=1):
+    for upcoming_number, scheduled_event in enumerate(selected_events, start=1):
+        event_link = scheduled_event["url"]
         if not can_match_fights:
             events.append(
                 _empty_upcoming_event(
                     event_link,
                     upcoming_number,
                     "Prediction data CSV is unavailable, so fight matching is disabled.",
+                    name=scheduled_event.get("name"),
+                    event_date=scheduled_event.get("date"),
                 )
             )
             continue
@@ -499,17 +510,35 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | No
             event_map = scraper.get_upcoming_cards([event_link])
         except Exception as exc:
             warnings.append(f"event {upcoming_number}: {exc}")
-            events.append(_empty_upcoming_event(event_link, upcoming_number, str(exc)))
+            events.append(
+                _empty_upcoming_event(
+                    event_link,
+                    upcoming_number,
+                    str(exc),
+                    name=scheduled_event.get("name"),
+                    event_date=scheduled_event.get("date"),
+                )
+            )
             continue
         if not event_map:
             warnings.append(f"event {upcoming_number}: no matched fights found")
-            events.append(_empty_upcoming_event(event_link, upcoming_number, "No matched fights found."))
+            events.append(
+                _empty_upcoming_event(
+                    event_link,
+                    upcoming_number,
+                    "No matched fights found.",
+                    name=scheduled_event.get("name"),
+                    event_date=scheduled_event.get("date"),
+                )
+            )
             continue
         for event_name, fights in event_map.items():
             events.append(
                 {
                     "upcoming_number": upcoming_number,
                     "name": _clean_event_name(event_name),
+                    "date": _iso_datetime(scheduled_event.get("date")),
+                    "source_url": event_link,
                     "fights": [
                         {
                             "date": fight[0].isoformat() if hasattr(fight[0], "isoformat") else str(fight[0]),
@@ -525,10 +554,37 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | No
     return {"events": events, "warning": "; ".join(warnings) if warnings else None}
 
 
-def _empty_upcoming_event(event_link: str, upcoming_number: int, warning: str) -> dict[str, Any]:
+def _scheduled_events_from_scraper(scraper: Any) -> list[dict[str, Any]]:
+    get_scheduled_events = getattr(scraper, "get_scheduled_events", None)
+    if not callable(get_scheduled_events):
+        return []
+    scheduled_events = []
+    for item in get_scheduled_events() or []:
+        event_link = item.get("url")
+        if not event_link:
+            continue
+        scheduled_events.append(
+            {
+                "url": event_link,
+                "name": _clean_event_name(item.get("name") or _event_name_from_url(event_link)),
+                "date": item.get("date"),
+            }
+        )
+    return sorted(scheduled_events, key=lambda event: (_parse_event_date(event.get("date")), event.get("name") or ""))
+
+
+def _empty_upcoming_event(
+    event_link: str,
+    upcoming_number: int,
+    warning: str,
+    *,
+    name: str | None = None,
+    event_date: Any = None,
+) -> dict[str, Any]:
     return {
         "upcoming_number": upcoming_number,
-        "name": _event_name_from_url(event_link),
+        "name": _clean_event_name(name) if name else _event_name_from_url(event_link),
+        "date": _iso_datetime(event_date),
         "fights": [],
         "warning": warning,
         "source_url": event_link,
@@ -546,12 +602,25 @@ def _clean_event_name(raw_name: str) -> str:
 
 
 def _upcoming_event_sort_key(event: dict[str, Any]) -> tuple[datetime, int]:
-    raw_date = (event.get("fights") or [{}])[0].get("date")
-    try:
-        event_date = datetime.fromisoformat(str(raw_date))
-    except (TypeError, ValueError):
-        event_date = datetime.max
+    raw_date = event.get("date") or (event.get("fights") or [{}])[0].get("date")
+    event_date = _parse_event_date(raw_date)
     return event_date, int(event.get("upcoming_number") or 0)
+
+
+def _parse_event_date(raw_date: Any) -> datetime:
+    try:
+        if hasattr(raw_date, "to_pydatetime"):
+            return raw_date.to_pydatetime()
+        if hasattr(raw_date, "isoformat"):
+            return datetime.fromisoformat(raw_date.isoformat())
+        return datetime.fromisoformat(str(raw_date))
+    except (TypeError, ValueError):
+        return datetime.max
+
+
+def _iso_datetime(raw_date: Any) -> str | None:
+    event_date = _parse_event_date(raw_date)
+    return None if event_date == datetime.max else event_date.isoformat()
 
 
 def run_training(request: TrainingRequest) -> dict[str, Any]:

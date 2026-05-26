@@ -10,8 +10,18 @@ class UpcomingFights():
         self.upcoming_number = upcoming_number # 1 is next event, 2 is event after next
 
     def run(self):
-        event_links = self.get_upcoming_event_links()
-        event_links = [event_links[-self.upcoming_number]]
+        try:
+            scheduled_events = self.get_scheduled_events()
+        except Exception:
+            scheduled_events = []
+        if scheduled_events:
+            event_index = self.upcoming_number - 1
+            if event_index < 0 or event_index >= len(scheduled_events):
+                return {}
+            event_links = [scheduled_events[event_index]['url']]
+        else:
+            event_links = self.get_upcoming_event_links()
+            event_links = [event_links[-self.upcoming_number]]
         events = self.get_upcoming_cards(event_links)
         return events
 
@@ -21,6 +31,63 @@ class UpcomingFights():
         ws = WikiTableScraper(url, id)
         event_links = ws.get_table_links(1)
         return event_links
+
+    def get_scheduled_events(self):
+        url = 'https://en.wikipedia.org/wiki/List_of_UFC_events'
+        id = {'id': 'Scheduled_events'}
+        ws = WikiTableScraper(url, id)
+        if ws.table is None:
+            return []
+
+        scheduled_events = self._scheduled_events_from_table(ws)
+        if scheduled_events:
+            return sorted(scheduled_events, key=self._scheduled_event_sort_key)
+
+        event_links = ws.get_table_links(1)
+        scheduled_table = ws.get_table_by_id()
+        for index, row in scheduled_table.iterrows():
+            if index >= len(event_links):
+                continue
+            event_date = pd.to_datetime(row.get('Date'), errors='coerce')
+            scheduled_events.append({
+                'name': str(row.get('Event', '')).strip(),
+                'date': None if pd.isna(event_date) else event_date.to_pydatetime(),
+                'url': event_links[index],
+            })
+
+        return sorted(scheduled_events, key=self._scheduled_event_sort_key)
+
+    def _scheduled_events_from_table(self, ws):
+        if not hasattr(ws.table, 'select'):
+            return []
+
+        scheduled_events = []
+        for row in ws.table.select('tr'):
+            cells = row.find_all('td', recursive=False)
+            if len(cells) < 2:
+                continue
+            event_link = cells[0].find('a', href=True)
+            if event_link is None:
+                continue
+            href = event_link.get('href', '')
+            if not href:
+                continue
+            event_url = href if href.startswith('http') else ws.base_url + href
+            event_date = pd.to_datetime(cells[1].get_text(' ', strip=True), errors='coerce')
+            scheduled_events.append({
+                'name': cells[0].get_text(' ', strip=True),
+                'date': None if pd.isna(event_date) else event_date.to_pydatetime(),
+                'url': event_url,
+            })
+
+        return scheduled_events
+
+    @staticmethod
+    def _scheduled_event_sort_key(event):
+        event_date = event.get('date')
+        if event_date is None:
+            event_date = datetime.max
+        return event_date, event.get('name') or event.get('url') or ''
 
     def name_matching(self, name, names_list):
         best_match = None

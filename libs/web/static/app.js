@@ -103,7 +103,7 @@ function bestPickEdge(rows) {
 }
 
 function eventDate(event) {
-  const raw = event?.fights?.[0]?.date;
+  const raw = event?.date || event?.fights?.[0]?.date;
   if (!raw) return null;
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
