@@ -1,4 +1,6 @@
 .git
+.env
+.env.local
 .pytest_cache
 .venv
 .python-version

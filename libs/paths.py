@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = PROJECT_ROOT / "data"
@@ -16,6 +18,17 @@ PICKS_DIR = PROJECT_ROOT / "pics" / "picks"
 DEFAULT_DATABASE_URL = "postgresql://postgres@localhost:5432/mma-ai"
 DEFAULT_ODDS_DATABASE_URL = "postgresql://postgres@localhost:5432/odds"
 DEFAULT_NO_WINSOR_DATABASE_URL = "postgresql://postgres@localhost:5432/mma-ai-no-winsor"
+
+
+def load_project_env(root: Path | None = None) -> bool:
+    """Load the repo .env file for local CLI/web commands without overriding shell env."""
+    env_file = (root or PROJECT_ROOT) / ".env"
+    if not env_file.exists():
+        return False
+    return load_dotenv(env_file, override=False)
+
+
+load_project_env()
 
 
 def env_path(name: str, default: Path) -> Path:

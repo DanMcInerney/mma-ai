@@ -700,6 +700,8 @@ Set-EnvValue "MMA_AI_COMPOSE_DATABASE_URL" "postgresql://postgres:postgres@db:54
 Set-EnvValue "MMA_AI_COMPOSE_ODDS_DATABASE_URL" "postgresql://postgres:postgres@db:5432/odds"
 $selectedPostgresPort = Get-SetupPostgresPort
 Set-EnvValue "MMA_AI_POSTGRES_PORT" "$selectedPostgresPort"
+Set-EnvValue "DATABASE_URL" "postgresql://postgres:postgres@localhost:$selectedPostgresPort/mma-ai"
+Set-EnvValue "ODDS_DATABASE_URL" "postgresql://postgres:postgres@localhost:$selectedPostgresPort/odds"
 if ($selectedPostgresPort -ne 5432) {
     Write-Host "Host port 5432 is unavailable; Docker Postgres will use localhost:$selectedPostgresPort."
 }

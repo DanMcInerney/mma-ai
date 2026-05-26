@@ -575,6 +575,8 @@ set_env_value "MMA_AI_COMPOSE_DATABASE_URL" "postgresql://postgres:postgres@db:5
 set_env_value "MMA_AI_COMPOSE_ODDS_DATABASE_URL" "postgresql://postgres:postgres@db:5432/odds"
 SELECTED_POSTGRES_PORT="$(setup_postgres_port)"
 set_env_value "MMA_AI_POSTGRES_PORT" "$SELECTED_POSTGRES_PORT"
+set_env_value "DATABASE_URL" "postgresql://postgres:postgres@localhost:$SELECTED_POSTGRES_PORT/mma-ai"
+set_env_value "ODDS_DATABASE_URL" "postgresql://postgres:postgres@localhost:$SELECTED_POSTGRES_PORT/odds"
 if [[ "$SELECTED_POSTGRES_PORT" != "5432" ]]; then
   echo "Host port 5432 is unavailable; Docker Postgres will use localhost:$SELECTED_POSTGRES_PORT."
 fi

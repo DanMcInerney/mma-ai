@@ -42,8 +42,10 @@ extracting the model, or importing dumps. Use `-ForceDownload` or
 
 If your machine already has Postgres on `localhost:5432`, setup automatically
 chooses another free host port for Docker Postgres and writes it to
-`MMA_AI_POSTGRES_PORT` in `.env`. The web app still reaches Postgres through
-Docker's internal `db:5432` address. To force a specific host port:
+`MMA_AI_POSTGRES_PORT` in `.env`. It also updates the local `DATABASE_URL` and
+`ODDS_DATABASE_URL` entries to that selected host port, while the Docker web app
+still reaches Postgres through Docker's internal `db:5432` address. To force a
+specific host port:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1 -PostgresPort 55432
@@ -100,6 +102,10 @@ For local development without Docker:
 uv sync
 uv run mma-web
 ```
+
+Local Python commands automatically load the repo `.env` file without
+overriding values already exported in your shell, so the URLs written by setup
+work for `uv run mma-web`, `uv run mma-predict`, and the other CLI entrypoints.
 
 Before publishing a release, run the tracked-file hygiene audit:
 

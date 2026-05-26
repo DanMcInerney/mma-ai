@@ -65,7 +65,9 @@ badge.
   copy processed CSVs, extract the starter model, optionally configure
   `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for
   analytics, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
-  start the web service, wait for `/api/readiness`, and open the dashboard.
+  write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL` values for
+  local CLI commands, start the web service, wait for `/api/readiness`, and open
+  the dashboard.
 - Docker stack: `postgres:17` plus the FastAPI web service. Compose initializes
   the auxiliary `odds` database with `docker/postgres-init/01-create-odds.sql`.
   `MMA_AI_COMPOSE_DATABASE_URL` and `MMA_AI_COMPOSE_ODDS_DATABASE_URL` let the
@@ -100,6 +102,9 @@ Public configuration lives in `.env.example`.
 
 Do not commit real credentials, local personal paths, trained model artifacts,
 raw data dumps, screenshots, notebooks, or generated prediction outputs.
+Local Python commands load the root `.env` file without overriding already
+exported shell variables. Docker builds ignore `.env`, so credentials used for a
+local setup do not enter the image build context.
 
 ## Verification Checklist
 

@@ -95,6 +95,9 @@ def test_setup_scripts_pin_compose_database_and_starter_model():
         assert "postgresql://postgres:postgres@db:5432/mma-ai" in script
         assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL" in script
         assert "postgresql://postgres:postgres@db:5432/odds" in script
+        assert "DATABASE_URL" in script
+        assert "postgresql://postgres:postgres@localhost:" in script
+        assert "ODDS_DATABASE_URL" in script
         assert "55432" in script
         assert "18000" in script
         assert "ag-20260304_110750-win-extreme" in script

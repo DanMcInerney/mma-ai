@@ -39,6 +39,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "MMA_AI_COMPOSE_DATABASE_URL" in readme
     assert "MMA_AI_POSTGRES_PORT" in readme
     assert "--postgres-port 55432" in readme
+    assert "updates the local `DATABASE_URL` and" in readme
+    assert "Local Python commands automatically load the repo `.env` file" in readme
     assert "Setup is safe to rerun after an interrupted install" in readme
     assert "/api/readiness" in readme
     assert "top bar shows a `Ready` badge" in readme
@@ -78,6 +80,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "mma-evaluate" in release_notes
     assert "Odds are not model inputs" in release_notes
     assert "wait for `/api/readiness`" in release_notes
+    assert "write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL`" in release_notes
+    assert "Docker builds ignore `.env`" in release_notes
     assert "The dashboard top bar mirrors this state" in release_notes
     assert "`Setup incomplete`" in release_notes
     assert "docker compose up --build db web" in release_notes
@@ -97,6 +101,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}" in compose
     assert "depends_on" not in compose
     assert "artifacts" in dockerignore
+    assert ".env" in dockerignore
+    assert ".env.local" in dockerignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
 
 
