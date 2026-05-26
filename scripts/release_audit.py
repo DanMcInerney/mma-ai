@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import re
 import subprocess
@@ -23,10 +24,33 @@ GENERATED_DATA_FILES = {
     "data/training_data_dec.csv",
 }
 REQUIRED_TRACKED_FILES = {
+    ".dockerignore",
+    ".env.example",
+    ".gitignore",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "Dockerfile",
+    "README.md",
+    "docker-compose.yml",
+    "docker/postgres-init/01-create-odds.sql",
+    "docs/HUGGINGFACE_DATASET.md",
+    "docs/RELEASE_READINESS.md",
+    "libs/web/static/app.js",
+    "libs/web/static/icons.js",
     "libs/web/static/index.html",
+    "libs/web/static/styles.css",
+    "main.py",
+    "predict.py",
+    "pyproject.toml",
+    "setup.ps1",
+    "setup.sh",
+    "uv.lock",
+    *SEED_DATA_PATHS,
 }
 FORBIDDEN_PREFIXES = ("AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
 FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
+MIN_SEED_ROWS = 1000
+MIN_SEED_COLUMNS = 6
 
 SENSITIVE_PATTERNS = {
     "local_windows_path": re.compile(r"\b[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s\"'`<>]+", re.IGNORECASE),
@@ -90,6 +114,39 @@ def find_missing_required_files(paths: Iterable[str], root: Path = ROOT) -> list
     return issues
 
 
+def find_seed_data_issues(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
+    tracked = {path.replace("\\", "/") for path in paths}
+    issues: list[AuditIssue] = []
+    for seed_path in sorted(SEED_DATA_PATHS):
+        if seed_path not in tracked:
+            continue
+        path = root / seed_path
+        try:
+            with path.open(newline="", encoding="utf-8", errors="replace") as handle:
+                reader = csv.reader(handle)
+                header = next(reader)
+                rows = sum(1 for _row in reader)
+        except FileNotFoundError:
+            issues.append(AuditIssue("missing_seed_data", seed_path, "Tracked seed CSV is missing from the working tree."))
+            continue
+        except (OSError, StopIteration, csv.Error) as exc:
+            issues.append(AuditIssue("unreadable_seed_data", seed_path, str(exc)))
+            continue
+
+        if rows < MIN_SEED_ROWS or len(header) < MIN_SEED_COLUMNS:
+            issues.append(
+                AuditIssue(
+                    kind="weak_seed_data",
+                    path=seed_path,
+                    detail=(
+                        f"Seed CSV has {rows} data rows and {len(header)} columns; "
+                        f"expected at least {MIN_SEED_ROWS} rows and {MIN_SEED_COLUMNS} columns."
+                    ),
+                )
+            )
+    return issues
+
+
 def find_sensitive_text(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
     issues: list[AuditIssue] = []
     for relative_path in paths:
@@ -115,7 +172,12 @@ def _excerpt(text: str, start: int, end: int, radius: int = 32) -> str:
 
 def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
     tracked = git_ls_files(root)
-    return [*find_missing_required_files(tracked, root), *find_forbidden_artifacts(tracked), *find_sensitive_text(tracked, root)]
+    return [
+        *find_missing_required_files(tracked, root),
+        *find_seed_data_issues(tracked, root),
+        *find_forbidden_artifacts(tracked),
+        *find_sensitive_text(tracked, root),
+    ]
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from scripts.release_audit import audit_repository, find_forbidden_artifacts, find_sensitive_text
+from scripts.release_audit import (
+    audit_repository,
+    find_forbidden_artifacts,
+    find_missing_required_files,
+    find_seed_data_issues,
+    find_sensitive_text,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +52,40 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
         "AutogluonModels/ag-test/predictor.pkl",
         "pics/picks/example.png",
     ]
+
+
+def test_release_audit_requires_public_entrypoints_and_seed_data():
+    issues = find_missing_required_files(["README.md", "libs/web/static/index.html"], ROOT)
+
+    missing_paths = {issue.path for issue in issues}
+    assert "setup.ps1" in missing_paths
+    assert "setup.sh" in missing_paths
+    assert "AGENTS.md" in missing_paths
+    assert "CLAUDE.md" in missing_paths
+    assert "data/raw/ufcstats/competitions.csv" in missing_paths
+    assert "data/raw/ufcstats/individuals.csv" in missing_paths
+
+
+def test_release_audit_rejects_tiny_or_malformed_seed_csvs(tmp_path):
+    competitions = tmp_path / "data" / "raw" / "ufcstats" / "competitions.csv"
+    individuals = tmp_path / "data" / "raw" / "ufcstats" / "individuals.csv"
+    competitions.parent.mkdir(parents=True)
+    competitions.write_text("a,b,c,d,e,f\n1,2,3,4,5,6\n", encoding="utf-8")
+    individuals.write_text("only_one_column\n", encoding="utf-8")
+
+    issues = find_seed_data_issues(
+        [
+            "data/raw/ufcstats/competitions.csv",
+            "data/raw/ufcstats/individuals.csv",
+        ],
+        tmp_path,
+    )
+
+    assert [issue.kind for issue in issues] == ["weak_seed_data", "weak_seed_data"]
+    assert {issue.path for issue in issues} == {
+        "data/raw/ufcstats/competitions.csv",
+        "data/raw/ufcstats/individuals.csv",
+    }
 
 
 def test_release_audit_detects_realistic_secret_and_local_path(tmp_path):
