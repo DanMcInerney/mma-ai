@@ -12,6 +12,7 @@ from libs.web.services import (
     TRAINING_RESULT_BEGIN,
     TRAINING_RESULT_END,
     _database_ready,
+    _run_logged_subprocess,
     get_data_status,
     get_readiness_status,
     list_fighters,
@@ -246,6 +247,27 @@ def test_database_ready_requires_postgres_tables(monkeypatch):
     assert any("to_regclass" in query for query, _params in captured_queries)
 
 
+def test_run_logged_subprocess_streams_output_and_returns_completed_process(capsys):
+    command = [
+        sys.executable,
+        "-c",
+        "import sys; print('hello stdout'); print('hello stderr', file=sys.stderr)",
+    ]
+
+    completed = _run_logged_subprocess(command, "unit-test")
+
+    assert completed.returncode == 0
+    assert completed.stdout == "hello stdout\n"
+    assert completed.stderr == "hello stderr\n"
+    output = capsys.readouterr().out
+    assert "[unit-test] command:" in output
+    assert "[unit-test] stdout begin" in output
+    assert "hello stdout" in output
+    assert "[unit-test] stderr begin" in output
+    assert "hello stderr" in output
+    assert "[unit-test] exit_code=0" in output
+
+
 @pytest.mark.parametrize("odds_enabled", [False, True])
 def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds_enabled):
     raw_dir = tmp_path / "raw"
@@ -255,12 +277,13 @@ def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds
     monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mma-ai")
     captured = {}
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, log_prefix, **kwargs):
         captured["command"] = command
+        captured["log_prefix"] = log_prefix
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="Finished rebuild\n", stderr="")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     result = run_data_refresh(
         DataRefreshRequest(
@@ -280,7 +303,9 @@ def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds
     assert "--reset-db" in command
     assert ("--odds" in command) is odds_enabled
     assert "--db-url" not in command
-    assert captured["kwargs"]["cwd"] == Path(__file__).resolve().parents[2]
+    assert captured["log_prefix"] == "data-refresh"
+    assert captured["kwargs"]["stdout_label"] == "rebuild stdout"
+    assert captured["kwargs"]["stderr_label"] == "rebuild stderr"
 
 
 def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, capsys):
@@ -290,8 +315,8 @@ def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, caps
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
     captured = {"commands": []}
 
-    def fake_run(command, **kwargs):
-        captured["commands"].append((command, kwargs))
+    def fake_run(command, log_prefix, **kwargs):
+        captured["commands"].append((command, log_prefix, kwargs))
         script = Path(command[1]).name
         if script == "main.py":
             return subprocess.CompletedProcess(command, 0, stdout="Finished rebuild\n", stderr="")
@@ -302,7 +327,7 @@ def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, caps
             stderr="crawler debug stderr\n",
         )
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     result = run_data_refresh(
         DataRefreshRequest(
@@ -314,32 +339,36 @@ def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, caps
         )
     )
 
-    scrape_command, scrape_kwargs = captured["commands"][0]
-    rebuild_command, rebuild_kwargs = captured["commands"][1]
+    scrape_command, scrape_prefix, scrape_kwargs = captured["commands"][0]
+    rebuild_command, rebuild_prefix, rebuild_kwargs = captured["commands"][1]
     assert scrape_command[0] == sys.executable
     assert scrape_command[1].endswith("scripts\\scrape_ufcstats.py") or scrape_command[1].endswith("scripts/scrape_ufcstats.py")
     assert scrape_command[scrape_command.index("--output-dir") + 1] == str(raw_dir)
     assert scrape_command[scrape_command.index("--log-level") + 1] == "DEBUG"
     assert "--force-full" in scrape_command
-    assert scrape_kwargs["cwd"] == Path(__file__).resolve().parents[2]
+    assert scrape_prefix == "data-refresh"
+    assert scrape_kwargs["stdout_label"] == "scraper stdout"
+    assert scrape_kwargs["stderr_label"] == "scraper stderr"
     assert rebuild_command[1].endswith("main.py")
     assert rebuild_command[rebuild_command.index("--raw-data-dir") + 1] == str(raw_dir)
     assert rebuild_command[rebuild_command.index("--output-data-dir") + 1] == str(data_dir)
     assert "--reset-db" in rebuild_command
-    assert rebuild_kwargs["cwd"] == Path(__file__).resolve().parents[2]
+    assert rebuild_prefix == "data-refresh"
+    assert rebuild_kwargs["stdout_label"] == "rebuild stdout"
+    assert rebuild_kwargs["stderr_label"] == "rebuild stderr"
     assert result["scrape_counts"] == {"fighters": 42, "fights": 99}
     output = capsys.readouterr().out
-    assert "scraper stdout begin" in output
-    assert "rebuild stdout begin" in output
+    assert "scraper subprocess finished" in output
+    assert "feature-store rebuild subprocess finished" in output
 
 
 def test_run_data_refresh_surfaces_scraper_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
 
-    def fake_run(command, **_kwargs):
+    def fake_run(command, _log_prefix, **_kwargs):
         return subprocess.CompletedProcess(command, 1, stdout="partial stdout", stderr="reactor error")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     with pytest.raises(RuntimeError, match="reactor error"):
         run_data_refresh(DataRefreshRequest(scrape=True, rebuild=False))
@@ -349,10 +378,10 @@ def test_run_data_refresh_surfaces_rebuild_failure(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path / "data"))
 
-    def fake_run(command, **_kwargs):
+    def fake_run(command, _log_prefix, **_kwargs):
         return subprocess.CompletedProcess(command, 2, stdout="partial rebuild stdout", stderr="schema error")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     with pytest.raises(RuntimeError, match="schema error"):
         run_data_refresh(DataRefreshRequest(scrape=False, rebuild=True))
@@ -595,7 +624,8 @@ def test_run_matchup_prediction_uses_predict_cli_without_interactive_odds(monkey
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, log_prefix, **kwargs):
+        captured["log_prefix"] = log_prefix
         captured["command"] = command
         output_dir = Path(command[command.index("--output-dir") + 1])
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -608,7 +638,7 @@ def test_run_matchup_prediction_uses_predict_cli_without_interactive_odds(monkey
         )
         return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
     request = MatchupPredictionRequest(
         prediction_data_csv=str(prediction_csv),
         output_dir="predictions/manual-custom",
@@ -628,6 +658,7 @@ def test_run_matchup_prediction_uses_predict_cli_without_interactive_odds(monkey
     assert "--fighter2-odds" in captured["command"]
     assert captured["command"][captured["command"].index("--fight-date") + 1] == "2026-06-01"
     assert "--no-manual-odds" not in captured["command"]
+    assert captured["log_prefix"] == "prediction"
     assert result["output_dir"] == str(tmp_path / "predictions" / "manual-custom")
     assert result["predictions"][0]["AI_Pick"] == "fighter one"
 
@@ -638,7 +669,8 @@ def test_run_matchup_prediction_can_fetch_odds_noninteractively(monkeypatch, tmp
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, log_prefix, **kwargs):
+        captured["log_prefix"] = log_prefix
         captured["command"] = command
         output_dir = Path(command[command.index("--output-dir") + 1])
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -651,7 +683,7 @@ def test_run_matchup_prediction_can_fetch_odds_noninteractively(monkeypatch, tmp
         )
         return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
     request = MatchupPredictionRequest(
         prediction_data_csv=str(prediction_csv),
         fighter1="fighter one",
@@ -665,6 +697,7 @@ def test_run_matchup_prediction_can_fetch_odds_noninteractively(monkeypatch, tmp
     assert "--fighter2-odds" not in captured["command"]
     assert "--odds" in captured["command"]
     assert "--no-manual-odds" in captured["command"]
+    assert captured["log_prefix"] == "prediction"
     assert result["predictions"][0]["EV"] == "1"
 
 
@@ -674,7 +707,8 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, log_prefix, **kwargs):
+        captured["log_prefix"] = log_prefix
         captured["command"] = command
         output_dir = Path(command[command.index("--output-dir") + 1])
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -687,7 +721,7 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
         )
         return subprocess.CompletedProcess(command, 0, stdout="ok", stderr="")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
     request = EventPredictionRequest(
         model_type="decision",
         prediction_data_csv=str(prediction_csv),
@@ -708,6 +742,7 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
     assert "--no-manual-odds" in captured["command"]
     assert "--use-calibrated" in captured["command"]
     assert "--no-shap" not in captured["command"]
+    assert captured["log_prefix"] == "prediction"
     assert result["output_dir"] == str(tmp_path / "predictions" / "event-custom")
     assert result["predictions"][0]["EV"] == "1"
 
@@ -718,7 +753,8 @@ def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
     write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     captured = {}
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, log_prefix, **kwargs):
+        captured["log_prefix"] = log_prefix
         captured["command"] = command
         output_dir = Path(command[command.index("--output-dir") + 1])
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -731,7 +767,7 @@ def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
         )
         return subprocess.CompletedProcess(command, 0, stdout="manual odds ok", stderr="debug stderr")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
     request = EventPredictionRequest(
         prediction_data_csv=str(prediction_csv),
         upcoming_number=1,
@@ -744,15 +780,17 @@ def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
     manual_json = captured["command"][captured["command"].index("--manual-odds-json") + 1]
     assert json.loads(manual_json) == {"fighter one": -120, "fighter two": 100}
     assert "--no-manual-odds" in captured["command"]
+    assert captured["log_prefix"] == "prediction"
     assert result["stdout_tail"] == "manual odds ok"
     assert result["stderr_tail"] == "debug stderr"
 
 
-def test_run_training_runs_dashboard_training_script_as_subprocess(monkeypatch, tmp_path, capsys):
+def test_run_training_runs_dashboard_training_script_as_subprocess(monkeypatch, tmp_path):
     captured = {}
 
-    def fake_run(command, **kwargs):
+    def fake_run(command, log_prefix, **kwargs):
         captured["command"] = command
+        captured["log_prefix"] = log_prefix
         captured["kwargs"] = kwargs
         payload = json.loads(kwargs["input"])
         result = {
@@ -769,39 +807,34 @@ def test_run_training_runs_dashboard_training_script_as_subprocess(monkeypatch, 
             stderr="training warnings\n",
         )
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     result = run_training(TrainingRequest(model_type="decision", time_limit=1200))
 
     command = captured["command"]
     assert command[0] == sys.executable
     assert command[1].endswith("scripts\\train_dashboard.py") or command[1].endswith("scripts/train_dashboard.py")
-    assert captured["kwargs"]["cwd"] == Path(__file__).resolve().parents[2]
+    assert captured["log_prefix"] == "training"
     assert captured["kwargs"]["input"].endswith("\n")
     assert result["used_script_defaults"] is True
     assert result["evaluation"]["available"] is True
-    output = capsys.readouterr().out
-    assert "[training] stdout begin" in output
-    assert "training logs" in output
-    assert "[training] stderr begin" in output
-    assert "training warnings" in output
 
 
 def test_run_training_surfaces_dashboard_script_failure(monkeypatch):
-    def fake_run(command, **_kwargs):
+    def fake_run(command, log_prefix, **_kwargs):
         return subprocess.CompletedProcess(command, 7, stdout="partial training output", stderr="autogluon exploded")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     with pytest.raises(RuntimeError, match="autogluon exploded"):
         run_training(TrainingRequest())
 
 
 def test_run_training_requires_structured_dashboard_script_result(monkeypatch):
-    def fake_run(command, **_kwargs):
+    def fake_run(command, log_prefix, **_kwargs):
         return subprocess.CompletedProcess(command, 0, stdout="finished without markers", stderr="")
 
-    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
 
     with pytest.raises(RuntimeError, match="structured dashboard result"):
         run_training(TrainingRequest())

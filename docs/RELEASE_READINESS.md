@@ -60,8 +60,8 @@ badge.
   positive EV status. Odds are not model inputs; event prediction can ingest
   manual American odds through the dashboard/API instead of waiting on terminal
   input.
-- Job logs: Data, Train, and Predict jobs persist stdout, stderr, command lines,
-  and tracebacks under `data/logs/jobs` and expose them at
+- Job logs: Data, Train, and Predict jobs stream and persist stdout, stderr,
+  command lines, exit codes, and tracebacks under `data/logs/jobs` and expose them at
   `/api/jobs/{job_id}/log`.
 - Bootstrap scripts: `setup.ps1` and `setup.sh` download the Hugging Face
   dataset artifacts, verify checksums, resume complete database imports by

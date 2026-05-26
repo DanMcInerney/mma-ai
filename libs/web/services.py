@@ -16,6 +16,7 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
+from threading import Thread
 from typing import Any
 
 import pandas as pd
@@ -225,6 +226,64 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
     return {"scrape_counts": counts, "status": get_data_status()}
 
 
+def _run_logged_subprocess(
+    command: list[str],
+    log_prefix: str,
+    *,
+    stdout_label: str = "stdout",
+    stderr_label: str = "stderr",
+    input: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run a child process while streaming stdout/stderr into the job log."""
+    print(f"[{log_prefix}] command: {subprocess.list2cmdline(command)}")
+    child_env = os.environ.copy()
+    child_env["PYTHONUNBUFFERED"] = "1"
+    process = subprocess.Popen(
+        command,
+        cwd=PROJECT_ROOT,
+        stdin=subprocess.PIPE if input is not None else None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        bufsize=1,
+        env=child_env,
+    )
+
+    stdout_chunks: list[str] = []
+    stderr_chunks: list[str] = []
+
+    def drain_stream(stream: Any, chunks: list[str], label: str) -> None:
+        began = False
+        try:
+            for line in iter(stream.readline, ""):
+                if not began:
+                    print(f"[{log_prefix}] {label} begin")
+                    began = True
+                chunks.append(line)
+                print(line, end="", flush=True)
+        finally:
+            if began:
+                print(f"[{log_prefix}] {label} end")
+
+    stdout_thread = Thread(target=drain_stream, args=(process.stdout, stdout_chunks, stdout_label), daemon=True)
+    stderr_thread = Thread(target=drain_stream, args=(process.stderr, stderr_chunks, stderr_label), daemon=True)
+    stdout_thread.start()
+    stderr_thread.start()
+
+    if input is not None and process.stdin is not None:
+        try:
+            process.stdin.write(input)
+            process.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+    returncode = process.wait()
+    stdout_thread.join()
+    stderr_thread.join()
+    print(f"[{log_prefix}] exit_code={returncode}")
+    return subprocess.CompletedProcess(command, returncode, stdout="".join(stdout_chunks), stderr="".join(stderr_chunks))
+
+
 def _run_scrape_command(request: DataRefreshRequest, raw_dir: Path) -> dict[str, int]:
     command = [
         sys.executable,
@@ -237,24 +296,12 @@ def _run_scrape_command(request: DataRefreshRequest, raw_dir: Path) -> dict[str,
     if request.force_full:
         command.append("--force-full")
 
-    print(f"[data-refresh] command: {subprocess.list2cmdline(command)}")
-    completed = subprocess.run(
+    completed = _run_logged_subprocess(
         command,
-        cwd=PROJECT_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=os.environ.copy(),
+        "data-refresh",
+        stdout_label="scraper stdout",
+        stderr_label="scraper stderr",
     )
-    print(f"[data-refresh] scraper exit_code={completed.returncode}")
-    if completed.stdout:
-        print("[data-refresh] scraper stdout begin")
-        print(completed.stdout.rstrip())
-        print("[data-refresh] scraper stdout end")
-    if completed.stderr:
-        print("[data-refresh] scraper stderr begin")
-        print(completed.stderr.rstrip())
-        print("[data-refresh] scraper stderr end")
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr or completed.stdout or f"UFCStats scrape failed with exit code {completed.returncode}")
     return _parse_scrape_counts(completed.stdout)
@@ -274,24 +321,12 @@ def _run_rebuild_command(request: DataRefreshRequest, raw_dir: Path, app_data_di
     if request.odds:
         command.append("--odds")
 
-    print(f"[data-refresh] command: {subprocess.list2cmdline(command)}")
-    completed = subprocess.run(
+    completed = _run_logged_subprocess(
         command,
-        cwd=PROJECT_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=os.environ.copy(),
+        "data-refresh",
+        stdout_label="rebuild stdout",
+        stderr_label="rebuild stderr",
     )
-    print(f"[data-refresh] rebuild exit_code={completed.returncode}")
-    if completed.stdout:
-        print("[data-refresh] rebuild stdout begin")
-        print(completed.stdout.rstrip())
-        print("[data-refresh] rebuild stdout end")
-    if completed.stderr:
-        print("[data-refresh] rebuild stderr begin")
-        print(completed.stderr.rstrip())
-        print("[data-refresh] rebuild stderr end")
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr or completed.stdout or f"Feature-store rebuild failed with exit code {completed.returncode}")
 
@@ -485,25 +520,13 @@ def _run_training_command(request: TrainingRequest) -> dict[str, Any]:
         str(PROJECT_ROOT / "scripts" / "train_dashboard.py"),
     ]
     payload = json.dumps(_pydantic_dump(request), sort_keys=True)
-    print(f"[training] command: {subprocess.list2cmdline(command)}")
-    completed = subprocess.run(
+    completed = _run_logged_subprocess(
         command,
-        cwd=PROJECT_ROOT,
         input=payload + "\n",
-        text=True,
-        capture_output=True,
-        check=False,
-        env=os.environ.copy(),
+        log_prefix="training",
+        stdout_label="stdout",
+        stderr_label="stderr",
     )
-    print(f"[training] exit_code={completed.returncode}")
-    if completed.stdout:
-        print("[training] stdout begin")
-        print(completed.stdout.rstrip())
-        print("[training] stdout end")
-    if completed.stderr:
-        print("[training] stderr begin")
-        print(completed.stderr.rstrip())
-        print("[training] stderr end")
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr or completed.stdout or f"Training failed with exit code {completed.returncode}")
     return _parse_training_result(completed.stdout)
@@ -586,24 +609,12 @@ def _base_prediction_command(model_type: str, output_dir: Path) -> list[str]:
 
 def _run_prediction_command(command: list[str], output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[prediction] command: {subprocess.list2cmdline(command)}")
-    completed = subprocess.run(
+    completed = _run_logged_subprocess(
         command,
-        cwd=PROJECT_ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-        env=os.environ.copy(),
+        "prediction",
+        stdout_label="stdout",
+        stderr_label="stderr",
     )
-    print(f"[prediction] exit_code={completed.returncode}")
-    if completed.stdout:
-        print("[prediction] stdout begin")
-        print(completed.stdout.rstrip())
-        print("[prediction] stdout end")
-    if completed.stderr:
-        print("[prediction] stderr begin")
-        print(completed.stderr.rstrip())
-        print("[prediction] stderr end")
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr or completed.stdout or f"Prediction failed with exit code {completed.returncode}")
 

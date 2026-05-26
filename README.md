@@ -195,8 +195,9 @@ run the Data and Train tabs to create them.
   prediction accepts manual fighter odds in the dashboard so web jobs never need
   to block on terminal prompts.
 
-Each long-running Data, Train, or Predict job writes a debug log under
-`data/logs/jobs` and exposes it through the dashboard and `/api/jobs/{job_id}/log`.
+Each long-running Data, Train, or Predict job streams stdout/stderr into a debug
+log under `data/logs/jobs` and exposes it through the dashboard and
+`/api/jobs/{job_id}/log`.
 
 ## Commands
 
