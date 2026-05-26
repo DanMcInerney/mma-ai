@@ -257,6 +257,24 @@ def test_matchup_prediction_endpoint_rejects_invalid_fight_date_before_job(monke
     assert response.json()["detail"] == "Fight date must use YYYY-MM-DD format."
 
 
+def test_predict_models_endpoint_returns_starter_model(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    for filename in ("predictor.pkl", "metadata.json", "feats.txt", "scaler.pkl"):
+        (starter_model / filename).write_text("starter", encoding="utf-8")
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+    client = TestClient(create_app())
+
+    response = client.get("/api/predict/models")
+
+    assert response.status_code == 200
+    models = response.json()["models"]
+    assert [model["name"] for model in models] == ["ag-20260304_110750-win-extreme"]
+    assert models[0]["has_features"] is True
+    assert models[0]["has_scaler"] is True
+
+
 def test_matchup_prediction_endpoint_rejects_missing_model_before_job(monkeypatch, tmp_path):
     data_dir = tmp_path / "data"
     models_dir = tmp_path / "models"

@@ -11,6 +11,7 @@ from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupP
 from libs.web.services import (
     get_data_status,
     list_fighters,
+    list_models,
     list_upcoming_events,
     run_data_refresh,
     run_event_prediction,
@@ -98,6 +99,22 @@ def test_list_fighters_supports_prediction_data_shapes(monkeypatch, tmp_path):
     )
 
     assert list_fighters(str(prediction_csv)) == ["alex", "bo", "casey"]
+
+
+def test_list_models_discovers_huggingface_starter_model_shape(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    for filename in ("predictor.pkl", "learner.pkl", "metadata.json", "feats.txt", "scaler.pkl"):
+        (starter_model / filename).write_text("starter", encoding="utf-8")
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    models = list_models()
+
+    assert [model["name"] for model in models] == ["ag-20260304_110750-win-extreme"]
+    assert models[0]["path"] == str(starter_model)
+    assert models[0]["has_features"] is True
+    assert models[0]["has_scaler"] is True
 
 
 def test_list_upcoming_events_uses_wikipedia_scraper_adapter(monkeypatch, tmp_path):

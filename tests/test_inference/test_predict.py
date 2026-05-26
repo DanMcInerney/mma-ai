@@ -27,6 +27,7 @@ from predict import (
     american_odds_to_prob,
     calculate_expected_value,
     has_positive_ev,
+    latest_model_path,
     parse_manual_odds_json,
     apply_manual_odds,
 )
@@ -1017,6 +1018,28 @@ def test_apply_manual_odds_overrides_missing_odds_and_devigs_pair():
     assert result["fighter two"]["original"] == 100
     assert isinstance(result["fighter one"]["vigless"], int)
     assert isinstance(result["fighter two"]["vigless"], int)
+
+
+def test_latest_model_path_uses_configured_models_dir_for_starter_model(monkeypatch, tmp_path):
+    models_dir = tmp_path / "AutogluonModels"
+    older = models_dir / "ag-20260101_000000-win-extreme"
+    starter = models_dir / "ag-20260304_110750-win-extreme"
+    older.mkdir(parents=True)
+    starter.mkdir()
+    os.utime(older, (1, 1))
+    os.utime(starter, (2, 2))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    assert latest_model_path("win") == starter
+
+
+def test_latest_model_path_reports_configured_models_dir_when_missing(monkeypatch, tmp_path):
+    models_dir = tmp_path / "empty-models"
+    models_dir.mkdir()
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    with pytest.raises(FileNotFoundError, match="empty-models"):
+        latest_model_path("win")
 
 
 if __name__ == "__main__":
