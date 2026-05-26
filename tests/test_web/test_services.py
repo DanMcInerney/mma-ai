@@ -834,6 +834,50 @@ def test_list_upcoming_events_reports_missing_prediction_csv(monkeypatch, tmp_pa
     assert "without matched fights" in result["warning"]
 
 
+def test_list_upcoming_events_caches_wikipedia_lookup_until_csv_changes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+    calls = {"scheduled": 0, "cards": 0}
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_scheduled_events(self):
+            calls["scheduled"] += 1
+            return [
+                {
+                    "url": "https://example.test/UFC_Cache_Test",
+                    "name": "UFC Cache Test",
+                    "date": pd.Timestamp("2026-06-01"),
+                }
+            ]
+
+        def get_upcoming_cards(self, links):
+            calls["cards"] += 1
+            return {
+                "UFC Cache Test": [
+                    (pd.Timestamp("2026-06-01"), "fighter one", "fighter two"),
+                ]
+            }
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    first = list_upcoming_events(str(prediction_csv))
+    first["events"][0]["name"] = "mutated in caller"
+    second = list_upcoming_events(str(prediction_csv))
+    write_csv(
+        prediction_csv,
+        [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}, {"fighter_name": "fighter three"}],
+    )
+    third = list_upcoming_events(str(prediction_csv))
+
+    assert second["events"][0]["name"] == "UFC Cache Test"
+    assert third["events"][0]["name"] == "UFC Cache Test"
+    assert calls == {"scheduled": 2, "cards": 2}
+
+
 def test_validate_matchup_request_rejects_unknown_fighter(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"

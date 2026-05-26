@@ -13,6 +13,17 @@ def test_health_endpoint():
     assert response.json() == {"status": "ok"}
 
 
+def test_app_startup_warms_up_upcoming_event_cache(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr("libs.web.app.warm_up_upcoming_events", lambda: calls.append("warm"))
+
+    with TestClient(create_app()):
+        pass
+
+    assert calls == ["warm"]
+
+
 def test_readiness_endpoint_returns_ready_payload(monkeypatch):
     monkeypatch.setattr(
         "libs.web.app.get_readiness_status",

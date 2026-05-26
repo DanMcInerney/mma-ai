@@ -8,6 +8,7 @@ effects.
 from __future__ import annotations
 
 import csv
+from copy import deepcopy
 import json
 import os
 import re
@@ -16,7 +17,8 @@ import sys
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
-from threading import Thread
+from threading import Lock, Thread
+from time import monotonic
 from typing import Any
 from urllib.parse import unquote
 
@@ -33,6 +35,7 @@ from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, reso
 STARTER_MODEL_NAME = "ag-20260304_110750-win-extreme"
 TRAINING_RESULT_BEGIN = "<<<MMA_AI_TRAINING_RESULT_BEGIN>>>"
 TRAINING_RESULT_END = "<<<MMA_AI_TRAINING_RESULT_END>>>"
+UPCOMING_EVENTS_CACHE_TTL_SECONDS = int(os.getenv("MMA_AI_UPCOMING_EVENTS_CACHE_TTL_SECONDS", "900"))
 READINESS_CSV_REQUIRED_COLUMNS = {
     ("raw_csvs", "competitions"): {"event_url"},
     ("raw_csvs", "individuals"): {"url"},
@@ -40,6 +43,8 @@ READINESS_CSV_REQUIRED_COLUMNS = {
     ("model_csvs", "training_data"): {"target"},
     ("model_csvs", "training_data_dec"): {"decision_target"},
 }
+_upcoming_events_cache: dict[tuple[Any, ...], tuple[float, dict[str, Any]]] = {}
+_upcoming_events_cache_lock = Lock()
 
 
 @dataclass(frozen=True)
@@ -461,8 +466,75 @@ def list_fighters(prediction_data_csv: str | None = None) -> list[str]:
     return sorted(names, key=str.lower)
 
 
-def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | None = None) -> dict[str, Any]:
+def list_upcoming_events(
+    prediction_data_csv: str | None = None,
+    limit: int | None = None,
+    *,
+    force_refresh: bool = False,
+) -> dict[str, Any]:
     path = resolve_data_csv(prediction_data_csv, "prediction_data.csv")
+    normalized_limit = _normalize_upcoming_limit(limit)
+    cache_key = _upcoming_events_cache_key(path, normalized_limit)
+    if not force_refresh:
+        cached = _cached_upcoming_events(cache_key)
+        if cached is not None:
+            return cached
+
+    payload = _load_upcoming_events(path, normalized_limit)
+    _store_upcoming_events(cache_key, payload)
+    return deepcopy(payload)
+
+
+def warm_up_upcoming_events(prediction_data_csv: str | None = None, limit: int | None = None) -> Thread:
+    """Warm the Wikipedia-backed upcoming-event cache without blocking startup."""
+    thread = Thread(
+        target=_warm_up_upcoming_events_worker,
+        args=(prediction_data_csv, limit),
+        name="mma-ai-upcoming-events-warmup",
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def _warm_up_upcoming_events_worker(prediction_data_csv: str | None, limit: int | None) -> None:
+    try:
+        list_upcoming_events(prediction_data_csv, limit, force_refresh=True)
+    except Exception as exc:
+        print(f"[startup] upcoming event warmup failed: {type(exc).__name__}: {exc}")
+
+
+def _normalize_upcoming_limit(limit: int | None) -> int | None:
+    return max(1, int(limit)) if limit is not None else None
+
+
+def _upcoming_events_cache_key(path: Path, limit: int | None) -> tuple[Any, ...]:
+    try:
+        stat = path.stat()
+        return (str(path), limit, stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return (str(path), limit, None, None)
+
+
+def _cached_upcoming_events(cache_key: tuple[Any, ...]) -> dict[str, Any] | None:
+    with _upcoming_events_cache_lock:
+        cached = _upcoming_events_cache.get(cache_key)
+    if cached is None:
+        return None
+    loaded_at, payload = cached
+    if monotonic() - loaded_at > UPCOMING_EVENTS_CACHE_TTL_SECONDS:
+        with _upcoming_events_cache_lock:
+            _upcoming_events_cache.pop(cache_key, None)
+        return None
+    return deepcopy(payload)
+
+
+def _store_upcoming_events(cache_key: tuple[Any, ...], payload: dict[str, Any]) -> None:
+    with _upcoming_events_cache_lock:
+        _upcoming_events_cache[cache_key] = (monotonic(), deepcopy(payload))
+
+
+def _load_upcoming_events(path: Path, limit: int | None = None) -> dict[str, Any]:
     from libs.upcoming_fights import UpcomingFights
 
     events = []
@@ -491,7 +563,7 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | No
             return {"events": [], "warning": f"Could not load upcoming UFC events from Wikipedia: {exc}"}
         selected_events = [{"url": link, "name": _event_name_from_url(link), "date": None} for link in reversed(event_links)]
     if limit is not None:
-        selected_events = selected_events[: max(1, limit)]
+        selected_events = selected_events[:limit]
 
     for upcoming_number, scheduled_event in enumerate(selected_events, start=1):
         event_link = scheduled_event["url"]

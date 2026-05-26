@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -34,6 +36,7 @@ from libs.web.services import (
     run_training,
     validate_event_prediction_request,
     validate_matchup_request,
+    warm_up_upcoming_events,
 )
 
 
@@ -51,7 +54,12 @@ def _plotly_bundle_path() -> Path:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="MMA AI", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        warm_up_upcoming_events()
+        yield
+
+    app = FastAPI(title="MMA AI", version="0.1.0", lifespan=lifespan)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
     @app.get("/")
