@@ -3,8 +3,29 @@ from pathlib import Path
 from scripts.release_audit import audit_repository, find_forbidden_artifacts, find_sensitive_text
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
 def test_release_audit_passes_current_tracked_repository():
     assert audit_repository() == []
+
+
+def test_runtime_dependencies_do_not_include_test_tooling():
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    dependency_block = text.split("dependencies = [", 1)[1].split("\n]", 1)[0]
+    dependencies = [
+        line.strip().strip('",')
+        for line in dependency_block.splitlines()
+        if line.strip().startswith('"')
+    ]
+    normalized = {
+        dependency.split("[", 1)[0].split("<", 1)[0].split(">", 1)[0].split("=", 1)[0].lower()
+        for dependency in dependencies
+    }
+
+    assert "pytest" not in normalized
+    assert "pytest-mock" not in normalized
+    assert "kaleido==0.2.1" in dependencies
 
 
 def test_release_audit_allows_only_seed_raw_csvs_from_data():
