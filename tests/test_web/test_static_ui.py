@@ -15,11 +15,15 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert "unpkg.com" not in html
     assert "Value Side" in app_js
     assert "Model Pick" in app_js
+    assert "Model Edge" in app_js
+    assert "Pick Edge" in app_js
+    assert "function formatOdds(value)" in app_js
     assert "confidence-pill" in app_js
     assert "Fighter1_Market_Prob" in app_js
     assert "Fighter2_Market_Prob" in app_js
     assert "Fighter1_Odds" in app_js
     assert "Fighter2_Odds" in app_js
+    assert ".edge-positive" in styles
     assert ".value-strip" in styles
 
 

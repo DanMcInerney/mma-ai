@@ -45,18 +45,52 @@ function escapeHtml(value) {
 }
 
 function numberOrNull(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
 
 function formatPercent(value) {
-  const number = numberOrNull(value);
+  const number = percentValue(value);
   return number === null ? "N/A" : `${number.toFixed(1)}%`;
 }
 
 function probabilityWidth(value) {
-  const number = numberOrNull(value);
+  const number = percentValue(value);
   return number === null ? 0 : Math.max(0, Math.min(100, number));
+}
+
+function percentValue(value) {
+  const number = numberOrNull(value);
+  if (number === null) return null;
+  return Math.abs(number) <= 1 ? number * 100 : number;
+}
+
+function formatEdge(value) {
+  const number = numberOrNull(value);
+  if (number === null) return "N/A";
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${number.toFixed(1)} pp`;
+}
+
+function modelEdge(aiProb, marketProb) {
+  const ai = percentValue(aiProb);
+  const market = percentValue(marketProb);
+  return ai === null || market === null ? null : ai - market;
+}
+
+function formatOdds(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw.toUpperCase() === "N/A") return "N/A";
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return raw;
+  return number > 0 ? `+${number}` : String(number);
+}
+
+function pickedEdge(row) {
+  if (row.AI_Pick === row.Fighter1) return modelEdge(row.Fighter1_AI_Prob, row.Fighter1_Market_Prob);
+  if (row.AI_Pick === row.Fighter2) return modelEdge(row.Fighter2_AI_Prob, row.Fighter2_Market_Prob);
+  return null;
 }
 
 function eventDate(event) {
@@ -209,6 +243,9 @@ function renderPredictionGraphic(target, predictions) {
     const valueSide = evPositive ? row.AI_Pick : "None";
     const f1Winner = row.AI_Pick === row.Fighter1;
     const f2Winner = row.AI_Pick === row.Fighter2;
+    const f1Edge = modelEdge(row.Fighter1_AI_Prob, row.Fighter1_Market_Prob);
+    const f2Edge = modelEdge(row.Fighter2_AI_Prob, row.Fighter2_Market_Prob);
+    const pickEdge = pickedEdge(row);
     return `
       <article class="prediction-result pretty-prediction${evPositive ? " has-value" : ""}">
         <div class="prediction-hero">
@@ -223,7 +260,10 @@ function renderPredictionGraphic(target, predictions) {
           </div>
         </div>
         <div class="prediction-title">
-          <strong>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</strong>
+          <div>
+            <strong>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</strong>
+            <p>Model edge on pick: ${escapeHtml(formatEdge(pickEdge))}</p>
+          </div>
           <span class="${evPositive ? "ev-positive" : "ev-neutral"}">${evPositive ? "Positive EV" : "No positive EV"}</span>
         </div>
         <div class="fighter-prob-grid">
@@ -233,7 +273,8 @@ function renderPredictionGraphic(target, predictions) {
               <span>${formatPercent(row.Fighter1_AI_Prob)}</span>
             </div>
             <div class="probability-track"><span style="width: ${f1Prob}%"></span></div>
-            <div class="market-line">Market ${formatPercent(row.Fighter1_Market_Prob)} | Odds ${escapeHtml(row.Fighter1_Odds || "N/A")}</div>
+            <div class="market-line">Market ${formatPercent(row.Fighter1_Market_Prob)} | Odds ${escapeHtml(formatOdds(row.Fighter1_Odds))}</div>
+            <div class="edge-chip ${f1Edge !== null && f1Edge > 0 ? "edge-positive" : "edge-neutral"}">Model Edge ${escapeHtml(formatEdge(f1Edge))}</div>
           </div>
           <div class="fighter-prob-card${f2Winner ? " picked" : ""}">
             <div class="fighter-prob-top">
@@ -241,7 +282,8 @@ function renderPredictionGraphic(target, predictions) {
               <span>${formatPercent(row.Fighter2_AI_Prob)}</span>
             </div>
             <div class="probability-track"><span style="width: ${f2Prob}%"></span></div>
-            <div class="market-line">Market ${formatPercent(row.Fighter2_Market_Prob)} | Odds ${escapeHtml(row.Fighter2_Odds || "N/A")}</div>
+            <div class="market-line">Market ${formatPercent(row.Fighter2_Market_Prob)} | Odds ${escapeHtml(formatOdds(row.Fighter2_Odds))}</div>
+            <div class="edge-chip ${f2Edge !== null && f2Edge > 0 ? "edge-positive" : "edge-neutral"}">Model Edge ${escapeHtml(formatEdge(f2Edge))}</div>
           </div>
         </div>
         <div class="prediction-callout">
@@ -251,7 +293,11 @@ function renderPredictionGraphic(target, predictions) {
           </div>
           <div>
             <span>AI Fair Line</span>
-            <strong>${escapeHtml(row.AI_Odds || "N/A")}</strong>
+            <strong>${escapeHtml(formatOdds(row.AI_Odds))}</strong>
+          </div>
+          <div>
+            <span>Pick Edge</span>
+            <strong>${escapeHtml(formatEdge(pickEdge))}</strong>
           </div>
         </div>
         <div class="prediction-foot">

@@ -684,6 +684,24 @@ summary {
   font-size: 12px;
 }
 
+.edge-chip {
+  justify-self: start;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.edge-positive {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.edge-neutral {
+  background: #eef2f7;
+  color: #475569;
+}
+
 .prediction-callout {
   border: 1px solid var(--line);
   border-radius: 8px;
