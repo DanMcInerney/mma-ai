@@ -71,6 +71,7 @@ dynamic_result.csv
 AutoGluonModels/
 
 # Generated data and reports
+artifacts/
 data/**
 !data/
 !data/raw/

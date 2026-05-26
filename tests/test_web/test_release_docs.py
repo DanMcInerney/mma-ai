@@ -14,6 +14,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     claude = read_text("CLAUDE.md")
     release_notes = read_text("docs/RELEASE_READINESS.md")
     compose = read_text("docker-compose.yml")
+    dockerignore = read_text(".dockerignore")
     postgres_init = read_text("docker/postgres-init/01-create-odds.sql")
 
     assert "docker compose up --build" in readme
@@ -70,6 +71,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
     assert "MMA_AI_POSTGRES_PORT:-5432" in compose
     assert "depends_on" not in compose
+    assert "artifacts" in dockerignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
 
 

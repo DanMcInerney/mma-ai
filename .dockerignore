@@ -4,6 +4,7 @@
 .python-version
 __pycache__
 *.pyc
+artifacts
 AutogluonModels
 data/**
 !data/
