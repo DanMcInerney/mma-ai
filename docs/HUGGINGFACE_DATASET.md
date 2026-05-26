@@ -23,8 +23,11 @@ The scripts download these artifacts, verify checksums, restore the dumps into
 the Docker Postgres service, copy processed CSVs into `data/`, extract the
 starter model into `AutogluonModels/`, optionally configure LLM analytics, and
 start the web dashboard. If host port `5432` is already occupied, setup writes a
-free `MMA_AI_POSTGRES_PORT` value to `.env`; pass `-PostgresPort 55432` or
-`--postgres-port 55432` to force a port.
+free `MMA_AI_POSTGRES_PORT` value plus matching local `DATABASE_URL` and
+`ODDS_DATABASE_URL` values to `.env`; pass `-PostgresPort 55432` or
+`--postgres-port 55432` to force a port. Local `uv run ...` commands load this
+`.env` file automatically without overriding values already exported in your
+shell.
 After setup, start the bundled local stack with
 `docker compose up --build db web` so both the dashboard and PostgreSQL are
 running.
@@ -79,11 +82,11 @@ createdb -U postgres mma-ai
 createdb -U postgres odds
 
 pg_restore --clean --if-exists --no-owner --jobs 4 \
-  --dbname "postgresql://postgres@localhost:5432/mma-ai" \
+  --dbname "postgresql://postgres:postgres@localhost:5432/mma-ai" \
   artifacts/mma-ai-dataset/dumps/mma-ai.postgres-custom
 
 pg_restore --clean --if-exists --no-owner --jobs 4 \
-  --dbname "postgresql://postgres@localhost:5432/odds" \
+  --dbname "postgresql://postgres:postgres@localhost:5432/odds" \
   artifacts/mma-ai-dataset/dumps/odds.postgres-custom
 ```
 
@@ -108,6 +111,7 @@ mkdir -p AutogluonModels
 tar -xzf artifacts/mma-ai-dataset/models/ag-20260304_110750-win-extreme.tar.gz -C AutogluonModels
 mkdir -p data
 cp artifacts/mma-ai-dataset/processed/training_data.csv data/training_data.csv
+cp artifacts/mma-ai-dataset/processed/training_data_dec.csv data/training_data_dec.csv
 cp artifacts/mma-ai-dataset/processed/prediction_data.csv data/prediction_data.csv
 ```
 

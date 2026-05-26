@@ -20,6 +20,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     agents = read_text("AGENTS.md")
     claude = read_text("CLAUDE.md")
     release_notes = read_text("docs/RELEASE_READINESS.md")
+    huggingface_docs = read_text("docs/HUGGINGFACE_DATASET.md")
     compose = read_text("docker-compose.yml")
     dockerignore = read_text(".dockerignore")
     postgres_init = read_text("docker/postgres-init/01-create-odds.sql")
@@ -104,6 +105,12 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert ".env" in dockerignore
     assert ".env.local" in dockerignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
+
+    assert "matching local `DATABASE_URL` and" in huggingface_docs
+    assert "Local `uv run ...` commands load this" in huggingface_docs
+    assert "processed/training_data_dec.csv" in huggingface_docs
+    assert "postgresql://postgres:postgres@localhost:5432/mma-ai" in huggingface_docs
+    assert "postgresql://postgres:postgres@localhost:5432/odds" in huggingface_docs
 
 
 def test_env_example_lists_public_configuration_without_real_secrets():
