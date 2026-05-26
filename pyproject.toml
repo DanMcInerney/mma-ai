@@ -79,6 +79,9 @@ py-modules = ["main", "predict"]
 [tool.setuptools.packages.find]
 include = ["config*", "libs*", "scripts*"]
 
+[tool.setuptools.package-data]
+"libs.web" = ["static/*"]
+
 # --- COMMANDS ---
 
 [project.scripts]

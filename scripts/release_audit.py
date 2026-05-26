@@ -70,6 +70,9 @@ REQUIRED_DOCKERIGNORE_LINES = {
     "!data/raw/ufcstats/competitions.csv",
     "!data/raw/ufcstats/individuals.csv",
 }
+REQUIRED_PACKAGE_DATA = {
+    "libs.web": {"static/*"},
+}
 
 SENSITIVE_PATTERNS = {
     "local_windows_path": re.compile(r"\b[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s\"'`<>]+", re.IGNORECASE),
@@ -177,6 +180,34 @@ def find_dockerignore_issues(root: Path = ROOT) -> list[AuditIssue]:
             detail="Missing required Docker context rule(s): " + ", ".join(missing),
         )
     ]
+
+
+def find_package_data_issues(root: Path = ROOT) -> list[AuditIssue]:
+    path = root / "pyproject.toml"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return [AuditIssue("unreadable_pyproject", "pyproject.toml", str(exc))]
+
+    match = re.search(
+        r"(?ms)^\[tool\.setuptools\.package-data\]\s*(?P<body>.*?)(?=^\[|\Z)",
+        text,
+    )
+    body = match.group("body") if match else ""
+    issues = []
+    for package, required_patterns in REQUIRED_PACKAGE_DATA.items():
+        package_pattern = re.search(rf'(?m)^"{re.escape(package)}"\s*=\s*\[(?P<patterns>[^\]]*)\]', body)
+        configured_patterns = set(re.findall(r'"([^"]+)"', package_pattern.group("patterns") if package_pattern else ""))
+        missing = sorted(required_patterns - configured_patterns)
+        if missing:
+            issues.append(
+                AuditIssue(
+                    kind="missing_package_data",
+                    path="pyproject.toml",
+                    detail=f"{package} must include package data pattern(s): {', '.join(missing)}.",
+                )
+            )
+    return issues
 
 
 def find_misplaced_test_scripts(paths: Iterable[str]) -> list[AuditIssue]:
@@ -351,6 +382,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_forbidden_artifacts(tracked),
         *find_file_mode_issues(file_modes),
         *find_dockerignore_issues(root),
+        *find_package_data_issues(root),
         *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),

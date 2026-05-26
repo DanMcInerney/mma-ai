@@ -10,6 +10,7 @@ from scripts.release_audit import (
     find_misplaced_test_scripts,
     find_missing_required_files,
     find_non_ascii_runtime_text,
+    find_package_data_issues,
     find_seed_data_issues,
     find_sensitive_text,
 )
@@ -103,6 +104,31 @@ def test_release_audit_requires_dockerignore_to_protect_public_context(tmp_path)
         ("incomplete_dockerignore", ".dockerignore")
     ]
     assert "!data/raw/ufcstats/individuals.csv" in issues[0].detail
+
+
+def test_release_audit_requires_dashboard_static_assets_in_package_data(tmp_path):
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        "[tool.setuptools.package-data]\n"
+        '"libs.web" = ["static/app.js"]\n',
+        encoding="utf-8",
+    )
+
+    issues = find_package_data_issues(tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("missing_package_data", "pyproject.toml")
+    ]
+    assert "libs.web" in issues[0].detail
+    assert "static/*" in issues[0].detail
+
+    pyproject.write_text(
+        "[tool.setuptools.package-data]\n"
+        '"libs.web" = ["static/*"]\n',
+        encoding="utf-8",
+    )
+
+    assert find_package_data_issues(tmp_path) == []
 
 
 def test_release_audit_requires_public_entrypoints_and_seed_data():
