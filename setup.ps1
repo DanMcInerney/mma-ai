@@ -121,8 +121,16 @@ function Invoke-DockerCompose {
 }
 
 function Get-ComposeDbPort {
-    $output = & docker compose port db 5432 2>$null
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($output)) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = & docker compose port db 5432 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    if ($exitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($output)) {
         $lastLine = @($output)[-1].Trim()
         $portText = ($lastLine -split ":")[-1]
         $parsed = 0
