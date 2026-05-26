@@ -5,6 +5,7 @@ from scripts.release_audit import (
     find_dockerignore_issues,
     find_file_mode_issues,
     find_forbidden_artifacts,
+    find_gitattributes_issues,
     find_hardcoded_local_database_urls,
     find_legacy_runtime_identifiers,
     find_misplaced_test_scripts,
@@ -106,6 +107,30 @@ def test_release_audit_requires_dockerignore_to_protect_public_context(tmp_path)
     assert "!data/raw/ufcstats/individuals.csv" in issues[0].detail
 
 
+def test_release_audit_requires_git_attributes_for_cross_platform_setup_scripts(tmp_path):
+    (tmp_path / ".gitattributes").write_text(
+        "* text=auto\n"
+        "Dockerfile text eol=lf\n",
+        encoding="utf-8",
+    )
+
+    issues = find_gitattributes_issues(tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("incomplete_gitattributes", ".gitattributes")
+    ]
+    assert "*.sh text eol=lf" in issues[0].detail
+
+    (tmp_path / ".gitattributes").write_text(
+        "* text=auto\n"
+        "*.sh text eol=lf\n"
+        "Dockerfile text eol=lf\n",
+        encoding="utf-8",
+    )
+
+    assert find_gitattributes_issues(tmp_path) == []
+
+
 def test_release_audit_requires_dashboard_static_assets_in_package_data(tmp_path):
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text(
@@ -135,6 +160,7 @@ def test_release_audit_requires_public_entrypoints_and_seed_data():
     issues = find_missing_required_files(["README.md", "libs/web/static/index.html"], ROOT)
 
     missing_paths = {issue.path for issue in issues}
+    assert ".gitattributes" in missing_paths
     assert "setup.ps1" in missing_paths
     assert "setup.sh" in missing_paths
     assert "AGENTS.md" in missing_paths

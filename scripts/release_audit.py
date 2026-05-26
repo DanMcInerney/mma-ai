@@ -24,6 +24,7 @@ GENERATED_DATA_FILES = {
     "data/training_data_dec.csv",
 }
 REQUIRED_TRACKED_FILES = {
+    ".gitattributes",
     ".dockerignore",
     ".env.example",
     ".gitignore",
@@ -73,6 +74,10 @@ REQUIRED_DOCKERIGNORE_LINES = {
 }
 REQUIRED_PACKAGE_DATA = {
     "libs.web": {"static/*"},
+}
+REQUIRED_GITATTRIBUTES_LINES = {
+    "*.sh text eol=lf",
+    "Dockerfile text eol=lf",
 }
 
 SENSITIVE_PATTERNS = {
@@ -179,6 +184,29 @@ def find_dockerignore_issues(root: Path = ROOT) -> list[AuditIssue]:
             kind="incomplete_dockerignore",
             path=".dockerignore",
             detail="Missing required Docker context rule(s): " + ", ".join(missing),
+        )
+    ]
+
+
+def find_gitattributes_issues(root: Path = ROOT) -> list[AuditIssue]:
+    path = root / ".gitattributes"
+    try:
+        lines = {
+            line.strip()
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+    except OSError as exc:
+        return [AuditIssue("unreadable_gitattributes", ".gitattributes", str(exc))]
+
+    missing = sorted(REQUIRED_GITATTRIBUTES_LINES - lines)
+    if not missing:
+        return []
+    return [
+        AuditIssue(
+            kind="incomplete_gitattributes",
+            path=".gitattributes",
+            detail="Missing required Git attribute rule(s): " + ", ".join(missing),
         )
     ]
 
@@ -383,6 +411,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_forbidden_artifacts(tracked),
         *find_file_mode_issues(file_modes),
         *find_dockerignore_issues(root),
+        *find_gitattributes_issues(root),
         *find_package_data_issues(root),
         *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),

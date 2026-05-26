@@ -71,6 +71,21 @@ def test_bash_setup_script_is_tracked_executable():
     assert result.stdout.startswith("100755 ")
 
 
+def test_bash_setup_scripts_are_pinned_to_lf_line_endings():
+    result = subprocess.run(
+        ["git", "check-attr", "eol", "--", "setup.sh", "scripts/verify_hf_manifest.sh"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert "setup.sh: eol: lf" in result.stdout
+    assert "scripts/verify_hf_manifest.sh: eol: lf" in result.stdout
+    assert b"\r\n" not in (ROOT / "setup.sh").read_bytes()
+    assert b"\r\n" not in (ROOT / "scripts" / "verify_hf_manifest.sh").read_bytes()
+
+
 def test_setup_scripts_help_exits_before_install_work():
     shell = shutil.which("powershell") or shutil.which("pwsh")
     if shell:
