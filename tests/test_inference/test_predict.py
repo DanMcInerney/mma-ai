@@ -28,6 +28,7 @@ from predict import (
     calculate_expected_value,
     has_positive_ev,
     latest_model_path,
+    maybe_take_screenshots,
     parse_manual_odds_json,
     apply_manual_odds,
 )
@@ -513,7 +514,7 @@ class TestModelFunctions:
     """Test suite for model-related functions"""
     
     @patch('autogluon.tabular.TabularPredictor')
-    @patch('predict.joblib.load')
+    @patch('predict.load_joblib_artifact')
     @patch('predict.os.path.exists')
     def test_load_model_and_calibrator(self, mock_exists, mock_joblib_load, mock_predictor):
         """Test model and calibrator loading"""
@@ -641,6 +642,22 @@ class TestModelFunctions:
         second_call_args = mock_model.predict_proba.call_args_list[1][0][0]
         assert 'sample_weight' in second_call_args.columns
         assert (second_call_args['sample_weight'] == 1.0).all()
+
+    @patch("predict.take_screenshots")
+    def test_maybe_take_screenshots_is_opt_in(self, mock_take_screenshots):
+        """Prediction should not require browser screenshots by default."""
+        result = maybe_take_screenshots("/tmp/predictions", enabled=False)
+
+        assert result is False
+        mock_take_screenshots.assert_not_called()
+
+    @patch("predict.take_screenshots", side_effect=RuntimeError("chrome unavailable"))
+    def test_maybe_take_screenshots_does_not_fail_prediction(self, mock_take_screenshots):
+        """Screenshot failures should not fail already-written prediction outputs."""
+        result = maybe_take_screenshots("/tmp/predictions", enabled=True)
+
+        assert result is False
+        mock_take_screenshots.assert_called_once_with("/tmp/predictions")
 
 
 class TestDataProcessingFunctions:
@@ -802,7 +819,7 @@ class TestIntegrationScenarios:
         assert len(fighter_dfs['fighter a']) == 1
         assert list(fighter_dfs['fighter a'].columns) == ['feature1', 'feature2', 'feature3']
     
-    @patch('predict.joblib.load')
+    @patch('predict.load_joblib_artifact')
     @patch('predict.load_model_and_calibrator')
     def test_full_prediction_workflow(self, mock_load_model, mock_joblib_load):
         """Test complete prediction workflow from features to results"""
@@ -1048,7 +1065,7 @@ class TestErrorHandling:
         assert calculate_expected_value("invalid", "invalid") == 0.0
     
     @patch('autogluon.tabular.TabularPredictor')
-    @patch('predict.joblib.load')  
+    @patch('predict.load_joblib_artifact')  
     @patch('predict.os.path.exists')
     def test_model_loading_error_handling(self, mock_exists, mock_joblib_load, mock_predictor):
         """Test model loading with various error conditions"""

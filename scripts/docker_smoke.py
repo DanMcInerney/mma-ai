@@ -113,8 +113,10 @@ def check_runtime_dependencies(container_name: str) -> None:
     code = textwrap.dedent(
         """
         import importlib.util
+        import pickle
         import sys
 
+        from libs.modeling.portable_artifacts import install_pathlib_pickle_compatibility
         from libs.modeling.runtime_dependencies import prediction_runtime_dependency_report
 
         present = [name for name in ("pytest", "pytest_mock") if importlib.util.find_spec(name) is not None]
@@ -133,7 +135,15 @@ def check_runtime_dependencies(container_name: str) -> None:
             )
             raise SystemExit(f"prediction runtime dependencies missing: {missing}")
 
-        print("runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1, prediction imports present")
+        windows_path_pickle = (
+            b"\\x80\\x04\\x953\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x8c\\x07pathlib\\x94"
+            b"\\x8c\\x0bWindowsPath\\x94\\x93\\x94\\x8c\\x03C:\\\\\\x94\\x8c\\x06models"
+            b"\\x94\\x8c\\x02ag\\x94\\x87\\x94R\\x94."
+        )
+        install_pathlib_pickle_compatibility()
+        pickle.loads(windows_path_pickle)
+
+        print("runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1, prediction imports present, cross-OS pathlib pickles load")
         """
     ).strip()
     result = _docker_exec(container_name, ["/app/.venv/bin/python", "-c", code], timeout=30)
