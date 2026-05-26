@@ -35,6 +35,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Train: launch model training" in readme
     assert "Predict: choose a model" in readme
     assert "uv run mma-evaluate" in readme
+    assert "uv run mma-docker-smoke" in readme
     assert "uv run mma-release-audit" in readme
     assert "docker compose up --build db web" in readme
     assert "MMA_AI_COMPOSE_DATABASE_URL" in readme
@@ -90,6 +91,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "`Setup incomplete`" in release_notes
     assert "docker compose up --build db web" in release_notes
     assert "docker compose up --build web" in release_notes
+    assert "uv run mma-docker-smoke" in release_notes
     assert "uv run pytest -q" in release_notes
     assert "uv run mma-release-audit" in release_notes
 

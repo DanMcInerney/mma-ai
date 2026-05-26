@@ -116,6 +116,7 @@ uv run pytest -q
 uv run mma-release-audit
 docker compose config --quiet
 docker compose build web
+uv run mma-docker-smoke
 ```
 
 Security and hygiene scans:

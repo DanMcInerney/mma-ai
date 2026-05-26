@@ -200,6 +200,8 @@ uv run mma-train
 uv run mma-evaluate --write-report --format text
 uv run mma-predict
 uv run pytest
+docker compose build web
+uv run mma-docker-smoke
 ```
 
 The dashboard uses the same command paths in background jobs so the UI does not
@@ -210,7 +212,9 @@ fork a separate feature or prediction implementation.
 - `AGENTS.md` and `CLAUDE.md`: agent guidance for safe analytics, training,
   prediction, feature semantics, and test expectations.
 - `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
-  and the FastAPI dashboard.
+  and the FastAPI dashboard. After building the web image, `uv run
+  mma-docker-smoke` runs the container, checks `/api/health`, and verifies the
+  runtime image does not include test tooling.
 - `libs/web`: FastAPI app, background jobs, web service adapters, analytics,
   evaluation summaries, and static UI.
 - `data`: finalized CSV outputs such as `prediction_data.csv`,
