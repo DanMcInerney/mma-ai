@@ -449,9 +449,9 @@ class BFOLatestOddsOnly:
         
         # Check what we found
         if fighter1_data and fighter2_data:
-            print(f"  ✅ Found BOTH fighters' odds!")
-            print(f"  📊 {fighter1_name}: decimal {fighter1_data['decimal_odds']:.3f} → American {fighter1_data['american_odds']:+d}")
-            print(f"  📊 {fighter2_name}: decimal {fighter2_data['decimal_odds']:.3f} → American {fighter2_data['american_odds']:+d}")
+            print("  [ok] Found both fighters' odds.")
+            print(f"  [odds] {fighter1_name}: decimal {fighter1_data['decimal_odds']:.3f} -> American {fighter1_data['american_odds']:+d}")
+            print(f"  [odds] {fighter2_name}: decimal {fighter2_data['decimal_odds']:.3f} -> American {fighter2_data['american_odds']:+d}")
             
             # Use the most recent timestamp
             latest_timestamp = max(fighter1_data['timestamp'], fighter2_data['timestamp'])
@@ -467,8 +467,8 @@ class BFOLatestOddsOnly:
             }
             
         elif fighter1_data:
-            print(f"  ⚠️  Found only {fighter1_name}'s odds. Will ask for {fighter2_name}'s odds manually.")
-            print(f"  📊 {fighter1_name}: decimal {fighter1_data['decimal_odds']:.3f} → American {fighter1_data['american_odds']:+d}")
+            print(f"  [warn] Found only {fighter1_name}'s odds; {fighter2_name} remains missing.")
+            print(f"  [odds] {fighter1_name}: decimal {fighter1_data['decimal_odds']:.3f} -> American {fighter1_data['american_odds']:+d}")
             
             # Return partial result without calculating opponent odds
             return {
@@ -482,8 +482,8 @@ class BFOLatestOddsOnly:
             }
             
         elif fighter2_data:
-            print(f"  ⚠️  Found only {fighter2_name}'s odds. Will ask for {fighter1_name}'s odds manually.")
-            print(f"  📊 {fighter2_name}: decimal {fighter2_data['decimal_odds']:.3f} → American {fighter2_data['american_odds']:+d}")
+            print(f"  [warn] Found only {fighter2_name}'s odds; {fighter1_name} remains missing.")
+            print(f"  [odds] {fighter2_name}: decimal {fighter2_data['decimal_odds']:.3f} -> American {fighter2_data['american_odds']:+d}")
             
             # Return partial result without calculating opponent odds
             return {
@@ -496,7 +496,7 @@ class BFOLatestOddsOnly:
                 'both_odds_found': False
             }
         
-        print(f"  ❌ No odds found for either fighter")
+        print("  [warn] No odds found for either fighter.")
         return {
             'fighter1': fighter1_name,
             'fighter2': fighter2_name,
@@ -514,18 +514,18 @@ class BFOLatestOddsOnly:
         Returns:
             Dictionary {fighter_name: vigless_odds, ...}
         """
-        print(f"\n🎯 Getting latest BFO odds for {len(fight_list)} fights (no DB operations)...")
+        print(f"\n[prediction] Getting latest BFO odds for {len(fight_list)} fights (no DB operations)...")
         result_odds = {}
         
         for fighter1, fighter2 in fight_list:
-            print(f"\n📋 Processing: {fighter1} vs {fighter2}")
+            print(f"\n[prediction] Processing odds: {fighter1} vs {fighter2}")
             
             # Try to find odds automatically
             fight_odds = self.find_fight_odds(fighter1, fighter2)
             
             if not fight_odds['found_match']:
                 # No odds found
-                print(f"  ⚠️  No odds found - setting to N/A")
+                print("  [warn] No odds found; setting to N/A.")
                 result_odds[fighter1] = "N/A"
                 result_odds[fighter2] = "N/A"
                 continue
@@ -536,7 +536,7 @@ class BFOLatestOddsOnly:
             
             if fighter1_odds is None or fighter2_odds is None:
                 # If one fighter's odds are missing, record the known one and mark the other as missing
-                print(f"  ⚠️  Partial odds found. Marking missing fighter as N/A for manual input later.")
+                print("  [warn] Partial odds found. Marking missing fighter as N/A for later manual input.")
                 if fighter1_odds is not None:
                     try:
                         result_odds[fighter1] = int(round(fighter1_odds))
@@ -569,10 +569,10 @@ class BFOLatestOddsOnly:
                 fair2_int = int(round(fair_odds2))
                 
                 # Show whether odds are real or calculated
-                odds_source = "🎯 REAL BFO ODDS" if both_real_odds else "⚙️ REAL + MANUAL (after input)"
+                odds_source = "REAL BFO ODDS" if both_real_odds else "REAL + MANUAL (after input)"
                 print(f"  {odds_source}")
-                print(f"  📊 Original odds: {fighter1}({orig1_int:+d}) vs {fighter2}({orig2_int:+d})")
-                print(f"  💎 Vig-free odds: {fighter1}({fair1_int:+d}) vs {fighter2}({fair2_int:+d})")
+                print(f"  [odds] Original odds: {fighter1}({orig1_int:+d}) vs {fighter2}({orig2_int:+d})")
+                print(f"  [odds] Vig-free odds: {fighter1}({fair1_int:+d}) vs {fighter2}({fair2_int:+d})")
                 
                 # Add to results - store both original and vigless odds
                 result_odds[fighter1] = {
@@ -585,7 +585,7 @@ class BFOLatestOddsOnly:
                 }
                 
             except Exception as e:
-                print(f"  ❌ Error calculating vig-free odds: {str(e)}")
+                print(f"  [error] Error calculating vig-free odds: {str(e)}")
                 # Fallback to original odds if vig removal fails (convert to int)
                 orig1_fallback = int(round(fighter1_odds)) if isinstance(fighter1_odds, (int, float)) else "N/A"
                 orig2_fallback = int(round(fighter2_odds)) if isinstance(fighter2_odds, (int, float)) else "N/A"
@@ -610,7 +610,7 @@ def get_manual_fighter_odds(fighter_name):
     Returns:
         American odds as integer or None if skipped
     """
-    print(f"\n📝 Manual odds input required for: {fighter_name}")
+    print(f"\n[input] Manual odds input required for: {fighter_name}")
     print("Please enter American odds (e.g., -150, +200) or hit enter to leave as N/A:")
     
     while True:
@@ -624,11 +624,11 @@ def get_manual_fighter_odds(fighter_name):
             # Try to parse as integer (handle + prefix)
             odds_str = user_input.replace('+', '')
             odds = int(odds_str)
-            print(f"✅ Set {fighter_name} odds to {odds:+d}")
+            print(f"[ok] Set {fighter_name} odds to {odds:+d}")
             return odds
             
         except ValueError:
-            print("❌ Please enter a valid integer (e.g., -150, +200) or 'skip'")
+            print("[error] Please enter a valid integer (e.g., -150, +200) or 'skip'")
 
 def _empty_odds_for_fights(fight_list):
     odds = {}
@@ -656,7 +656,7 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
         scraper = BFOLatestOddsOnly()
         latest_odds = scraper.get_latest_fight_odds_no_db(bfo_fight_list)
         
-        print(f"✅ Retrieved odds for {len(latest_odds)} fighters from BFO")
+        print(f"[ok] Retrieved odds for {len(latest_odds)} fighters from BFO")
         
         # Check for missing odds and prompt for manual input
         all_fighters = set()
@@ -670,11 +670,11 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
             print(f"\nMissing odds for {len(missing_fighters)} fighters; leaving them as N/A in non-interactive mode.")
 
         if missing_fighters and allow_manual_input:
-            print(f"\n⚠️  Missing odds for {len(missing_fighters)} fighters:")
+            print(f"\n[warn] Missing odds for {len(missing_fighters)} fighters:")
             for fighter in missing_fighters:
                 print(f"  - {fighter}")
             
-            print("\n🔧 You can manually input odds for missing fighters...")
+            print("\n[input] You can manually input odds for missing fighters.")
             
             # Process manual input by fight pairs to enable devigging
             for fight in fight_list:
@@ -688,7 +688,7 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
                     needs_input.append(fighter2)
                 
                 if needs_input:
-                    print(f"\n🥊 Fight: {fighter1} vs {fighter2}")
+                    print(f"\n[prediction] Fight: {fighter1} vs {fighter2}")
                     
                     # Get manual input for missing fighters
                     for fighter in needs_input:
@@ -705,11 +705,11 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
                     if (f1_odds != "N/A" and f2_odds != "N/A" and 
                         isinstance(f1_odds, (int, float)) and isinstance(f2_odds, (int, float))):
                         
-                        print(f"  🔧 Devigging odds for {fighter1} vs {fighter2}...")
+                        print(f"  [odds] Devigging odds for {fighter1} vs {fighter2}...")
                         try:
                             fair_odds1, fair_odds2 = scraper.remove_vig(f1_odds, f2_odds)
-                            print(f"  📊 Original: {fighter1}({int(f1_odds):+d}) vs {fighter2}({int(f2_odds):+d})")
-                            print(f"  💎 Vig-free: {fighter1}({int(fair_odds1):+d}) vs {fighter2}({int(fair_odds2):+d})")
+                            print(f"  [odds] Original: {fighter1}({int(f1_odds):+d}) vs {fighter2}({int(f2_odds):+d})")
+                            print(f"  [odds] Vig-free: {fighter1}({int(fair_odds1):+d}) vs {fighter2}({int(fair_odds2):+d})")
                             
                             # Store both original and vigless odds
                             latest_odds[fighter1] = {
@@ -721,8 +721,8 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
                                 'vigless': int(fair_odds2)
                             }
                         except Exception as e:
-                            print(f"  ❌ Error devigging odds: {e}")
-                            print(f"  ⚠️  Using original odds without devigging")
+                            print(f"  [error] Error devigging odds: {e}")
+                            print("  [warn] Using original odds without devigging")
                             # Store original odds in both fields if devigging fails
                             latest_odds[fighter1] = {
                                 'original': int(f1_odds),
@@ -736,8 +736,8 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
         return latest_odds
         
     except Exception as e:
-        print(f"❌ Error getting BFO odds: {str(e)}")
-        print("⚠️  Falling back to manual input for all fighters")
+        print(f"[error] Error getting BFO odds: {str(e)}")
+        print("[warn] Falling back to manual input for all fighters")
         
         if not allow_manual_input:
             print("Non-interactive mode enabled; leaving all odds as N/A")
@@ -750,7 +750,7 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
         # Process by fight pairs to enable devigging
         for fight in fight_list:
             fighter1, fighter2 = fight[1], fight[2]
-            print(f"\n🥊 Fight: {fighter1} vs {fighter2}")
+            print(f"\n[prediction] Fight: {fighter1} vs {fighter2}")
             
             # Get manual input for both fighters
             f1_odds = get_manual_fighter_odds(fighter1) or "N/A"
@@ -760,17 +760,17 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
             if (f1_odds != "N/A" and f2_odds != "N/A" and 
                 isinstance(f1_odds, (int, float)) and isinstance(f2_odds, (int, float))):
                 
-                print(f"  🔧 Devigging odds for {fighter1} vs {fighter2}...")
+                print(f"  [odds] Devigging odds for {fighter1} vs {fighter2}...")
                 try:
                     fair_odds1, fair_odds2 = scraper.remove_vig(f1_odds, f2_odds)
-                    print(f"  📊 Original: {fighter1}({int(f1_odds):+d}) vs {fighter2}({int(f2_odds):+d})")
-                    print(f"  💎 Vig-free: {fighter1}({int(fair_odds1):+d}) vs {fighter2}({int(fair_odds2):+d})")
+                    print(f"  [odds] Original: {fighter1}({int(f1_odds):+d}) vs {fighter2}({int(f2_odds):+d})")
+                    print(f"  [odds] Vig-free: {fighter1}({int(fair_odds1):+d}) vs {fighter2}({int(fair_odds2):+d})")
                     
                     manual_odds[fighter1] = fair_odds1
                     manual_odds[fighter2] = fair_odds2
                 except Exception as e:
-                    print(f"  ❌ Error devigging odds: {e}")
-                    print(f"  ⚠️  Using original odds without devigging")
+                    print(f"  [error] Error devigging odds: {e}")
+                    print("  [warn] Using original odds without devigging")
                     manual_odds[fighter1] = f1_odds
                     manual_odds[fighter2] = f2_odds
             else:
@@ -997,7 +997,7 @@ def load_model_and_calibrator(model_path, use_calibrated=True):
         if os.path.exists(calibrator_path):
             try:
                 calibrator = joblib.load(calibrator_path)
-                print(f"✓ Loaded calibrator from {calibrator_path}")
+                print(f"[ok] Loaded calibrator from {calibrator_path}")
             except Exception as e:
                 print(f"Warning: Could not load calibrator from {calibrator_path}: {e}")
                 calibrator = None
@@ -1051,7 +1051,7 @@ def get_predictions(model, calibrator, scaled_X_df, use_calibrated=None):
 
     # Apply calibration if requested and available
     if use_calibrated and calibrator is not None:
-        # Preferred path: probability-only calibrator that maps class-1 probs → calibrated probs
+        # Preferred path: probability-only calibrator that maps class-1 probabilities to calibrated probabilities.
         try:
             prob_class1 = y_pred_df[1].values
             cal_prob_class1 = calibrator.predict_proba(prob_class1)
@@ -1374,11 +1374,11 @@ def cli():
     # Print calibration status
     if use_calibrated:
         if calibrator is not None:
-            print(f"🎯 Using calibrated predictions")
+            print("[prediction] Using calibrated predictions")
         else:
-            print(f"⚠️  Calibrated predictions requested but not available - using original predictions")
+            print("[warn] Calibrated predictions requested but not available - using original predictions")
     else:
-        print(f"📊 Using original (uncalibrated) predictions")
+        print("[prediction] Using original (uncalibrated) predictions")
 
     ## Single fight or event
     if args.fighter1 or args.fighter2:
@@ -1652,7 +1652,7 @@ def cli():
                 else:
                     payout_multiplier = 100 / abs(vegas_odds_num)
             
-            # Calculate EV: (AI_win_prob × payout) - (AI_lose_prob × 1)
+            # Calculate EV: (AI_win_prob * payout) - (AI_lose_prob * 1)
             # For a $1 bet: win = get back $1 + payout, lose = lose $1
             ev_value = (ai_win_prob * payout_multiplier) - ((1 - ai_win_prob) * 1)
             ev_percentage = ev_value * 100  # Convert to percentage

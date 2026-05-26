@@ -50,6 +50,7 @@ REQUIRED_TRACKED_FILES = {
 }
 FORBIDDEN_PREFIXES = (".cursor/", "AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
 FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
+ASCII_RUNTIME_LOG_FILES = {"predict.py"}
 MIN_SEED_ROWS = 1000
 MIN_SEED_COLUMNS = 6
 
@@ -245,6 +246,32 @@ def find_hardcoded_local_database_urls(paths: Iterable[str], root: Path = ROOT) 
     return issues
 
 
+def find_non_ascii_runtime_text(paths: Iterable[str], root: Path = ROOT) -> list[AuditIssue]:
+    """Keep dashboard-captured CLI logs portable across Windows, Docker, and CI."""
+    tracked = {path.replace("\\", "/") for path in paths}
+    issues: list[AuditIssue] = []
+    for relative_path in sorted(ASCII_RUNTIME_LOG_FILES & tracked):
+        path = root / relative_path
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            issues.append(AuditIssue("unreadable_file", relative_path, str(exc)))
+            continue
+        for index, char in enumerate(text):
+            if ord(char) <= 127:
+                continue
+            line_number = text.count("\n", 0, index) + 1
+            issues.append(
+                AuditIssue(
+                    kind="non_ascii_runtime_text",
+                    path=relative_path,
+                    detail=f"Non-ASCII character U+{ord(char):04X} at line {line_number}; use ASCII status text in dashboard logs.",
+                )
+            )
+            break
+    return issues
+
+
 def _excerpt(text: str, start: int, end: int, radius: int = 32) -> str:
     snippet = text[max(0, start - radius) : min(len(text), end + radius)]
     return " ".join(snippet.split())
@@ -260,6 +287,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),
         *find_hardcoded_local_database_urls(tracked, root),
+        *find_non_ascii_runtime_text(tracked, root),
     ]
 
 

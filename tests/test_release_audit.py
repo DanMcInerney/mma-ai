@@ -7,6 +7,7 @@ from scripts.release_audit import (
     find_legacy_runtime_identifiers,
     find_misplaced_test_scripts,
     find_missing_required_files,
+    find_non_ascii_runtime_text,
     find_seed_data_issues,
     find_sensitive_text,
 )
@@ -162,3 +163,15 @@ def test_release_audit_rejects_hardcoded_runtime_database_urls(tmp_path):
     assert [(issue.kind, issue.path) for issue in issues] == [
         ("hardcoded_local_postgres_url", "scripts/debug.py"),
     ]
+
+
+def test_release_audit_rejects_non_ascii_prediction_runtime_logs(tmp_path):
+    runtime_file = tmp_path / "predict.py"
+    runtime_file.write_text("print('prediction ready " + chr(0x2713) + "')\n", encoding="utf-8")
+
+    issues = find_non_ascii_runtime_text(["predict.py"], tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("non_ascii_runtime_text", "predict.py"),
+    ]
+    assert "line 1" in issues[0].detail
