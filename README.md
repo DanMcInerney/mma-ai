@@ -67,7 +67,7 @@ bash setup.sh --web-port 18000
 If you already bootstrapped artifacts and only want to start the app:
 
 ```bash
-docker compose up --build
+docker compose up --build db web
 ```
 
 The Compose stack starts PostgreSQL 17 and initializes both the main `mma-ai`

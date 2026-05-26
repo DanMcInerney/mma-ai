@@ -27,6 +27,11 @@ docker compose config --quiet
 docker compose up --build
 ```
 
+For a bootstrapped local app start, use `docker compose up --build db web` so
+the API and the bundled PostgreSQL service come up together. Use
+`docker compose up --build web` only when `MMA_AI_COMPOSE_DATABASE_URL` and
+`MMA_AI_COMPOSE_ODDS_DATABASE_URL` point to an external PostgreSQL instance.
+
 After the web service starts, verify `http://localhost:8000/api/health` returns
 `{"status":"ok"}` and open the dashboard at `http://localhost:8000`, or the
 alternate port printed by setup.
@@ -61,8 +66,8 @@ alternate port printed by setup.
   the auxiliary `odds` database with `docker/postgres-init/01-create-odds.sql`.
   `MMA_AI_COMPOSE_DATABASE_URL` and `MMA_AI_COMPOSE_ODDS_DATABASE_URL` let the
   Docker web service use an existing host PostgreSQL instance instead; in that
-  mode, start `docker compose up --build web` so the bundled database service
-  does not claim port 5432.
+  mode, start only `docker compose up --build web` so the bundled database
+  service does not claim port 5432.
 - Local static assets: Plotly is served from `/vendor/plotly.min.js`; dashboard
   icons are served from `/static/icons.js`.
 

@@ -593,7 +593,7 @@ configure_llm_analytics
 
 if [[ "$NO_START" -eq 0 ]]; then
   echo "Starting MMA AI web dashboard"
-  docker compose up -d --build web
+  docker compose up -d --build db web
   WEB_URL="http://localhost:$SELECTED_WEB_PORT"
   echo "MMA AI is ready: $WEB_URL"
   if [[ "$NO_OPEN" -eq 0 ]]; then
@@ -604,5 +604,5 @@ if [[ "$NO_START" -eq 0 ]]; then
     fi
   fi
 else
-  echo "Setup complete. Start the dashboard with: docker compose up -d --build web"
+  echo "Setup complete. Start the dashboard with: docker compose up -d --build db web"
 fi

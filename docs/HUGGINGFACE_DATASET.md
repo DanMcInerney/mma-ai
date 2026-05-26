@@ -25,6 +25,9 @@ starter model into `AutogluonModels/`, optionally configure LLM analytics, and
 start the web dashboard. If host port `5432` is already occupied, setup writes a
 free `MMA_AI_POSTGRES_PORT` value to `.env`; pass `-PostgresPort 55432` or
 `--postgres-port 55432` to force a port.
+After setup, start the bundled local stack with
+`docker compose up --build db web` so both the dashboard and PostgreSQL are
+running.
 
 LLM analytics setup supports OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
 Google Gemini, xAI Grok, local OpenAI-compatible servers, and custom endpoints.

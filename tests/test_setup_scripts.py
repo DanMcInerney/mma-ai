@@ -36,6 +36,8 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "MMA_AI_POSTGRES_PORT" in script
         assert "MMA_AI_WEB_PORT" in script
         assert "docker compose up" in script
+        assert "db" in script
+        assert "web" in script
         assert "recreating the setup database volume" in script
         assert "setup-complete" in script
         assert "extracting" in script
@@ -95,3 +97,12 @@ def test_setup_scripts_pin_compose_database_and_starter_model():
         assert "18000" in script
         assert "ag-20260304_110750-win-extreme" in script
         assert "AutogluonModels" in script
+
+
+def test_setup_scripts_start_database_and_web_together():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    assert 'Invoke-DockerCompose @("up", "-d", "--build", "db", "web")' in powershell
+    assert "docker compose up -d --build db web" in powershell
+    assert "docker compose up -d --build db web" in bash

@@ -704,12 +704,12 @@ Configure-LlmAnalytics
 
 if (-not $NoStart) {
     Write-Host "Starting MMA AI web dashboard"
-    Invoke-DockerCompose @("up", "-d", "--build", "web")
+    Invoke-DockerCompose @("up", "-d", "--build", "db", "web")
     $webUrl = "http://localhost:$selectedWebPort"
     Write-Host "MMA AI is ready: $webUrl"
     if (-not $NoOpen) {
         Start-Process $webUrl
     }
 } else {
-    Write-Host "Setup complete. Start the dashboard with: docker compose up -d --build web"
+    Write-Host "Setup complete. Start the dashboard with: docker compose up -d --build db web"
 }
