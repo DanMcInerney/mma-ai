@@ -69,6 +69,7 @@ dynamic_result.csv
 
 # AutoGluon
 AutoGluonModels/
+AutogluonModels/
 
 # Generated data and reports
 artifacts/

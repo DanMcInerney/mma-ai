@@ -23,6 +23,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     huggingface_docs = read_text("docs/HUGGINGFACE_DATASET.md")
     compose = read_text("docker-compose.yml")
     dockerignore = read_text(".dockerignore")
+    gitignore = read_text(".gitignore")
     postgres_init = read_text("docker/postgres-init/01-create-odds.sql")
 
     assert "docker compose up --build" in readme
@@ -109,6 +110,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "artifacts" in dockerignore
     assert ".env" in dockerignore
     assert ".env.local" in dockerignore
+    assert "AutogluonModels/" in gitignore
+    assert "AutoGluonModels/" in gitignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
 
     assert "matching local `DATABASE_URL` and" in huggingface_docs
