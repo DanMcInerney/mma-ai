@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from typing import Any
 
 from libs.paths import PROJECT_ROOT
 from libs.web.evaluations import summarize_model_evaluation
-from libs.web.llm import google_api_key
+from libs.web.llm import llm_config, llm_generate_text
 from libs.web.services import get_dashboard_defaults
 
 
 def answer_training_question(question: str, model_path: str | None = None) -> dict[str, Any]:
     context = _training_context(model_path)
-    api_key = google_api_key()
-    if api_key:
-        return _ask_gemini(question, context, api_key)
+    config = llm_config()
+    if config and config.is_configured:
+        return _ask_llm(question, context)
     return {
         "answer": _fallback_answer(question, context),
         "used_llm": False,
@@ -44,18 +42,17 @@ def _training_context(model_path: str | None = None) -> dict[str, Any]:
     }
 
 
-def _ask_gemini(question: str, context: dict[str, Any], api_key: str) -> dict[str, Any]:
-    import google.generativeai as genai
-
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-pro")
+def _ask_llm(question: str, context: dict[str, Any]) -> dict[str, Any]:
     prompt = {
         "task": "Answer a user question about this MMA AI model training workflow. Be specific, concise, and preserve time-ordering and leakage cautions.",
         "question": question,
         "context": context,
     }
-    response = model.generate_content(json.dumps(prompt))
-    return {"answer": response.text, "used_llm": True, "context": {"evaluation": context.get("evaluation"), "defaults": context.get("defaults")}}
+    return {
+        "answer": llm_generate_text(prompt),
+        "used_llm": True,
+        "context": {"evaluation": context.get("evaluation"), "defaults": context.get("defaults")},
+    }
 
 
 def _fallback_answer(question: str, context: dict[str, Any]) -> str:

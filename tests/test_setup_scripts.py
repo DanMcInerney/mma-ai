@@ -26,6 +26,13 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "--if-exists" in script
         assert "--no-owner" in script
         assert "GEMINI_API_KEY" in script
+        assert "LLM_PROVIDER" in script
+        assert "LLM_MODEL" in script
+        assert "LLM_API_KEY" in script
+        assert "LLM_BASE_URL" in script
+        assert "Anthropic Claude" in script
+        assert "xAI Grok" in script
+        assert "Local model" in script
         assert "MMA_AI_POSTGRES_PORT" in script
         assert "docker compose up" in script
         assert "recreating the setup database volume" in script

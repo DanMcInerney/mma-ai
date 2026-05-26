@@ -26,6 +26,11 @@ start the web dashboard. If host port `5432` is already occupied, setup writes a
 free `MMA_AI_POSTGRES_PORT` value to `.env`; pass `-PostgresPort 55432` or
 `--postgres-port 55432` to force a port.
 
+LLM analytics setup supports OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
+Google Gemini, xAI Grok, local OpenAI-compatible servers, and custom endpoints.
+The scripts save `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and optional
+`LLM_BASE_URL` to `.env`.
+
 ## Required Files
 
 | File | Purpose |
@@ -42,9 +47,9 @@ free `MMA_AI_POSTGRES_PORT` value to `.env`; pass `-PostgresPort 55432` or
 | `processed/prediction_data.csv` | Generated prediction feature CSV. |
 | `models/ag-20260304_110750-win-extreme.tar.gz` | Pretrained AutoGluon win model. |
 
-The dumps were created with PostgreSQL 18.1 custom archive format and gzip
-compression. Restore them with the repo's PostgreSQL 18 Docker service or a
-compatible local PostgreSQL version.
+The dumps use PostgreSQL custom archive format with gzip compression. Restore
+them with the repo's PostgreSQL 17 Docker service or a compatible local
+PostgreSQL version.
 
 ## Restore
 

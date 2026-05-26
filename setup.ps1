@@ -6,6 +6,10 @@ param(
     [switch]$ForceDownload,
     [switch]$SkipLlmPrompt,
     [string]$GeminiApiKey,
+    [string]$LlmProvider,
+    [string]$LlmModel,
+    [string]$LlmApiKey,
+    [string]$LlmBaseUrl,
     [int]$PostgresPort = 0
 )
 
@@ -127,6 +131,195 @@ function Set-EnvValue {
         $updated += $replacement
     }
     Set-Content -LiteralPath $envPath -Value $updated -Encoding utf8
+}
+
+function Normalize-LlmProvider {
+    param([string]$Provider)
+    if ([string]::IsNullOrWhiteSpace($Provider)) {
+        return ""
+    }
+    $value = $Provider.Trim().ToLowerInvariant()
+    switch ($value) {
+        "gemini" { return "google" }
+        "google" { return "google" }
+        "openai" { return "openai" }
+        "codex" { return "codex" }
+        "anthropic" { return "anthropic" }
+        "claude" { return "anthropic" }
+        "grok" { return "grok" }
+        "xai" { return "grok" }
+        "local" { return "local" }
+        "ollama" { return "local" }
+        "lmstudio" { return "local" }
+        "lm-studio" { return "local" }
+        "custom" { return "custom" }
+        default { return $value }
+    }
+}
+
+function Get-LlmDefaultModel {
+    param([string]$Provider)
+    switch ($Provider) {
+        "google" { return "gemini-1.5-pro" }
+        "openai" { return "gpt-4o-mini" }
+        "codex" { return "gpt-5-codex" }
+        "anthropic" { return "claude-3-5-sonnet-latest" }
+        "grok" { return "grok-2-latest" }
+        "local" { return "llama3.1" }
+        default { return "gpt-4o-mini" }
+    }
+}
+
+function Get-LlmDefaultBaseUrl {
+    param([string]$Provider)
+    switch ($Provider) {
+        "openai" { return "https://api.openai.com/v1" }
+        "codex" { return "https://api.openai.com/v1" }
+        "grok" { return "https://api.x.ai/v1" }
+        "local" { return "http://host.docker.internal:11434/v1" }
+        "custom" { return "http://host.docker.internal:11434/v1" }
+        default { return "" }
+    }
+}
+
+function Read-SecretPlainText {
+    param([string]$Prompt)
+    $secureValue = Read-Host $Prompt -AsSecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+    try {
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+    }
+}
+
+function Set-LlmConfiguration {
+    param(
+        [string]$Provider,
+        [string]$Model,
+        [string]$ApiKey,
+        [string]$BaseUrl
+    )
+
+    $normalizedProvider = Normalize-LlmProvider $Provider
+    if ([string]::IsNullOrWhiteSpace($normalizedProvider)) {
+        throw "LLM provider is required when configuring analytics."
+    }
+
+    if ([string]::IsNullOrWhiteSpace($Model)) {
+        $Model = Get-LlmDefaultModel $normalizedProvider
+    }
+
+    if ([string]::IsNullOrWhiteSpace($BaseUrl)) {
+        $BaseUrl = Get-LlmDefaultBaseUrl $normalizedProvider
+    }
+
+    Set-EnvValue "LLM_PROVIDER" $normalizedProvider
+    Set-EnvValue "LLM_MODEL" $Model
+    Set-EnvValue "LLM_BASE_URL" $BaseUrl
+
+    if (-not [string]::IsNullOrWhiteSpace($ApiKey)) {
+        Set-EnvValue "LLM_API_KEY" $ApiKey
+        switch ($normalizedProvider) {
+            "google" {
+                Set-EnvValue "GEMINI_API_KEY" $ApiKey
+                Set-EnvValue "GOOGLE_API_KEY" $ApiKey
+            }
+            "openai" { Set-EnvValue "OPENAI_API_KEY" $ApiKey }
+            "codex" { Set-EnvValue "OPENAI_API_KEY" $ApiKey }
+            "anthropic" { Set-EnvValue "ANTHROPIC_API_KEY" $ApiKey }
+            "grok" {
+                Set-EnvValue "XAI_API_KEY" $ApiKey
+                Set-EnvValue "GROK_API_KEY" $ApiKey
+            }
+        }
+    } elseif ($normalizedProvider -eq "local") {
+        Set-EnvValue "LLM_API_KEY" ""
+    }
+
+    Write-Host "Configured LLM analytics: provider=$normalizedProvider model=$Model"
+}
+
+function Resolve-LlmProviderChoice {
+    param([string]$Choice)
+    $value = $Choice.Trim().ToLowerInvariant()
+    switch ($value) {
+        "" { return "openai" }
+        "1" { return "openai" }
+        "2" { return "codex" }
+        "3" { return "anthropic" }
+        "4" { return "google" }
+        "5" { return "grok" }
+        "6" { return "local" }
+        "7" { return "custom" }
+        default { return (Normalize-LlmProvider $value) }
+    }
+}
+
+function Configure-LlmAnalytics {
+    if ($GeminiApiKey) {
+        Set-LlmConfiguration -Provider "google" -Model $LlmModel -ApiKey $GeminiApiKey -BaseUrl $LlmBaseUrl
+        return
+    }
+
+    if ($LlmProvider -or $LlmModel -or $LlmApiKey -or $LlmBaseUrl) {
+        $provider = if ($LlmProvider) { $LlmProvider } else { "custom" }
+        Set-LlmConfiguration -Provider $provider -Model $LlmModel -ApiKey $LlmApiKey -BaseUrl $LlmBaseUrl
+        return
+    }
+
+    if ($SkipLlmPrompt) {
+        return
+    }
+
+    $answer = Read-Host "Set up LLM analytics and training chat now? [y/N]"
+    if ($answer -notmatch "^(y|yes)$") {
+        return
+    }
+
+    Write-Host "Choose your LLM provider:"
+    Write-Host "  1) OpenAI"
+    Write-Host "  2) Codex / OpenAI-compatible"
+    Write-Host "  3) Anthropic Claude"
+    Write-Host "  4) Google Gemini"
+    Write-Host "  5) xAI Grok"
+    Write-Host "  6) Local model (Ollama or LM Studio)"
+    Write-Host "  7) Custom OpenAI-compatible endpoint"
+    $provider = Resolve-LlmProviderChoice (Read-Host "Provider [1]")
+
+    $defaultModel = Get-LlmDefaultModel $provider
+    $model = Read-Host "Model name [$defaultModel]"
+    if ([string]::IsNullOrWhiteSpace($model)) {
+        $model = $defaultModel
+    }
+
+    $baseUrl = Get-LlmDefaultBaseUrl $provider
+    if ($provider -in @("openai", "codex", "grok")) {
+        $override = Read-Host "API base URL [$baseUrl]"
+        if (-not [string]::IsNullOrWhiteSpace($override)) {
+            $baseUrl = $override
+        }
+    } elseif ($provider -in @("local", "custom")) {
+        $override = Read-Host "OpenAI-compatible base URL [$baseUrl]"
+        if (-not [string]::IsNullOrWhiteSpace($override)) {
+            $baseUrl = $override
+        }
+    }
+
+    $apiKey = ""
+    if ($provider -eq "local") {
+        $apiKey = Read-SecretPlainText "API key/token if required by your local server; otherwise press Enter"
+    } elseif ($provider -eq "custom") {
+        $apiKey = Read-SecretPlainText "API key/token if required by your endpoint; otherwise press Enter"
+    } else {
+        $apiKey = Read-SecretPlainText "API key/token"
+        if ([string]::IsNullOrWhiteSpace($apiKey)) {
+            Write-Host "No API key entered; skipping LLM analytics configuration."
+            return
+        }
+    }
+
+    Set-LlmConfiguration -Provider $provider -Model $model -ApiKey $apiKey -BaseUrl $baseUrl
 }
 
 function Invoke-DockerCompose {
@@ -390,23 +583,7 @@ if (-not $SkipImport) {
     Invoke-DockerComposeOptional @("exec", "-T", "db", "rm", "-f", "/tmp/mma-ai.postgres-custom", "/tmp/odds.postgres-custom")
 }
 
-if ($GeminiApiKey) {
-    Set-EnvValue "GEMINI_API_KEY" $GeminiApiKey
-} elseif (-not $SkipLlmPrompt) {
-    $answer = Read-Host "Set up LLM analytics now with a Gemini/Google API key? [y/N]"
-    if ($answer -match "^(y|yes)$") {
-        $secureKey = Read-Host "Enter Gemini API key" -AsSecureString
-        $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureKey)
-        try {
-            $plainKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
-        } finally {
-            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
-        }
-        if (-not [string]::IsNullOrWhiteSpace($plainKey)) {
-            Set-EnvValue "GEMINI_API_KEY" $plainKey
-        }
-    }
-}
+Configure-LlmAnalytics
 
 if (-not $NoStart) {
     Write-Host "Starting MMA AI web dashboard"

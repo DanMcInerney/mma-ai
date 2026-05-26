@@ -12,7 +12,7 @@ import plotly.express as px
 from sqlalchemy import create_engine, inspect, text
 
 from libs.paths import PROJECT_ROOT, data_file, database_url
-from libs.web.llm import google_api_key, google_api_key_hint
+from libs.web.llm import llm_config, llm_config_hint, llm_generate_text
 
 
 FORBIDDEN_SQL = re.compile(
@@ -63,15 +63,15 @@ def database_context(max_columns_per_table: int = 80) -> dict[str, Any]:
 
 def run_analytics(question: str, sql: str | None = None, max_rows: int = 100) -> dict[str, Any]:
     generated = None
-    api_key = google_api_key()
-    if sql is None and api_key:
-        generated = _ask_gemini(question, api_key)
+    config = llm_config()
+    if sql is None and config and config.is_configured:
+        generated = _ask_llm(question)
         sql = generated.get("sql")
 
     if not sql:
         context = database_context()
         return {
-            "answer": f"{google_api_key_hint()} or provide a read-only SQL query to execute analytics from the dashboard.",
+            "answer": f"{llm_config_hint()} Or provide a read-only SQL query to execute analytics from the dashboard.",
             "schema_context": context,
             "sql": None,
             "rows": [],
@@ -93,11 +93,7 @@ def run_analytics(question: str, sql: str | None = None, max_rows: int = 100) ->
     }
 
 
-def _ask_gemini(question: str, api_key: str) -> dict[str, Any]:
-    import google.generativeai as genai
-
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-pro")
+def _ask_llm(question: str) -> dict[str, Any]:
     prompt = {
         "task": "Return strict JSON with answer, sql, and optional chart keys for read-only MMA analytics.",
         "question": question,
@@ -111,8 +107,7 @@ def _ask_gemini(question: str, api_key: str) -> dict[str, Any]:
             "Return JSON only, with no Markdown fences.",
         ],
     }
-    response = model.generate_content(json.dumps(prompt))
-    return parse_llm_json(response.text)
+    return parse_llm_json(llm_generate_text(prompt, json_mode=True))
 
 
 def parse_llm_json(text_response: str) -> dict[str, Any]:

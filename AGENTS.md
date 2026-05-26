@@ -11,10 +11,11 @@ model training, analytics, and fight prediction.
 - First-time setup: `setup.ps1` on Windows or `setup.sh` on macOS/Linux. The
   scripts download Hugging Face artifacts, restore both Docker Postgres
   databases, copy processed CSVs, extract the starter model, optionally
-  configure `GEMINI_API_KEY`, and start the dashboard.
+  configure `LLM_PROVIDER`/`LLM_MODEL` plus provider API keys, and start the
+  dashboard.
 - Local web command: `uv run mma-web`
 - Docker command: `docker compose up --build`
-- Docker Postgres 18 initializes both `mma-ai` and `odds`; keep
+- Docker Postgres 17 initializes both `mma-ai` and `odds`; keep
   `docker/postgres-init/01-create-odds.sql` mounted in Compose while
   `ODDS_DATABASE_URL` points at the `odds` database.
 - Browser charts use the local `/vendor/plotly.min.js` route backed by the
@@ -31,8 +32,10 @@ model training, analytics, and fight prediction.
     The Evaluations subtab summarizes saved artifacts such as `evals.txt`,
     `model_stats.txt`, `test_predictions.csv`, `all_predictions.csv`, and
     `calibration_curve.png`. The Training Chat box can answer process and feature
-    questions with local defaults/artifact context and optionally Gemini when
-    `GEMINI_API_KEY` or `GOOGLE_API_KEY` is configured.
+    questions with local defaults/artifact context and optionally an LLM when
+    `LLM_PROVIDER` and `LLM_MODEL` are configured. Supported setup choices are
+    OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini, xAI Grok, local
+    OpenAI-compatible servers, and custom OpenAI-compatible endpoints.
   - Predict tab: choose a model, load upcoming events from Wikipedia, run event prediction, and validate manual fighter matchups.
 
 Heavy workflows are intentionally lazy. Importing the web app must not import

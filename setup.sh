@@ -15,6 +15,10 @@ NO_OPEN=0
 FORCE_DOWNLOAD=0
 SKIP_LLM_PROMPT=0
 GEMINI_API_KEY_VALUE=""
+LLM_PROVIDER_VALUE=""
+LLM_MODEL_VALUE=""
+LLM_API_KEY_VALUE=""
+LLM_BASE_URL_VALUE=""
 POSTGRES_PORT=0
 
 while [[ $# -gt 0 ]]; do
@@ -28,6 +32,22 @@ while [[ $# -gt 0 ]]; do
     --gemini-api-key)
       shift
       GEMINI_API_KEY_VALUE="${1:-}"
+      ;;
+    --llm-provider)
+      shift
+      LLM_PROVIDER_VALUE="${1:-}"
+      ;;
+    --llm-model)
+      shift
+      LLM_MODEL_VALUE="${1:-}"
+      ;;
+    --llm-api-key)
+      shift
+      LLM_API_KEY_VALUE="${1:-}"
+      ;;
+    --llm-base-url)
+      shift
+      LLM_BASE_URL_VALUE="${1:-}"
       ;;
     --postgres-port)
       shift
@@ -142,6 +162,172 @@ set_env_value() {
     printf "\n%s=%s\n" "$key" "$value" >> "$tmp"
   fi
   mv "$tmp" "$ROOT/.env"
+}
+
+normalize_llm_provider() {
+  local provider
+  provider="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$provider" in
+    gemini|google) echo "google" ;;
+    openai) echo "openai" ;;
+    codex) echo "codex" ;;
+    anthropic|claude) echo "anthropic" ;;
+    grok|xai) echo "grok" ;;
+    local|ollama|lmstudio|lm-studio) echo "local" ;;
+    custom|openai-compatible) echo "custom" ;;
+    *) echo "$provider" ;;
+  esac
+}
+
+llm_default_model() {
+  case "$1" in
+    google) echo "gemini-1.5-pro" ;;
+    openai) echo "gpt-4o-mini" ;;
+    codex) echo "gpt-5-codex" ;;
+    anthropic) echo "claude-3-5-sonnet-latest" ;;
+    grok) echo "grok-2-latest" ;;
+    local) echo "llama3.1" ;;
+    *) echo "gpt-4o-mini" ;;
+  esac
+}
+
+llm_default_base_url() {
+  case "$1" in
+    openai|codex) echo "https://api.openai.com/v1" ;;
+    grok) echo "https://api.x.ai/v1" ;;
+    local|custom) echo "http://host.docker.internal:11434/v1" ;;
+    *) echo "" ;;
+  esac
+}
+
+set_llm_config() {
+  local provider
+  local model
+  local api_key
+  local base_url
+  provider="$(normalize_llm_provider "${1:-}")"
+  model="${2:-}"
+  api_key="${3:-}"
+  base_url="${4:-}"
+
+  if [[ -z "$provider" ]]; then
+    echo "LLM provider is required when configuring analytics." >&2
+    exit 1
+  fi
+
+  [[ -n "$model" ]] || model="$(llm_default_model "$provider")"
+  [[ -n "$base_url" ]] || base_url="$(llm_default_base_url "$provider")"
+
+  set_env_value "LLM_PROVIDER" "$provider"
+  set_env_value "LLM_MODEL" "$model"
+  set_env_value "LLM_BASE_URL" "$base_url"
+
+  if [[ -n "$api_key" ]]; then
+    set_env_value "LLM_API_KEY" "$api_key"
+    case "$provider" in
+      google)
+        set_env_value "GEMINI_API_KEY" "$api_key"
+        set_env_value "GOOGLE_API_KEY" "$api_key"
+        ;;
+      openai|codex)
+        set_env_value "OPENAI_API_KEY" "$api_key"
+        ;;
+      anthropic)
+        set_env_value "ANTHROPIC_API_KEY" "$api_key"
+        ;;
+      grok)
+        set_env_value "XAI_API_KEY" "$api_key"
+        set_env_value "GROK_API_KEY" "$api_key"
+        ;;
+    esac
+  elif [[ "$provider" == "local" ]]; then
+    set_env_value "LLM_API_KEY" ""
+  fi
+
+  echo "Configured LLM analytics: provider=$provider model=$model"
+}
+
+resolve_llm_provider_choice() {
+  local choice
+  choice="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  case "$choice" in
+    ""|1) echo "openai" ;;
+    2) echo "codex" ;;
+    3) echo "anthropic" ;;
+    4) echo "google" ;;
+    5) echo "grok" ;;
+    6) echo "local" ;;
+    7) echo "custom" ;;
+    *) normalize_llm_provider "$choice" ;;
+  esac
+}
+
+configure_llm_analytics() {
+  if [[ -n "$GEMINI_API_KEY_VALUE" ]]; then
+    set_llm_config "google" "$LLM_MODEL_VALUE" "$GEMINI_API_KEY_VALUE" "$LLM_BASE_URL_VALUE"
+    return
+  fi
+
+  if [[ -n "$LLM_PROVIDER_VALUE" || -n "$LLM_MODEL_VALUE" || -n "$LLM_API_KEY_VALUE" || -n "$LLM_BASE_URL_VALUE" ]]; then
+    local provider="${LLM_PROVIDER_VALUE:-custom}"
+    set_llm_config "$provider" "$LLM_MODEL_VALUE" "$LLM_API_KEY_VALUE" "$LLM_BASE_URL_VALUE"
+    return
+  fi
+
+  [[ "$SKIP_LLM_PROMPT" -eq 0 ]] || return
+
+  local answer
+  read -r -p "Set up LLM analytics and training chat now? [y/N] " answer
+  case "$answer" in
+    y|Y|yes|YES) ;;
+    *) return ;;
+  esac
+
+  echo "Choose your LLM provider:"
+  echo "  1) OpenAI"
+  echo "  2) Codex / OpenAI-compatible"
+  echo "  3) Anthropic Claude"
+  echo "  4) Google Gemini"
+  echo "  5) xAI Grok"
+  echo "  6) Local model (Ollama or LM Studio)"
+  echo "  7) Custom OpenAI-compatible endpoint"
+
+  local choice provider default_model model base_url override api_key
+  read -r -p "Provider [1] " choice
+  provider="$(resolve_llm_provider_choice "$choice")"
+  default_model="$(llm_default_model "$provider")"
+  read -r -p "Model name [$default_model] " model
+  model="${model:-$default_model}"
+
+  base_url="$(llm_default_base_url "$provider")"
+  case "$provider" in
+    openai|codex|grok)
+      read -r -p "API base URL [$base_url] " override
+      base_url="${override:-$base_url}"
+      ;;
+    local|custom)
+      read -r -p "OpenAI-compatible base URL [$base_url] " override
+      base_url="${override:-$base_url}"
+      ;;
+  esac
+
+  api_key=""
+  if [[ "$provider" == "local" ]]; then
+    read -r -s -p "API key/token if required by your local server; otherwise press Enter: " api_key
+    echo
+  elif [[ "$provider" == "custom" ]]; then
+    read -r -s -p "API key/token if required by your endpoint; otherwise press Enter: " api_key
+    echo
+  else
+    read -r -s -p "API key/token: " api_key
+    echo
+    if [[ -z "$api_key" ]]; then
+      echo "No API key entered; skipping LLM analytics configuration."
+      return
+    fi
+  fi
+
+  set_llm_config "$provider" "$model" "$api_key" "$base_url"
 }
 
 wait_for_postgres() {
@@ -310,20 +496,7 @@ if [[ "$SKIP_IMPORT" -eq 0 ]]; then
   docker compose exec -T db rm -f /tmp/mma-ai.postgres-custom /tmp/odds.postgres-custom >/dev/null 2>&1 || true
 fi
 
-if [[ -n "$GEMINI_API_KEY_VALUE" ]]; then
-  set_env_value "GEMINI_API_KEY" "$GEMINI_API_KEY_VALUE"
-elif [[ "$SKIP_LLM_PROMPT" -eq 0 ]]; then
-  read -r -p "Set up LLM analytics now with a Gemini/Google API key? [y/N] " answer
-  case "$answer" in
-    y|Y|yes|YES)
-      read -r -s -p "Enter Gemini API key: " api_key
-      echo
-      if [[ -n "$api_key" ]]; then
-        set_env_value "GEMINI_API_KEY" "$api_key"
-      fi
-      ;;
-  esac
-fi
+configure_llm_analytics
 
 if [[ "$NO_START" -eq 0 ]]; then
   echo "Starting MMA AI web dashboard"

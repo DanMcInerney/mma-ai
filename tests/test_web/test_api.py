@@ -123,7 +123,19 @@ def test_train_evaluations_endpoint_reports_missing_when_no_models(monkeypatch, 
 
 
 def test_train_chat_endpoint_uses_fallback(monkeypatch, tmp_path):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    for name in [
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "XAI_API_KEY",
+        "GROK_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+    ]:
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "models"))
     client = TestClient(create_app())
 

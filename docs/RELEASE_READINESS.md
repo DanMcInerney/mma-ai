@@ -50,8 +50,9 @@ After the web service starts, verify `http://127.0.0.1:8000/api/health` returns
 - Bootstrap scripts: `setup.ps1` and `setup.sh` download the Hugging Face
   dataset artifacts, verify checksums, restore both Postgres dumps into Docker,
   copy processed CSVs, extract the starter model, optionally configure
-  `GEMINI_API_KEY`, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is
-  occupied, start the web service, and open the dashboard.
+  `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for analytics
+  chat, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
+  start the web service, and open the dashboard.
 - Docker stack: `postgres:17` plus the FastAPI web service. Compose initializes
   the auxiliary `odds` database with `docker/postgres-init/01-create-odds.sql`.
   `MMA_AI_COMPOSE_DATABASE_URL` and `MMA_AI_COMPOSE_ODDS_DATABASE_URL` let the
@@ -74,6 +75,13 @@ Public configuration lives in `.env.example`.
 - `MMA_AI_MODELS_DIR`
 - `MMA_AI_PICKS_DIR`
 - `THE_ODDS_API_KEY`
+- `LLM_PROVIDER`
+- `LLM_MODEL`
+- `LLM_API_KEY`
+- `LLM_BASE_URL`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `XAI_API_KEY`
 - `GEMINI_API_KEY`
 - `GOOGLE_API_KEY`
 

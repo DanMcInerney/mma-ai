@@ -30,14 +30,18 @@ Train, and Predict dashboard.
 - Train: expose defaults from `libs/modeling/train.py`; keep advanced knobs in
   collapsed UI controls. The Evaluations subtab reads saved model artifacts and
   charts holdout prediction metrics. The Training Chat box answers process,
-  feature, leakage, and evaluation questions using local context, or Gemini when
-  configured.
+  feature, leakage, and evaluation questions using local context, or the
+  configured LLM provider/model when available.
 - Predict: select a model, load upcoming UFC events from Wikipedia, predict the
   selected event, and run manual fighter matchups through the same inference
   path.
 
-LLM-assisted analytics and training chat use `GEMINI_API_KEY` first and
-`GOOGLE_API_KEY` as a fallback alias.
+LLM-assisted analytics and training chat use `LLM_PROVIDER`, `LLM_MODEL`,
+`LLM_API_KEY`, and optional `LLM_BASE_URL` first. The setup scripts can configure
+OpenAI, Codex/OpenAI-compatible, Anthropic Claude, Google Gemini, xAI Grok, a
+local OpenAI-compatible server such as Ollama or LM Studio, or a custom
+OpenAI-compatible endpoint. Legacy `GEMINI_API_KEY` and `GOOGLE_API_KEY` still
+work as Google aliases.
 
 Background jobs write stdout, stderr, subprocess command lines, and tracebacks
 to `data/logs/jobs`; the dashboard reads full logs from `/api/jobs/{job_id}/log`.
@@ -46,7 +50,7 @@ The setup scripts download from
 `https://huggingface.co/datasets/DanMcInerney/mma-ai`, verify checksums, restore
 the main and odds dumps into Docker Postgres, copy processed CSVs into `data/`,
 extract `ag-20260304_110750-win-extreme` into `AutogluonModels/`, optionally
-write `GEMINI_API_KEY`, and start the dashboard.
+write the LLM provider/model/API key configuration, and start the dashboard.
 
 ## Data And Database
 
@@ -65,6 +69,13 @@ Important environment variables:
 - `MMA_AI_UFCSTATS_DIR`
 - `MMA_AI_MODELS_DIR`
 - `MMA_AI_PICKS_DIR`
+- `LLM_PROVIDER`
+- `LLM_MODEL`
+- `LLM_API_KEY`
+- `LLM_BASE_URL`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `XAI_API_KEY`
 - `GEMINI_API_KEY`
 - `GOOGLE_API_KEY`
 - `THE_ODDS_API_KEY`

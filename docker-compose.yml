@@ -25,6 +25,15 @@ services:
       MMA_AI_UFCSTATS_DIR: /app/data/raw/ufcstats
       MMA_AI_MODELS_DIR: /app/AutogluonModels
       MMA_AI_PICKS_DIR: /app/pics/picks
+      LLM_PROVIDER: ${LLM_PROVIDER:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-90}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      GROK_API_KEY: ${GROK_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       THE_ODDS_API_KEY: ${THE_ODDS_API_KEY:-}

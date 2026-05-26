@@ -9,8 +9,9 @@ with the feature store, training, and prediction system from `mma-ai-db`.
 For a first-time local install with predictions ready, run the bootstrap script.
 It downloads the database dumps, processed prediction/training CSVs, and starter
 AutoGluon model from `https://huggingface.co/datasets/DanMcInerney/mma-ai`,
-imports the dumps into Docker Postgres, optionally records a Gemini/Google API
-key for LLM analytics, starts the dashboard, and opens it in your browser.
+imports the dumps into Docker Postgres, optionally configures your preferred
+analytics LLM provider/model/API key, starts the dashboard, and opens it in your
+browser.
 
 Windows PowerShell:
 
@@ -49,9 +50,26 @@ If you already bootstrapped artifacts and only want to start the app:
 docker compose up --build
 ```
 
-The Compose stack starts PostgreSQL 18 and initializes both the main `mma-ai`
+The Compose stack starts PostgreSQL 17 and initializes both the main `mma-ai`
 database and the auxiliary `odds` database used by odds-related workflows. The
 setup scripts restore the Hugging Face dumps into those databases.
+
+During setup you can choose OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
+Google Gemini, xAI Grok, a local OpenAI-compatible server such as Ollama or LM
+Studio, or a custom endpoint for Data-tab analytics and Train-tab chat. The
+choices are saved in `.env` as `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
+optional `LLM_BASE_URL`. Non-interactive installs can pass values directly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 `
+  -LlmProvider anthropic `
+  -LlmModel claude-3-5-sonnet-latest `
+  -LlmApiKey "<token>"
+```
+
+```bash
+bash setup.sh --llm-provider local --llm-model llama3.1 --llm-base-url http://host.docker.internal:11434/v1
+```
 
 For local development without Docker:
 
@@ -1016,6 +1034,13 @@ Root `.env` example:
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mma-ai
 ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds
 THE_ODDS_API_KEY=
+LLM_PROVIDER=
+LLM_MODEL=
+LLM_API_KEY=
+LLM_BASE_URL=
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+XAI_API_KEY=
 GOOGLE_API_KEY=
 GEMINI_API_KEY=
 ```

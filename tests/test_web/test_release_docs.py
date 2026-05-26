@@ -70,6 +70,9 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
     assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
     assert "MMA_AI_POSTGRES_PORT:-5432" in compose
+    assert "LLM_PROVIDER: ${LLM_PROVIDER:-}" in compose
+    assert "LLM_MODEL: ${LLM_MODEL:-}" in compose
+    assert "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}" in compose
     assert "depends_on" not in compose
     assert "artifacts" in dockerignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
@@ -87,6 +90,13 @@ def test_env_example_lists_public_configuration_without_real_secrets():
         "MMA_AI_MODELS_DIR",
         "MMA_AI_UFCSTATS_DIR",
         "MMA_AI_POSTGRES_PORT",
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "XAI_API_KEY",
         "GEMINI_API_KEY",
         "GOOGLE_API_KEY",
         "THE_ODDS_API_KEY",
