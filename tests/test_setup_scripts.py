@@ -42,6 +42,12 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "http://localhost:" in script
         assert "Validating setup artifact cache" in script
         assert "Required setup artifact cache is incomplete or corrupt" in script
+        assert "feats.txt" in script
+        assert "predictor.pkl" in script
+        assert "ensemble_info.txt" in script
+        assert "final_model" in script
+        assert "window_*" in script
+        assert "Starter model extraction did not create a usable model directory" in script
 
 
 def test_setup_scripts_detect_existing_postgres_host_port():
@@ -59,6 +65,21 @@ def test_setup_scripts_detect_existing_postgres_host_port():
     assert "docker ps --format" in bash
     assert "safe_remove_setup_dir" in bash
     assert "assert_artifact_cache" in bash
+
+
+def test_setup_scripts_validate_starter_model_before_resuming():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    assert "function Test-StarterModelComplete" in powershell
+    assert "Test-StarterModelComplete $modelDir" in powershell
+    assert "Starter model is missing required files; re-extracting" in powershell
+    assert "Remove-Item -LiteralPath $markerPath -Force" in powershell
+
+    assert "starter_model_complete()" in bash
+    assert 'starter_model_complete "$model_dir"' in bash
+    assert "Starter model is missing required files; re-extracting" in bash
+    assert 'rm -f "$marker_path"' in bash
 
 
 def test_setup_scripts_pin_compose_database_and_starter_model():

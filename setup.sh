@@ -369,6 +369,22 @@ wait_for_postgres() {
   return 1
 }
 
+starter_model_complete() {
+  local model_dir="$1"
+  [[ -d "$model_dir" ]] || return 1
+  [[ -f "$model_dir/feats.txt" ]] || return 1
+
+  [[ -f "$model_dir/predictor.pkl" ]] && return 0
+  [[ -f "$model_dir/ensemble_info.txt" ]] || return 1
+  [[ -d "$model_dir/final_model" ]] && return 0
+
+  local window_dir
+  for window_dir in "$model_dir"/window_*; do
+    [[ -d "$window_dir" ]] && return 0
+  done
+  return 1
+}
+
 compose_db_port() {
   docker compose port db 5432 2>/dev/null | awk -F: 'NF { print $NF; exit }'
 }
@@ -475,17 +491,18 @@ ensure_starter_model() {
 
   mkdir -p "$models_root"
 
-  if [[ -d "$model_dir" && -f "$marker_path" ]]; then
+  if starter_model_complete "$model_dir" && [[ -f "$marker_path" ]]; then
     echo "Using existing starter model $MODEL_NAME"
     return
   fi
 
   if [[ -d "$model_dir" ]]; then
-    echo "Starter model extraction was incomplete; re-extracting $MODEL_NAME"
+    echo "Starter model is missing required files; re-extracting $MODEL_NAME"
     safe_remove_setup_dir "$model_dir" "$models_root"
   else
     echo "Extracting starter model $MODEL_NAME"
   fi
+  rm -f "$marker_path"
 
   safe_remove_setup_dir "$extract_dir" "$models_root"
   mkdir -p "$extract_dir"
@@ -503,6 +520,13 @@ ensure_starter_model() {
     shopt -s dotglob nullglob
     mv "$extract_dir"/* "$model_dir"
     shopt -u dotglob nullglob
+  fi
+
+  if ! starter_model_complete "$model_dir"; then
+    safe_remove_setup_dir "$model_dir" "$models_root"
+    safe_remove_setup_dir "$extract_dir" "$models_root"
+    echo "Starter model extraction did not create a usable model directory." >&2
+    exit 1
   fi
 
   touch "$marker_path"

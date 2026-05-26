@@ -544,6 +544,32 @@ function Wait-ForPostgres {
     throw "Postgres did not become ready in time."
 }
 
+function Test-StarterModelComplete {
+    param([string]$ModelDir)
+
+    if (-not (Test-Path -LiteralPath $ModelDir -PathType Container)) {
+        return $false
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $ModelDir "feats.txt") -PathType Leaf)) {
+        return $false
+    }
+
+    if (Test-Path -LiteralPath (Join-Path $ModelDir "predictor.pkl") -PathType Leaf) {
+        return $true
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $ModelDir "ensemble_info.txt") -PathType Leaf)) {
+        return $false
+    }
+    if (Test-Path -LiteralPath (Join-Path $ModelDir "final_model") -PathType Container) {
+        return $true
+    }
+    $windowDirs = @(Get-ChildItem -LiteralPath $ModelDir -Directory -Filter "window_*" -ErrorAction SilentlyContinue)
+    if ($windowDirs.Count -gt 0) {
+        return $true
+    }
+    return $false
+}
+
 function Start-PostgresForImport {
     Write-Host "Starting Docker Postgres"
     try {
@@ -565,16 +591,19 @@ function Ensure-StarterModel {
 
     New-Item -ItemType Directory -Force $modelsRoot | Out-Null
 
-    if ((Test-Path -LiteralPath $modelDir) -and (Test-Path -LiteralPath $markerPath)) {
+    if ((Test-StarterModelComplete $modelDir) -and (Test-Path -LiteralPath $markerPath -PathType Leaf)) {
         Write-Host "Using existing starter model $ModelName"
         return
     }
 
     if (Test-Path -LiteralPath $modelDir) {
-        Write-Host "Starter model extraction was incomplete; re-extracting $ModelName"
+        Write-Host "Starter model is missing required files; re-extracting $ModelName"
         Remove-SetupDirectory $modelDir $modelsRoot
     } else {
         Write-Host "Extracting starter model $ModelName"
+    }
+    if (Test-Path -LiteralPath $markerPath) {
+        Remove-Item -LiteralPath $markerPath -Force
     }
 
     Remove-SetupDirectory $extractDir $modelsRoot
@@ -592,6 +621,12 @@ function Ensure-StarterModel {
     } else {
         New-Item -ItemType Directory -Force $modelDir | Out-Null
         Get-ChildItem -LiteralPath $extractDir -Force | Move-Item -Destination $modelDir
+    }
+
+    if (-not (Test-StarterModelComplete $modelDir)) {
+        Remove-SetupDirectory $modelDir $modelsRoot
+        Remove-SetupDirectory $extractDir $modelsRoot
+        throw "Starter model extraction did not create a usable model directory."
     }
 
     New-Item -ItemType File -Force $markerPath | Out-Null
