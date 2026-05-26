@@ -23,6 +23,7 @@ from libs.feature_store.features import vSeven_testing2, vSeven_testing2_with_f1
 from libs.modeling.data_preparation import DataPreparation
 from libs.modeling.data_utils import balance_dataset, _swap_fighter_roles, filter_fights, load_training_data
 from libs.modeling.model_utils import ModelUtils
+from libs.modeling.portable_artifacts import load_joblib_artifact, load_tabular_predictor
 from libs.paths import data_file
 
 
@@ -245,9 +246,8 @@ class EnsemblePredictor:
         if scaler_path is None or not os.path.exists(scaler_path):
             return data.copy()
         
-        import joblib
         try:
-            scaler = joblib.load(scaler_path)
+            scaler = load_joblib_artifact(scaler_path)
             
             # Identify columns to exclude from scaling
             date_cols = ['event_date', 'fight_id', 'fighter_name', 'opp_name']
@@ -487,7 +487,8 @@ class EnsemblePredictor:
         # Walk-forward format: load windows + final_model
         window_dirs.sort(key=lambda x: x[0])
         for window_num, window_path in window_dirs:
-            predictor = TabularPredictor.load(
+            predictor = load_tabular_predictor(
+                TabularPredictor,
                 window_path,
                 require_version_match=False,
                 require_py_version_match=False,
@@ -498,7 +499,8 @@ class EnsemblePredictor:
             scaler_paths.append(scaler_path if os.path.exists(scaler_path) else None)
         
         if final_model_dir:
-            predictor = TabularPredictor.load(
+            predictor = load_tabular_predictor(
+                TabularPredictor,
                 final_model_dir,
                 require_version_match=False,
                 require_py_version_match=False,

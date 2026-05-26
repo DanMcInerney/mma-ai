@@ -2,7 +2,6 @@ from libs.upcoming_fights import UpcomingFights
 import pandas as pd
 from libs.feature_store.create_inference_data import CreateInferenceData  # Keep for backward compatibility
 from libs.feature_store.inference import InferenceDataBuilder, filter_features_for_model
-import joblib
 from libs.visualization import FightVisualizer
 from libs.shap_visualization import ShapVisualizer
 from itertools import combinations
@@ -19,6 +18,12 @@ import urllib3
 import warnings
 from libs.bfo_scraper import BFOScraper
 from libs.modeling.discovery import is_loadable_prediction_model_dir
+from libs.modeling.portable_artifacts import (
+    install_pathlib_pickle_compatibility,
+    load_joblib_artifact,
+    load_tabular_predictor,
+    pathlib_pickle_compatibility,
+)
 from libs.paths import data_file, models_dir, picks_dir
 
 # Disable SSL warnings
@@ -967,7 +972,6 @@ def load_model_and_calibrator(model_path, use_calibrated=True):
     :return: Tuple of (predictor, calibrator or None)
     """
     from autogluon.tabular import TabularPredictor
-    import joblib
     import os
     
     ensemble_info_path = os.path.join(model_path, 'ensemble_info.txt')
@@ -989,7 +993,8 @@ def load_model_and_calibrator(model_path, use_calibrated=True):
     else:
         # Old single-model format
         print(f"Detected SINGLE model at {model_path}")
-        predictor = TabularPredictor.load(
+        predictor = load_tabular_predictor(
+            TabularPredictor,
             model_path,
             require_version_match=False,
             require_py_version_match=False,
@@ -1001,7 +1006,7 @@ def load_model_and_calibrator(model_path, use_calibrated=True):
         calibrator_path = os.path.join(model_path, 'calibrator.pkl')
         if os.path.exists(calibrator_path):
             try:
-                calibrator = joblib.load(calibrator_path)
+                calibrator = load_joblib_artifact(calibrator_path)
                 print(f"[ok] Loaded calibrator from {calibrator_path}")
             except Exception as e:
                 print(f"Warning: Could not load calibrator from {calibrator_path}: {e}")
@@ -1032,12 +1037,14 @@ def get_predictions(model, calibrator, scaled_X_df, use_calibrated=None):
     
     # Get original predictions - handle models trained with sample_weight
     try:
-        y_pred_proba = model.predict_proba(scaled_X_df)
+        with pathlib_pickle_compatibility():
+            y_pred_proba = model.predict_proba(scaled_X_df)
     except KeyError as e:
         if 'sample_weight' in str(e):
             scaled_X_df_with_weights = scaled_X_df.copy()
             scaled_X_df_with_weights['sample_weight'] = 1.0
-            y_pred_proba = model.predict_proba(scaled_X_df_with_weights)
+            with pathlib_pickle_compatibility():
+                y_pred_proba = model.predict_proba(scaled_X_df_with_weights)
             print(f"Added sample_weight column for prediction (model was trained with recency weights)")
         else:
             raise e
@@ -1086,7 +1093,7 @@ def get_predictions(model, calibrator, scaled_X_df, use_calibrated=None):
 def load_model(model_name):
     """Load an AutoGluon model from the specified path (deprecated - use load_model_and_calibrator)"""
     from autogluon.tabular import TabularPredictor
-    predictor = TabularPredictor.load(model_name)
+    predictor = load_tabular_predictor(TabularPredictor, model_name)
     return predictor
 
 def create_conf_parlays(results):
@@ -1247,6 +1254,23 @@ def has_positive_ev(ai_odds_str, bookie_odds_str):
     return ev > 0
 
 
+def maybe_take_screenshots(output_dir, enabled=False):
+    """Optionally create PNG screenshots without failing an otherwise successful prediction."""
+    if not enabled:
+        print("Skipping screenshots. Use --screenshots to create PNG captures from generated HTML visualizations.")
+        return False
+
+    print("\nTaking screenshots of visualizations...")
+    try:
+        take_screenshots(output_dir)
+    except Exception as exc:
+        print(f"Warning: Screenshot generation failed: {exc}. Prediction artifacts were still written.")
+        return False
+
+    print(f"Screenshots saved to: {os.path.join(output_dir, 'screenshots')}")
+    return True
+
+
 def latest_model_path(model_type):
     candidates = [
         path for path in models_dir().glob(f"ag-*-{model_type}-*")
@@ -1278,10 +1302,15 @@ def parse_args():
     parser.add_argument("--no-shap", action="store_true", help="Skip SHAP visualizations.")
     parser.add_argument("--use-calibrated", action="store_true", help="Use calibrated predictions when calibrator.pkl exists.")
     parser.add_argument("--output-dir", default=None, help="Directory for prediction images and CSVs.")
+    parser.add_argument("--screenshots", action="store_true", help="Create PNG screenshots from generated HTML visualizations when Chrome is available.")
     return parser.parse_args()
 
 
 def cli():
+    compat_class = install_pathlib_pickle_compatibility()
+    if compat_class:
+        print(f"[runtime] Enabled cross-OS pathlib pickle compatibility for {compat_class} artifacts")
+
     args = parse_args()
     # Which event to predict
     upcoming_number = args.upcoming_number
@@ -1344,7 +1373,7 @@ def cli():
         # Single model: load scaler from root directory
         scaler_path = os.path.join(model_path, 'scaler.pkl')
         if os.path.exists(scaler_path):
-            scaler = joblib.load(scaler_path)
+            scaler = load_joblib_artifact(scaler_path)
             print(f"Loaded scaler from root directory (single model)")
         else:
             raise FileNotFoundError(f"scaler.pkl not found in {model_path}")
@@ -1742,10 +1771,7 @@ def cli():
     #conf_parlays = create_conf_parlays(results)
     #kelly_parlays = create_parlays(results)
     
-    # Take screenshots of all visualizations
-    print("\nTaking screenshots of visualizations...")
-    take_screenshots(ss_output_dir)
-    print(f"Screenshots saved to: {os.path.join(ss_output_dir, 'screenshots')}")
+    maybe_take_screenshots(ss_output_dir, enabled=args.screenshots)
 
 
 if __name__ == "__main__":
