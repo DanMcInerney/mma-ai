@@ -4,6 +4,7 @@
 .env.local
 .webapp*.log
 .pytest_cache
+tests
 .venv
 .python-version
 __pycache__

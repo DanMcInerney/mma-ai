@@ -115,6 +115,12 @@ def check_runtime_dependencies(container_name: str) -> None:
     print(f"[docker-smoke] {result.stdout.strip()}")
 
 
+def check_runtime_source_tree(container_name: str) -> None:
+    """Verify dev-only source trees are not copied into the runtime image."""
+    result = _docker_exec(container_name, ["sh", "-lc", "test ! -e /app/tests"], timeout=10)
+    print("[docker-smoke] runtime source tree ok: tests absent")
+
+
 def check_dashboard_assets(container_name: str) -> None:
     """Verify the runtime image serves the packaged dashboard and local JS assets."""
     checks = [
@@ -142,6 +148,7 @@ def run_smoke(image: str = DEFAULT_IMAGE, timeout_seconds: int = 90, container_n
         wait_for_health(name, timeout_seconds)
         check_dashboard_assets(name)
         check_runtime_dependencies(name)
+        check_runtime_source_tree(name)
         print("[docker-smoke] passed")
     finally:
         stopped = _run_allow_failure(["docker", "stop", name], timeout=30)
