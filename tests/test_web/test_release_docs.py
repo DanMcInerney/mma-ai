@@ -54,6 +54,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "-ForceImport" in readme
     assert "--force-import" in readme
     assert "docker compose logs --tail 120 web db" in readme
+    assert "Dashboard jobs run one at a time" in readme
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
     dockerfile = read_text("Dockerfile")
@@ -105,6 +106,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "`Setup incomplete`" in release_notes
     assert "features.fight_mapping" in release_notes
     assert "bestfightodds.bfo" in release_notes
+    assert "Dashboard jobs are serialized" in release_notes
     assert "docker compose up --build db web" in release_notes
     assert "docker compose up --build web" in release_notes
     assert "uv run mma-docker-smoke" in release_notes

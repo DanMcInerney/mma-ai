@@ -75,6 +75,7 @@ class JobManager:
     def __init__(self, log_dir_factory: Callable[[], Path] | None = None, log_tail_chars: int = 20000) -> None:
         self._jobs: dict[str, JobRecord] = {}
         self._lock = Lock()
+        self._run_lock = Lock()
         self._log_dir_factory = log_dir_factory
         self._log_tail_chars = log_tail_chars
 
@@ -129,21 +130,22 @@ class JobManager:
             job.updated_at = utcnow()
 
     def _run(self, job_id: str, func: Callable[[], dict[str, Any] | None]) -> None:
-        self._patch(job_id, state=JobState.RUNNING, message="Running")
-        self.append_log(job_id, f"[{utcnow().isoformat()}] started\n")
-        stdout = JobLogWriter(self, job_id, "stdout")
-        stderr = JobLogWriter(self, job_id, "stderr")
-        try:
-            with redirect_stdout(stdout), redirect_stderr(stderr):
-                result = func() or {}
-        except Exception as exc:  # pragma: no cover - exercised through API behavior
-            self.append_log(job_id, traceback.format_exc(), stream_name="stderr")
-            self._patch(job_id, state=JobState.FAILED, message="Failed", error=str(exc))
-            self.append_log(job_id, f"[{utcnow().isoformat()}] failed: {exc}\n")
-            return
+        with self._run_lock:
+            self._patch(job_id, state=JobState.RUNNING, message="Running")
+            self.append_log(job_id, f"[{utcnow().isoformat()}] started\n")
+            stdout = JobLogWriter(self, job_id, "stdout")
+            stderr = JobLogWriter(self, job_id, "stderr")
+            try:
+                with redirect_stdout(stdout), redirect_stderr(stderr):
+                    result = func() or {}
+            except Exception as exc:  # pragma: no cover - exercised through API behavior
+                self.append_log(job_id, traceback.format_exc(), stream_name="stderr")
+                self._patch(job_id, state=JobState.FAILED, message="Failed", error=str(exc))
+                self.append_log(job_id, f"[{utcnow().isoformat()}] failed: {exc}\n")
+                return
 
-        self._patch(job_id, state=JobState.SUCCEEDED, message="Succeeded", result=result)
-        self.append_log(job_id, f"[{utcnow().isoformat()}] succeeded\n")
+            self._patch(job_id, state=JobState.SUCCEEDED, message="Succeeded", result=result)
+            self.append_log(job_id, f"[{utcnow().isoformat()}] succeeded\n")
 
     def _new_log_path(self, job_id: str) -> str | None:
         if self._log_dir_factory is None:

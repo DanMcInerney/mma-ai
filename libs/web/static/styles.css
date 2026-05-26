@@ -432,13 +432,20 @@ summary {
   min-height: 320px;
 }
 
-.prediction-card {
+.prediction-output {
   margin-top: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
   min-height: 180px;
-  padding: 16px;
-  background: #f9fafb;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+.prediction-output:empty {
+  display: none;
+}
+
+.prediction-output .prediction-set {
+  color: var(--ink);
+  white-space: normal;
 }
 
 .event-preview {

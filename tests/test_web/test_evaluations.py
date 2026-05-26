@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from libs.web.evaluations import cli, summarize_model_evaluation, write_model_evaluation_report
+from scripts.evaluate_model import main as evaluate_model_main
 
 
 def write_model_artifacts(model_dir: Path):
@@ -175,3 +176,14 @@ def test_evaluation_cli_can_write_markdown_and_text_output(monkeypatch, tmp_path
     assert "Best-Practice Checks" in capsys.readouterr().out
     assert (model_dir / "dashboard_evaluation_summary.json").exists()
     assert (model_dir / "dashboard_evaluation.md").exists()
+
+
+def test_evaluate_model_script_wrapper_matches_console_command(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "models"))
+    model_dir = tmp_path / "models" / "ag-script-wrapper"
+    write_model_artifacts(model_dir)
+
+    exit_code = evaluate_model_main(["--model-path", str(model_dir), "--format", "text"])
+
+    assert exit_code == 0
+    assert "Model Evaluation Report: ag-script-wrapper" in capsys.readouterr().out

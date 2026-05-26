@@ -203,7 +203,8 @@ run the Data and Train tabs to create them.
 
 Each long-running Data, Train, or Predict job streams stdout/stderr into a debug
 log under `data/logs/jobs` and exposes it through the dashboard and
-`/api/jobs/{job_id}/log`.
+`/api/jobs/{job_id}/log`. Dashboard jobs run one at a time so model/data writes
+and captured debug logs remain deterministic.
 
 ## Commands
 
@@ -212,6 +213,7 @@ uv run mma-scrape-ufcstats
 uv run mma-rebuild-db
 uv run mma-train
 uv run mma-evaluate --write-report --format text
+uv run python scripts/evaluate_model.py --write-report --format text
 uv run mma-predict
 uv run pytest
 docker compose build web

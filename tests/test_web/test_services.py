@@ -568,6 +568,31 @@ def test_list_upcoming_events_preserves_prediction_cli_numbers_after_date_sort(m
     assert [event["upcoming_number"] for event in result["events"]] == [2, 1, 3]
 
 
+def test_list_upcoming_events_keeps_unmatched_event_names_visible(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_upcoming_event_links(self):
+            return ["https://example.test/UFC_Empty_Event"]
+
+        def get_upcoming_cards(self, links):
+            return {}
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    result = list_upcoming_events(str(prediction_csv), limit=1)
+
+    assert result["events"][0]["name"] == "UFC Empty Event"
+    assert result["events"][0]["fights"] == []
+    assert result["events"][0]["upcoming_number"] == 1
+    assert "no matched fights found" in result["warning"]
+
+
 def test_list_upcoming_events_reports_missing_prediction_csv(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     result = list_upcoming_events(str(tmp_path / "missing.csv"))

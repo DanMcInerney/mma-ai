@@ -18,6 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from threading import Thread
 from typing import Any
+from urllib.parse import unquote
 
 import pandas as pd
 
@@ -433,6 +434,11 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 20
             event_map = scraper.get_upcoming_cards([event_link])
         except Exception as exc:
             warnings.append(f"event {upcoming_number}: {exc}")
+            events.append(_empty_upcoming_event(event_link, upcoming_number, str(exc)))
+            continue
+        if not event_map:
+            warnings.append(f"event {upcoming_number}: no matched fights found")
+            events.append(_empty_upcoming_event(event_link, upcoming_number, "No matched fights found."))
             continue
         for event_name, fights in event_map.items():
             events.append(
@@ -452,6 +458,22 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 20
 
     events.sort(key=_upcoming_event_sort_key)
     return {"events": events, "warning": "; ".join(warnings) if warnings else None}
+
+
+def _empty_upcoming_event(event_link: str, upcoming_number: int, warning: str) -> dict[str, Any]:
+    return {
+        "upcoming_number": upcoming_number,
+        "name": _event_name_from_url(event_link),
+        "fights": [],
+        "warning": warning,
+        "source_url": event_link,
+    }
+
+
+def _event_name_from_url(event_link: str) -> str:
+    slug = event_link.rstrip("/").rsplit("/", 1)[-1]
+    name = unquote(slug).replace("_", " ").strip()
+    return name or f"Upcoming UFC event {event_link}"
 
 
 def _upcoming_event_sort_key(event: dict[str, Any]) -> tuple[datetime, int]:

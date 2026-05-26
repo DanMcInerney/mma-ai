@@ -23,6 +23,9 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert "Fighter2_Market_Prob" in app_js
     assert "Fighter1_Odds" in app_js
     assert "Fighter2_Odds" in app_js
+    assert 'id="events-output" class="prediction-output"' in html
+    assert 'id="prediction-output" class="prediction-output"' in html
+    assert ".prediction-output" in styles
     assert ".edge-positive" in styles
     assert ".value-strip" in styles
 

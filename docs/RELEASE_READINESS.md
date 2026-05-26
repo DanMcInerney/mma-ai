@@ -56,7 +56,8 @@ badge.
   advanced knobs collapsed, and summarize saved model evaluation artifacts with
   metrics and charts. Completed dashboard training jobs write
   `dashboard_evaluation_summary.json` and `dashboard_evaluation.md` into the
-  model directory; `mma-evaluate --write-report --format text` emits the same
+  model directory; `mma-evaluate --write-report --format text` and
+  `python scripts/evaluate_model.py --write-report --format text` emit the same
   report artifacts for automation and local inspection.
 - Predict tab: list models, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, run manual
@@ -66,7 +67,9 @@ badge.
   input.
 - Job logs: Data, Train, and Predict jobs stream and persist stdout, stderr,
   command lines, exit codes, and tracebacks under `data/logs/jobs` and expose them at
-  `/api/jobs/{job_id}/log`.
+  `/api/jobs/{job_id}/log`. Dashboard jobs are serialized so long-running data,
+  training, and prediction workflows do not interleave process-wide stdout/stderr
+  captures or write shared artifacts at the same time.
 - Bootstrap scripts: `setup.ps1` and `setup.sh` download the Hugging Face
   dataset artifacts, verify checksums, resume complete database imports by
   checking `features.fight_mapping` and `bestfightodds.bfo`, restore both
