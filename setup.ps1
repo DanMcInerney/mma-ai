@@ -254,7 +254,7 @@ function Set-LlmConfiguration {
                 Set-EnvValue "GROK_API_KEY" $ApiKey
             }
         }
-    } elseif ($normalizedProvider -eq "local") {
+    } elseif ($normalizedProvider -in @("local", "custom")) {
         Set-EnvValue "LLM_API_KEY" ""
     }
 

@@ -270,7 +270,7 @@ set_llm_config() {
         set_env_value "GROK_API_KEY" "$api_key"
         ;;
     esac
-  elif [[ "$provider" == "local" ]]; then
+  elif [[ "$provider" == "local" || "$provider" == "custom" ]]; then
     set_env_value "LLM_API_KEY" ""
   fi
 

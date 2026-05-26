@@ -101,6 +101,16 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "Database import finished but required tables were not found." in script
 
 
+def test_setup_scripts_clear_stale_llm_key_for_keyless_custom_and_local_endpoints():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    assert '$normalizedProvider -in @("local", "custom")' in powershell
+    assert 'Set-EnvValue "LLM_API_KEY" ""' in powershell
+    assert '[[ "$provider" == "local" || "$provider" == "custom" ]]' in bash
+    assert 'set_env_value "LLM_API_KEY" ""' in bash
+
+
 def test_setup_scripts_detect_existing_postgres_host_port():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")
