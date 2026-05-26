@@ -93,6 +93,9 @@ database and the auxiliary `odds` database used by odds-related workflows. The
 setup scripts restore the Hugging Face dumps into those databases. The web
 service waits for the PostgreSQL healthcheck before starting, so first-run
 readiness checks do not race a cold database container.
+Compose also maps `host.docker.internal` to Docker's host gateway, so Linux,
+macOS, and Windows users can point the web container at host-side services such
+as a local Postgres instance, Ollama, or LM Studio with the same URL shape.
 
 During setup you can choose OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
 Google Gemini, xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI,

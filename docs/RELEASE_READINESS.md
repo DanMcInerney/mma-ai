@@ -92,7 +92,10 @@ badge.
   `MMA_AI_COMPOSE_DATABASE_URL` and `MMA_AI_COMPOSE_ODDS_DATABASE_URL` let the
   Docker web service use an existing host PostgreSQL instance instead; in that
   mode, start only `docker compose up --no-deps --build web` so the bundled
-  database service does not claim port 5432.
+  database service does not claim port 5432. The web service also maps
+  `host.docker.internal:host-gateway` so Linux users can reach host-side
+  Postgres and local OpenAI-compatible LLM servers through the same URLs
+  documented for Docker Desktop.
 - Local static assets: Plotly is served from `/vendor/plotly.min.js`; dashboard
   icons are served from `/static/icons.js`.
 

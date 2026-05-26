@@ -124,6 +124,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "docker compose up --build db web" in release_notes
     assert "docker compose up --no-deps --build web" in readme
     assert "docker compose up --no-deps --build web" in release_notes
+    assert "host.docker.internal" in readme
+    assert "host-gateway" in release_notes
     assert "uv run mma-docker-smoke" in release_notes
     assert "uv run pytest -q" in release_notes
     assert "uv run mma-release-audit" in release_notes
@@ -138,6 +140,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "./docker/postgres-init:/docker-entrypoint-initdb.d:ro" in compose
     assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
     assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
+    assert "host.docker.internal:host-gateway" in compose
     assert "MMA_AI_POSTGRES_PORT:-5432" in compose
     assert "LLM_PROVIDER: ${LLM_PROVIDER:-}" in compose
     assert "LLM_MODEL: ${LLM_MODEL:-}" in compose
@@ -206,6 +209,7 @@ def test_env_example_lists_public_configuration_without_real_secrets():
     assert "DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mma-ai" in env_example
     assert "ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds" in env_example
     assert "host.docker.internal" in env_example
+    assert "host.docker.internal to the host gateway" in env_example
     assert "secret" not in env_example.lower()
 
 
