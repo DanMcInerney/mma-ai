@@ -632,9 +632,11 @@ def _can_use_training_script_defaults(request: TrainingRequest) -> bool:
     return all(advanced_matches.values())
 
 
-def _safe_evaluation(model_path: str) -> dict[str, Any] | None:
+def _safe_evaluation(model_path: str) -> dict[str, Any]:
     if not model_path:
-        return None
+        message = "Training finished but no model path was returned, so evaluation artifacts could not be located."
+        print(f"[training] evaluation unavailable: {message}")
+        return {"available": False, "message": message, "model_path": None}
     try:
         summary = summarize_model_evaluation(model_path)
         report_paths = write_model_evaluation_report(summary)

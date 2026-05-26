@@ -1124,6 +1124,24 @@ def test_run_training_logs_evaluation_summary_failures(monkeypatch, tmp_path, ca
     assert "[training] evaluation summary failed: RuntimeError: missing evals.txt" in captured.out
 
 
+def test_run_training_returns_structured_unavailable_evaluation_when_model_path_missing(monkeypatch, capsys):
+    def fake_main(**_kwargs):
+        return SimpleNamespace()
+
+    fake_train_module = ModuleType("libs.modeling.train")
+    fake_train_module.main = fake_main
+    monkeypatch.setitem(sys.modules, "libs.modeling.train", fake_train_module)
+
+    result = run_training_impl(TrainingRequest())
+
+    captured = capsys.readouterr()
+    assert result["model_path"] == ""
+    assert result["evaluation"]["available"] is False
+    assert result["evaluation"]["model_path"] is None
+    assert "no model path" in result["evaluation"]["message"].lower()
+    assert "[training] evaluation unavailable:" in captured.out
+
+
 def test_list_fighters_rejects_csv_outside_data_dir(monkeypatch, tmp_path):
     data_root = tmp_path / "data"
     outside = tmp_path / "outside" / "prediction_data.csv"
