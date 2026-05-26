@@ -49,6 +49,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "top bar shows a `Ready` badge" in readme
     assert "--skip-download" in readme
     assert "--force-download" in readme
+    assert "-ForceImport" in readme
+    assert "--force-import" in readme
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
     dockerfile = read_text("Dockerfile")
@@ -90,6 +92,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Docker builds ignore `.env`" in release_notes
     assert "The dashboard top bar mirrors this state" in release_notes
     assert "`Setup incomplete`" in release_notes
+    assert "features.fight_mapping" in release_notes
+    assert "bestfightodds.bfo" in release_notes
     assert "docker compose up --build db web" in release_notes
     assert "docker compose up --build web" in release_notes
     assert "uv run mma-docker-smoke" in release_notes
@@ -118,6 +122,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
 
     assert "matching local `DATABASE_URL` and" in huggingface_docs
     assert "Local `uv run ...` commands load this" in huggingface_docs
+    assert "--force-import" in huggingface_docs
     assert "processed/training_data_dec.csv" in huggingface_docs
     assert "postgresql://postgres:postgres@localhost:5432/mma-ai" in huggingface_docs
     assert "postgresql://postgres:postgres@localhost:5432/odds" in huggingface_docs

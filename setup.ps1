@@ -1,6 +1,7 @@
 param(
     [switch]$SkipDownload,
     [switch]$SkipImport,
+    [switch]$ForceImport,
     [switch]$NoStart,
     [switch]$NoOpen,
     [switch]$ForceDownload,
@@ -544,6 +545,46 @@ function Wait-ForPostgres {
     throw "Postgres did not become ready in time."
 }
 
+function Get-DatabaseImportMarker {
+    return (Join-Path $ArtifactsRoot ".db-import-complete")
+}
+
+function Test-DatabaseTableExists {
+    param([string]$Database, [string]$QualifiedTable)
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $query = "SELECT to_regclass('$QualifiedTable') IS NOT NULL;"
+        $output = & docker compose exec -T db psql -U postgres -d $Database -tAc $query 2>$null
+        $exitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+
+    $normalized = ((@($output) -join "") -replace "\s+", "")
+    return $exitCode -eq 0 -and $normalized -eq "t"
+}
+
+function Test-DatabaseImportComplete {
+    return (
+        (Test-DatabaseTableExists -Database "mma-ai" -QualifiedTable "features.fight_mapping") -and
+        (Test-DatabaseTableExists -Database "odds" -QualifiedTable "bestfightodds.bfo")
+    )
+}
+
+function Mark-DatabaseImportComplete {
+    New-Item -ItemType Directory -Force $ArtifactsRoot | Out-Null
+    New-Item -ItemType File -Force (Get-DatabaseImportMarker) | Out-Null
+}
+
+function Clear-DatabaseImportMarker {
+    $markerPath = Get-DatabaseImportMarker
+    if (Test-Path -LiteralPath $markerPath) {
+        Remove-Item -LiteralPath $markerPath -Force
+    }
+}
+
 function Format-WebReadinessDetail {
     param([string]$Detail)
 
@@ -741,20 +782,32 @@ Ensure-StarterModel
 if (-not $SkipImport) {
     Start-PostgresForImport
 
-    Invoke-DockerComposeOptional @("exec", "-T", "db", "createdb", "-U", "postgres", "mma-ai")
-    Invoke-DockerComposeOptional @("exec", "-T", "db", "createdb", "-U", "postgres", "odds")
+    if (-not $ForceImport -and (Test-DatabaseImportComplete)) {
+        Write-Host "Using existing imported Postgres databases"
+        Mark-DatabaseImportComplete
+    } else {
+        Clear-DatabaseImportMarker
 
-    Write-Host "Copying database dumps into the Postgres container"
-    Invoke-DockerCompose @("cp", (Join-ArtifactPath "dumps/mma-ai.postgres-custom"), "db:/tmp/mma-ai.postgres-custom")
-    Invoke-DockerCompose @("cp", (Join-ArtifactPath "dumps/odds.postgres-custom"), "db:/tmp/odds.postgres-custom")
+        Invoke-DockerComposeOptional @("exec", "-T", "db", "createdb", "-U", "postgres", "mma-ai")
+        Invoke-DockerComposeOptional @("exec", "-T", "db", "createdb", "-U", "postgres", "odds")
 
-    Write-Host "Restoring mma-ai database"
-    Invoke-DockerCompose @("exec", "-T", "db", "pg_restore", "--clean", "--if-exists", "--no-owner", "--jobs", "4", "-U", "postgres", "-d", "mma-ai", "/tmp/mma-ai.postgres-custom")
+        Write-Host "Copying database dumps into the Postgres container"
+        Invoke-DockerCompose @("cp", (Join-ArtifactPath "dumps/mma-ai.postgres-custom"), "db:/tmp/mma-ai.postgres-custom")
+        Invoke-DockerCompose @("cp", (Join-ArtifactPath "dumps/odds.postgres-custom"), "db:/tmp/odds.postgres-custom")
 
-    Write-Host "Restoring odds database"
-    Invoke-DockerCompose @("exec", "-T", "db", "pg_restore", "--clean", "--if-exists", "--no-owner", "--jobs", "4", "-U", "postgres", "-d", "odds", "/tmp/odds.postgres-custom")
+        Write-Host "Restoring mma-ai database"
+        Invoke-DockerCompose @("exec", "-T", "db", "pg_restore", "--clean", "--if-exists", "--no-owner", "--jobs", "4", "-U", "postgres", "-d", "mma-ai", "/tmp/mma-ai.postgres-custom")
 
-    Invoke-DockerComposeOptional @("exec", "-T", "db", "rm", "-f", "/tmp/mma-ai.postgres-custom", "/tmp/odds.postgres-custom")
+        Write-Host "Restoring odds database"
+        Invoke-DockerCompose @("exec", "-T", "db", "pg_restore", "--clean", "--if-exists", "--no-owner", "--jobs", "4", "-U", "postgres", "-d", "odds", "/tmp/odds.postgres-custom")
+
+        Invoke-DockerComposeOptional @("exec", "-T", "db", "rm", "-f", "/tmp/mma-ai.postgres-custom", "/tmp/odds.postgres-custom")
+
+        if (-not (Test-DatabaseImportComplete)) {
+            throw "Database import finished but required tables were not found."
+        }
+        Mark-DatabaseImportComplete
+    }
 }
 
 Configure-LlmAnalytics

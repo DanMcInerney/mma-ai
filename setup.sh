@@ -10,6 +10,7 @@ MODEL_NAME="ag-20260304_110750-win-extreme"
 
 SKIP_DOWNLOAD=0
 SKIP_IMPORT=0
+FORCE_IMPORT=0
 NO_START=0
 NO_OPEN=0
 FORCE_DOWNLOAD=0
@@ -26,6 +27,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-download) SKIP_DOWNLOAD=1 ;;
     --skip-import) SKIP_IMPORT=1 ;;
+    --force-import) FORCE_IMPORT=1 ;;
     --no-start) NO_START=1 ;;
     --no-open) NO_OPEN=1 ;;
     --force-download) FORCE_DOWNLOAD=1 ;;
@@ -369,6 +371,32 @@ wait_for_postgres() {
   return 1
 }
 
+database_import_marker() {
+  printf '%s/.db-import-complete' "$ARTIFACTS_ROOT"
+}
+
+database_table_exists() {
+  local database="$1"
+  local qualified_table="$2"
+  local result
+  result="$(docker compose exec -T db psql -U postgres -d "$database" -tAc "SELECT to_regclass('$qualified_table') IS NOT NULL;" 2>/dev/null | tr -d '[:space:]')" || return 1
+  [[ "$result" == "t" ]]
+}
+
+database_import_complete() {
+  database_table_exists "mma-ai" "features.fight_mapping" \
+    && database_table_exists "odds" "bestfightodds.bfo"
+}
+
+mark_database_import_complete() {
+  mkdir -p "$ARTIFACTS_ROOT"
+  touch "$(database_import_marker)"
+}
+
+clear_database_import_marker() {
+  rm -f "$(database_import_marker)"
+}
+
 readiness_response() {
   local web_url="$1"
   local response status body
@@ -607,20 +635,33 @@ ensure_starter_model
 if [[ "$SKIP_IMPORT" -eq 0 ]]; then
   start_postgres_for_import
 
-  docker compose exec -T db createdb -U postgres "mma-ai" >/dev/null 2>&1 || true
-  docker compose exec -T db createdb -U postgres "odds" >/dev/null 2>&1 || true
+  if [[ "$FORCE_IMPORT" -eq 0 ]] && database_import_complete; then
+    echo "Using existing imported Postgres databases"
+    mark_database_import_complete
+  else
+    clear_database_import_marker
 
-  echo "Copying database dumps into the Postgres container"
-  docker compose cp "$ARTIFACTS_ROOT/dumps/mma-ai.postgres-custom" "db:/tmp/mma-ai.postgres-custom"
-  docker compose cp "$ARTIFACTS_ROOT/dumps/odds.postgres-custom" "db:/tmp/odds.postgres-custom"
+    docker compose exec -T db createdb -U postgres "mma-ai" >/dev/null 2>&1 || true
+    docker compose exec -T db createdb -U postgres "odds" >/dev/null 2>&1 || true
 
-  echo "Restoring mma-ai database"
-  docker compose exec -T db pg_restore --clean --if-exists --no-owner --jobs 4 -U postgres -d "mma-ai" /tmp/mma-ai.postgres-custom
+    echo "Copying database dumps into the Postgres container"
+    docker compose cp "$ARTIFACTS_ROOT/dumps/mma-ai.postgres-custom" "db:/tmp/mma-ai.postgres-custom"
+    docker compose cp "$ARTIFACTS_ROOT/dumps/odds.postgres-custom" "db:/tmp/odds.postgres-custom"
 
-  echo "Restoring odds database"
-  docker compose exec -T db pg_restore --clean --if-exists --no-owner --jobs 4 -U postgres -d "odds" /tmp/odds.postgres-custom
+    echo "Restoring mma-ai database"
+    docker compose exec -T db pg_restore --clean --if-exists --no-owner --jobs 4 -U postgres -d "mma-ai" /tmp/mma-ai.postgres-custom
 
-  docker compose exec -T db rm -f /tmp/mma-ai.postgres-custom /tmp/odds.postgres-custom >/dev/null 2>&1 || true
+    echo "Restoring odds database"
+    docker compose exec -T db pg_restore --clean --if-exists --no-owner --jobs 4 -U postgres -d "odds" /tmp/odds.postgres-custom
+
+    docker compose exec -T db rm -f /tmp/mma-ai.postgres-custom /tmp/odds.postgres-custom >/dev/null 2>&1 || true
+
+    if ! database_import_complete; then
+      echo "Database import finished but required tables were not found." >&2
+      exit 1
+    fi
+    mark_database_import_complete
+  fi
 fi
 
 configure_llm_analytics

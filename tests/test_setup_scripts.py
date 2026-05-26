@@ -76,6 +76,7 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "Local model" in script
         assert "MMA_AI_POSTGRES_PORT" in script
         assert "MMA_AI_WEB_PORT" in script
+        assert "force-import" in script.lower() or "ForceImport" in script
         assert "docker compose up" in script
         assert "db" in script
         assert "web" in script
@@ -93,6 +94,11 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "final_model" in script
         assert "window_*" in script
         assert "Starter model extraction did not create a usable model directory" in script
+        assert ".db-import-complete" in script
+        assert "features.fight_mapping" in script
+        assert "bestfightodds.bfo" in script
+        assert "Using existing imported Postgres databases" in script
+        assert "Database import finished but required tables were not found." in script
 
 
 def test_setup_scripts_detect_existing_postgres_host_port():
@@ -125,6 +131,33 @@ def test_setup_scripts_validate_starter_model_before_resuming():
     assert 'starter_model_complete "$model_dir"' in bash
     assert "Starter model is missing required files; re-extracting" in bash
     assert 'rm -f "$marker_path"' in bash
+
+
+def test_setup_scripts_validate_database_import_before_resuming():
+    powershell = read_text("setup.ps1")
+    bash = read_text("setup.sh")
+
+    assert "[switch]$ForceImport" in powershell
+    assert "function Test-DatabaseTableExists" in powershell
+    assert "function Test-DatabaseImportComplete" in powershell
+    assert "function Mark-DatabaseImportComplete" in powershell
+    assert "function Clear-DatabaseImportMarker" in powershell
+    assert "to_regclass('$QualifiedTable')" in powershell
+    assert "features.fight_mapping" in powershell
+    assert "bestfightodds.bfo" in powershell
+    assert "-not $ForceImport -and (Test-DatabaseImportComplete)" in powershell
+    assert "Start-PostgresForImport\n\n    if (-not $ForceImport -and (Test-DatabaseImportComplete))" in powershell
+
+    assert "--force-import" in bash
+    assert "database_table_exists()" in bash
+    assert "database_import_complete()" in bash
+    assert "mark_database_import_complete()" in bash
+    assert "clear_database_import_marker()" in bash
+    assert "to_regclass('$qualified_table')" in bash
+    assert "features.fight_mapping" in bash
+    assert "bestfightodds.bfo" in bash
+    assert '[[ "$FORCE_IMPORT" -eq 0 ]] && database_import_complete' in bash
+    assert 'start_postgres_for_import\n\n  if [[ "$FORCE_IMPORT" -eq 0 ]] && database_import_complete' in bash
 
 
 def test_setup_scripts_pin_compose_database_and_starter_model():

@@ -34,11 +34,14 @@ The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 paths before running setup.
 
 Setup is safe to rerun after an interrupted install. It reuses verified cached
-artifacts, re-extracts incomplete starter models, and restores the databases
-again if needed. Use `-SkipDownload` or `--skip-download` only when the artifact
-cache already exists; the scripts validate the cache before copying CSVs,
-extracting the model, or importing dumps. Use `-ForceDownload` or
-`--force-download` to repair a corrupt cache.
+artifacts, re-extracts incomplete starter models, and skips the large database
+restore when the existing Docker databases already contain the expected
+`features.fight_mapping` and `bestfightodds.bfo` tables. Use `-ForceImport` or
+`--force-import` when you intentionally want to restore the Hugging Face dumps
+again. Use `-SkipDownload` or `--skip-download` only when the artifact cache
+already exists; the scripts validate the cache before copying CSVs, extracting
+the model, or importing dumps. Use `-ForceDownload` or `--force-download` to
+repair a corrupt cache.
 
 If your machine already has Postgres on `localhost:5432`, setup automatically
 chooses another free host port for Docker Postgres and writes it to

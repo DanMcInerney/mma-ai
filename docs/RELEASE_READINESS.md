@@ -63,8 +63,10 @@ badge.
   and tracebacks under `data/logs/jobs` and expose them at
   `/api/jobs/{job_id}/log`.
 - Bootstrap scripts: `setup.ps1` and `setup.sh` download the Hugging Face
-  dataset artifacts, verify checksums, restore both Postgres dumps into Docker,
-  copy processed CSVs, extract the starter model, optionally configure
+  dataset artifacts, verify checksums, resume complete database imports by
+  checking `features.fight_mapping` and `bestfightodds.bfo`, restore both
+  Postgres dumps into Docker when needed, copy processed CSVs, extract the
+  starter model, optionally configure
   `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for
   analytics, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
   write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL` values for

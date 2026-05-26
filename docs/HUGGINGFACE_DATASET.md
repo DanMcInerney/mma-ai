@@ -31,6 +31,9 @@ shell.
 After setup, start the bundled local stack with
 `docker compose up --build db web` so both the dashboard and PostgreSQL are
 running.
+Rerunning setup reuses complete imported databases when `features.fight_mapping`
+and `bestfightodds.bfo` are present; pass `-ForceImport` or `--force-import` to
+restore the dumps again.
 
 LLM analytics setup supports OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
 Google Gemini, xAI Grok, local OpenAI-compatible servers, and custom endpoints.
