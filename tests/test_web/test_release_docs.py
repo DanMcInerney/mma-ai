@@ -146,7 +146,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}" in compose
     assert "TOGETHER_API_KEY: ${TOGETHER_API_KEY:-}" in compose
     assert "PERPLEXITY_API_KEY: ${PERPLEXITY_API_KEY:-}" in compose
-    assert "depends_on" not in compose
+    assert "depends_on:" in compose
+    assert "condition: service_healthy" in compose
     assert "artifacts" in dockerignore
     assert ".cursor" in dockerignore
     assert ".env" in dockerignore

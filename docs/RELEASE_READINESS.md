@@ -28,7 +28,8 @@ docker compose up --build
 ```
 
 For a bootstrapped local app start, use `docker compose up --build db web` so
-the API and the bundled PostgreSQL service come up together. Use
+the API and the bundled PostgreSQL service come up together. The web service is
+gated on the PostgreSQL healthcheck in Compose. Use
 `docker compose up --build web` only when `MMA_AI_COMPOSE_DATABASE_URL` and
 `MMA_AI_COMPOSE_ODDS_DATABASE_URL` point to an external PostgreSQL instance.
 

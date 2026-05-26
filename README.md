@@ -90,7 +90,9 @@ docker compose up --build db web
 
 The Compose stack starts PostgreSQL 17 and initializes both the main `mma-ai`
 database and the auxiliary `odds` database used by odds-related workflows. The
-setup scripts restore the Hugging Face dumps into those databases.
+setup scripts restore the Hugging Face dumps into those databases. The web
+service waits for the PostgreSQL healthcheck before starting, so first-run
+readiness checks do not race a cold database container.
 
 During setup you can choose OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
 Google Gemini, xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI,
