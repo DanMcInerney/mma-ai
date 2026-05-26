@@ -183,6 +183,10 @@ def test_analytics_options_expose_bounded_row_limit():
 
     assert 'id="analytics-max-rows" type="number" min="1" max="1000" value="100"' in html
     assert "max_rows: Number(qs(\"#analytics-max-rows\").value || 100)" in app_js
+    assert "function renderPlotlyChart(target, chart)" in app_js
+    assert "Plotly.purge(element)" in app_js
+    assert 'renderPlotlyChart("#analytics-chart", result.chart)' in app_js
+    assert 'renderPlotlyChart("#analytics-chart", null)' in app_js
 
 
 def test_debug_logs_and_manual_event_odds_are_wired():

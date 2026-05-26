@@ -23,6 +23,16 @@ function renderJson(target, value) {
   qs(target).textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
+function renderPlotlyChart(target, chart) {
+  const element = qs(target);
+  if (!chart) {
+    if (window.Plotly) Plotly.purge(element);
+    element.innerHTML = "";
+    return;
+  }
+  Plotly.newPlot(element, chart.data, chart.layout, { responsive: true });
+}
+
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
@@ -531,9 +541,10 @@ function wireData() {
         }),
       });
       renderJson("#analytics-output", { answer: result.answer, sql: result.sql, rows: result.rows });
-      if (result.chart) Plotly.newPlot("analytics-chart", result.chart.data, result.chart.layout, { responsive: true });
+      renderPlotlyChart("#analytics-chart", result.chart);
     } catch (error) {
       renderJson("#analytics-output", error.message);
+      renderPlotlyChart("#analytics-chart", null);
     }
   });
 }

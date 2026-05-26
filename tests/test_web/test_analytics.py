@@ -177,6 +177,69 @@ def test_run_analytics_uses_openai_compatible_llm(monkeypatch, tmp_path):
     assert result["rows"] == [{"fighter1_name": "a", "wins": 3}]
 
 
+def test_run_analytics_accepts_llm_plotly_figure_spec(monkeypatch, tmp_path):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:1/missing")
+    pd.DataFrame([{"fighter1_name": "a", "wins": 3}]).to_csv(tmp_path / "training_data.csv", index=False)
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "answer": "AI chart",
+                                    "sql": "select fighter1_name, wins from training_data",
+                                    "chart": {
+                                        "data": [{"type": "bar", "x": ["a"], "y": [3], "name": "Wins"}],
+                                        "layout": {"title": "Wins by fighter"},
+                                    },
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("libs.web.llm.requests.post", lambda *_args, **_kwargs: FakeResponse())
+
+    result = run_analytics("Show wins")
+
+    assert result["chart"]["data"] == [{"type": "bar", "x": ["a"], "y": [3], "name": "Wins"}]
+    assert result["chart"]["layout"]["title"] == "Wins by fighter"
+    assert result["chart"]["layout"]["template"] == "plotly_white"
+
+
+def test_run_analytics_falls_back_when_llm_chart_spec_is_not_an_object(monkeypatch, tmp_path):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv("GOOGLE_API_KEY", "google-key")
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:1/missing")
+    pd.DataFrame([{"fighter1_name": "a", "wins": 3}]).to_csv(tmp_path / "training_data.csv", index=False)
+    install_fake_gemini(
+        monkeypatch,
+        json.dumps(
+            {
+                "answer": "AI summary",
+                "sql": "select fighter1_name, wins from training_data",
+                "chart": "not a chart object",
+            }
+        ),
+    )
+
+    result = run_analytics("Show wins")
+
+    assert result["chart"] is not None
+    assert result["chart"]["data"][0]["type"] == "bar"
+
+
 def test_database_context_lists_finalized_csvs(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:1/missing")

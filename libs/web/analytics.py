@@ -82,7 +82,8 @@ def run_analytics(question: str, sql: str | None = None, max_rows: int = 100) ->
         raise ValueError("Only a single read-only SELECT or WITH query is allowed.")
 
     df = _execute_read_only_query(sql, max_rows)
-    chart_spec = (generated or {}).get("chart") or _default_chart_spec(df)
+    raw_chart_spec = (generated or {}).get("chart")
+    chart_spec = raw_chart_spec if isinstance(raw_chart_spec, dict) else _default_chart_spec(df)
     chart = _build_chart(df, chart_spec)
     return {
         "answer": (generated or {}).get("answer", "Query executed."),
@@ -104,6 +105,7 @@ def _ask_llm(question: str) -> dict[str, Any]:
             "Prefer features schema tables and finalized model_data/training outputs when Postgres is available.",
             "When schema_context.source is finalized_csvs, query table names such as training_data, training_data_dec, or prediction_data directly.",
             "Never mutate data.",
+            "For charts, either return {type, x, y} using result column names, or a Plotly JSON object with data and layout.",
             "Return JSON only, with no Markdown fences.",
         ],
     }
@@ -212,9 +214,18 @@ def _default_chart_spec(df: pd.DataFrame) -> dict[str, str] | None:
     return {"type": "bar", "x": x_column, "y": numeric[0]}
 
 
-def _build_chart(df: pd.DataFrame, spec: dict[str, str] | None) -> dict[str, Any] | None:
+def _build_chart(df: pd.DataFrame, spec: dict[str, Any] | None) -> dict[str, Any] | None:
     if not spec:
         return None
+    if isinstance(spec.get("data"), list):
+        return {
+            "data": spec["data"],
+            "layout": {
+                "template": "plotly_white",
+                "margin": {"l": 36, "r": 16, "t": 28, "b": 36},
+                **(spec.get("layout") if isinstance(spec.get("layout"), dict) else {}),
+            },
+        }
     chart_type = spec.get("type", "bar")
     x_column = spec.get("x")
     y_column = spec.get("y")
