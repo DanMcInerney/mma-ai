@@ -23,6 +23,7 @@ from libs.web.models import (
 from libs.web.services import (
     get_dashboard_defaults,
     get_data_status,
+    get_readiness_status,
     list_fighters,
     list_models,
     list_upcoming_events,
@@ -66,6 +67,13 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/readiness")
+    def readiness() -> dict:
+        payload = get_readiness_status()
+        if not payload["ready"]:
+            raise HTTPException(status_code=503, detail=payload)
+        return payload
 
     @app.get("/api/defaults")
     def defaults() -> dict:

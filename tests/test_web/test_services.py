@@ -10,6 +10,7 @@ import pytest
 from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupPredictionRequest, TrainingRequest
 from libs.web.services import (
     get_data_status,
+    get_readiness_status,
     list_fighters,
     list_models,
     list_upcoming_events,
@@ -52,6 +53,51 @@ def test_get_data_status_counts_configured_csvs(monkeypatch, tmp_path):
     assert status["raw_csvs"]["individuals"]["rows"] == 1
     assert status["model_csvs"]["training_data"]["rows"] == 3
     assert "secret" not in status["database_url"]
+
+
+def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(monkeypatch, tmp_path):
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    models_dir = tmp_path / "AutogluonModels"
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
+    write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
+    write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url: {"ok": True, "url": url})
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is True
+    assert readiness["status"] == "ok"
+    assert readiness["checks"]["competitions_csv"]["rows"] == 1
+    assert readiness["checks"]["prediction_data_csv"]["ok"] is True
+    assert readiness["checks"]["starter_model"]["models"] == ["ag-20260304_110750-win-extreme"]
+    assert readiness["checks"]["database"]["ok"] is True
+    assert readiness["checks"]["odds_database"]["ok"] is True
+
+
+def test_get_readiness_status_reports_missing_prerequisites(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url: {"ok": False, "url": url, "error": "offline"})
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is False
+    assert readiness["status"] == "not_ready"
+    assert readiness["checks"]["competitions_csv"]["ok"] is False
+    assert readiness["checks"]["prediction_data_csv"]["ok"] is False
+    assert readiness["checks"]["starter_model"]["ok"] is False
+    assert readiness["checks"]["database"]["error"] == "offline"
 
 
 @pytest.mark.parametrize("odds_enabled", [False, True])

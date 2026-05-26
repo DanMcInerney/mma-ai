@@ -40,7 +40,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "MMA_AI_POSTGRES_PORT" in readme
     assert "--postgres-port 55432" in readme
     assert "Setup is safe to rerun after an interrupted install" in readme
-    assert "/api/health" in readme
+    assert "/api/readiness" in readme
     assert "--skip-download" in readme
     assert "--force-download" in readme
     assert "AGENTS.md" in readme
@@ -76,7 +76,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Predict tab" in release_notes
     assert "mma-evaluate" in release_notes
     assert "Odds are not model inputs" in release_notes
-    assert "wait for `/api/health`" in release_notes
+    assert "wait for `/api/readiness`" in release_notes
     assert "docker compose up --build db web" in release_notes
     assert "docker compose up --build web" in release_notes
     assert "uv run pytest -q" in release_notes

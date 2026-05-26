@@ -13,6 +13,32 @@ def test_health_endpoint():
     assert response.json() == {"status": "ok"}
 
 
+def test_readiness_endpoint_returns_ready_payload(monkeypatch):
+    monkeypatch.setattr(
+        "libs.web.app.get_readiness_status",
+        lambda: {"status": "ok", "ready": True, "checks": {"database": {"ok": True}}},
+    )
+    client = TestClient(create_app())
+
+    response = client.get("/api/readiness")
+
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+
+
+def test_readiness_endpoint_returns_503_until_prediction_stack_is_ready(monkeypatch):
+    monkeypatch.setattr(
+        "libs.web.app.get_readiness_status",
+        lambda: {"status": "not_ready", "ready": False, "checks": {"starter_model": {"ok": False}}},
+    )
+    client = TestClient(create_app())
+
+    response = client.get("/api/readiness")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["checks"]["starter_model"]["ok"] is False
+
+
 def test_plotly_vendor_bundle_is_served_locally():
     client = TestClient(create_app())
 

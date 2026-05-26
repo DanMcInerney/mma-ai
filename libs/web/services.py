@@ -19,7 +19,7 @@ from typing import Any
 
 import pandas as pd
 
-from libs.paths import PROJECT_ROOT, data_dir, data_file, database_url, models_dir, raw_ufcstats_dir
+from libs.paths import PROJECT_ROOT, data_dir, data_file, database_url, models_dir, odds_database_url, raw_ufcstats_dir
 from libs.web.evaluations import summarize_model_evaluation
 from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupPredictionRequest, TrainingRequest
 from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, resolve_model_dir
@@ -124,6 +124,61 @@ def get_data_status() -> dict[str, Any]:
             "training_data_dec": {"path": str(decision_csv), "rows": _count_csv_rows(decision_csv)},
         },
     }
+
+
+def get_readiness_status() -> dict[str, Any]:
+    """Return whether the dashboard has the artifacts needed for first use."""
+    status = get_data_status()
+    checks: dict[str, dict[str, Any]] = {}
+
+    for group, key in (
+        ("raw_csvs", "competitions"),
+        ("raw_csvs", "individuals"),
+        ("model_csvs", "prediction_data"),
+        ("model_csvs", "training_data"),
+    ):
+        entry = status[group][key]
+        rows = entry["rows"]
+        checks[f"{key}_csv"] = {
+            "ok": rows is not None and rows > 0,
+            "rows": rows,
+            "path": entry["path"],
+        }
+
+    models = list_models()
+    checks["starter_model"] = {
+        "ok": bool(models),
+        "count": len(models),
+        "models": [model["name"] for model in models[:5]],
+    }
+    checks["database"] = _database_ready(database_url())
+    checks["odds_database"] = _database_ready(odds_database_url())
+
+    ready = all(check["ok"] for check in checks.values())
+    return {
+        "status": "ok" if ready else "not_ready",
+        "ready": ready,
+        "checks": checks,
+    }
+
+
+def _database_ready(url: str) -> dict[str, Any]:
+    try:
+        from sqlalchemy import create_engine, text
+
+        engine_kwargs: dict[str, Any] = {"pool_pre_ping": True}
+        if url.startswith("postgresql"):
+            engine_kwargs["connect_args"] = {"connect_timeout": 3}
+        engine = create_engine(url, **engine_kwargs)
+        try:
+            with engine.connect() as connection:
+                connection.execute(text("select 1"))
+        finally:
+            engine.dispose()
+    except Exception as exc:
+        return {"ok": False, "url": _redact_url(url), "error": type(exc).__name__}
+
+    return {"ok": True, "url": _redact_url(url)}
 
 
 def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:

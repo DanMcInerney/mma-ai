@@ -550,7 +550,7 @@ function Test-WebReady {
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Stop"
-        $response = Invoke-WebRequest -Uri "$WebUrl/api/health" -UseBasicParsing -TimeoutSec 5
+        $response = Invoke-WebRequest -Uri "$WebUrl/api/readiness" -UseBasicParsing -TimeoutSec 5
         return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
     } catch {
         return $false
@@ -733,7 +733,7 @@ if (-not $NoStart) {
     Write-Host "Starting MMA AI web dashboard"
     Invoke-DockerCompose @("up", "-d", "--build", "db", "web")
     $webUrl = "http://localhost:$selectedWebPort"
-    Write-Host "Waiting for MMA AI web dashboard health check"
+    Write-Host "Waiting for MMA AI web dashboard readiness check"
     Wait-ForWeb $webUrl
     Write-Host "MMA AI is ready: $webUrl"
     if (-not $NoOpen) {

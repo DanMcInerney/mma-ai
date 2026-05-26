@@ -371,7 +371,7 @@ wait_for_postgres() {
 
 web_ready() {
   local web_url="$1"
-  curl -fsS "$web_url/api/health" >/dev/null 2>&1
+  curl -fsS "$web_url/api/readiness" >/dev/null 2>&1
 }
 
 wait_for_web() {
@@ -612,7 +612,7 @@ if [[ "$NO_START" -eq 0 ]]; then
   echo "Starting MMA AI web dashboard"
   docker compose up -d --build db web
   WEB_URL="http://localhost:$SELECTED_WEB_PORT"
-  echo "Waiting for MMA AI web dashboard health check"
+  echo "Waiting for MMA AI web dashboard readiness check"
   wait_for_web "$WEB_URL"
   echo "MMA AI is ready: $WEB_URL"
   if [[ "$NO_OPEN" -eq 0 ]]; then

@@ -42,8 +42,8 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "setup-complete" in script
         assert "extracting" in script
         assert "http://localhost:" in script
-        assert "/api/health" in script
-        assert "Waiting for MMA AI web dashboard health check" in script
+        assert "/api/readiness" in script
+        assert "Waiting for MMA AI web dashboard readiness check" in script
         assert "Validating setup artifact cache" in script
         assert "Required setup artifact cache is incomplete or corrupt" in script
         assert "feats.txt" in script
@@ -116,12 +116,12 @@ def test_setup_scripts_wait_for_web_health_before_opening():
 
     assert "function Test-WebReady" in powershell
     assert "function Wait-ForWeb" in powershell
-    assert 'Invoke-WebRequest -Uri "$WebUrl/api/health"' in powershell
+    assert 'Invoke-WebRequest -Uri "$WebUrl/api/readiness"' in powershell
     assert "Wait-ForWeb $webUrl" in powershell
     assert powershell.index("Wait-ForWeb $webUrl") < powershell.index("Start-Process $webUrl")
 
     assert "web_ready()" in bash
     assert "wait_for_web()" in bash
-    assert 'curl -fsS "$web_url/api/health"' in bash
+    assert 'curl -fsS "$web_url/api/readiness"' in bash
     assert 'wait_for_web "$WEB_URL"' in bash
     assert bash.index('wait_for_web "$WEB_URL"') < bash.index('xdg-open "$WEB_URL"')
