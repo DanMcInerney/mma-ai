@@ -54,7 +54,8 @@ bash setup.sh --postgres-port 55432
 
 Setup also writes `MMA_AI_WEB_PORT` to `.env`. If another local web server is
 already using port 8000, setup chooses a free port from 18000 upward and prints
-the dashboard URL. To force a specific dashboard port:
+the dashboard URL after `/api/health` responds. To force a specific dashboard
+port:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1 -WebPort 18000

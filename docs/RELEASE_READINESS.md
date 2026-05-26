@@ -61,7 +61,7 @@ alternate port printed by setup.
   copy processed CSVs, extract the starter model, optionally configure
   `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for
   analytics, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
-  start the web service, and open the dashboard.
+  start the web service, wait for `/api/health`, and open the dashboard.
 - Docker stack: `postgres:17` plus the FastAPI web service. Compose initializes
   the auxiliary `odds` database with `docker/postgres-init/01-create-odds.sql`.
   `MMA_AI_COMPOSE_DATABASE_URL` and `MMA_AI_COMPOSE_ODDS_DATABASE_URL` let the

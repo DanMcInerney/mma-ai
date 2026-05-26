@@ -544,6 +544,33 @@ function Wait-ForPostgres {
     throw "Postgres did not become ready in time."
 }
 
+function Test-WebReady {
+    param([string]$WebUrl)
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Stop"
+        $response = Invoke-WebRequest -Uri "$WebUrl/api/health" -UseBasicParsing -TimeoutSec 5
+        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
+function Wait-ForWeb {
+    param([string]$WebUrl)
+
+    for ($i = 0; $i -lt 90; $i++) {
+        if (Test-WebReady $WebUrl) {
+            return
+        }
+        Start-Sleep -Seconds 2
+    }
+    throw "Web dashboard did not become ready at $WebUrl in time."
+}
+
 function Test-StarterModelComplete {
     param([string]$ModelDir)
 
@@ -706,6 +733,8 @@ if (-not $NoStart) {
     Write-Host "Starting MMA AI web dashboard"
     Invoke-DockerCompose @("up", "-d", "--build", "db", "web")
     $webUrl = "http://localhost:$selectedWebPort"
+    Write-Host "Waiting for MMA AI web dashboard health check"
+    Wait-ForWeb $webUrl
     Write-Host "MMA AI is ready: $webUrl"
     if (-not $NoOpen) {
         Start-Process $webUrl
