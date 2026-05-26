@@ -141,6 +141,8 @@ Match `libs/modeling/train.py` unless the user asks otherwise:
 Analytics must be read-only. Only execute one `SELECT` or `WITH` statement and
 reject mutation keywords. Prefer finalized model data, then feature-specific
 tables, then `fight_stats_derived`, then raw `fight_stats_fe`.
+Postgres analytics run inside a read-only transaction with a statement timeout;
+CSV fallback analytics use SQLite query-only mode after loading finalized CSVs.
 
 When Postgres is unavailable, analytics can query finalized CSV fallbacks as
 read-only tables: `training_data`, `training_data_dec`, and `prediction_data`.

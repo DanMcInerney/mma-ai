@@ -19,6 +19,7 @@ FORBIDDEN_SQL = re.compile(
     r"\b(alter|analyze|attach|checkpoint|comment|copy|create|delete|detach|drop|execute|grant|insert|merge|refresh|reindex|replace|reset|revoke|set|truncate|update|vacuum)\b",
     re.IGNORECASE,
 )
+POSTGRES_ANALYTICS_STATEMENT_TIMEOUT_MS = 30_000
 
 
 def is_read_only_sql(sql: str) -> bool:
@@ -135,10 +136,13 @@ def parse_llm_json(text_response: str) -> dict[str, Any]:
 
 def _execute_read_only_query(sql: str, max_rows: int) -> pd.DataFrame:
     stripped_sql = sql.strip().rstrip(";")
+    bounded_sql = f"SELECT * FROM ({stripped_sql}) AS analytics_query LIMIT :max_rows"
     try:
         engine = create_engine(database_url())
-        bounded_sql = f"SELECT * FROM ({stripped_sql}) AS analytics_query LIMIT :max_rows"
-        return pd.read_sql(text(bounded_sql), engine, params={"max_rows": max_rows})
+        try:
+            return _execute_database_read_only_query(engine, bounded_sql, max_rows)
+        finally:
+            engine.dispose()
     except Exception as db_exc:
         csv_tables = _load_csv_tables()
         if not csv_tables:
@@ -147,6 +151,7 @@ def _execute_read_only_query(sql: str, max_rows: int) -> pd.DataFrame:
         with sqlite3.connect(":memory:") as conn:
             for table_name, df in csv_tables.items():
                 df.to_sql(table_name, conn, index=False, if_exists="replace")
+            conn.execute("PRAGMA query_only = ON")
             try:
                 return pd.read_sql_query(
                     f"SELECT * FROM ({stripped_sql}) AS analytics_query LIMIT ?",
@@ -158,6 +163,16 @@ def _execute_read_only_query(sql: str, max_rows: int) -> pd.DataFrame:
                 raise RuntimeError(
                     f"Database query failed, and CSV fallback query failed. Available CSV tables: {table_names}. CSV error: {csv_exc}"
                 ) from csv_exc
+
+
+def _execute_database_read_only_query(engine: Any, bounded_sql: str, max_rows: int) -> pd.DataFrame:
+    """Execute analytics SQL inside a database-enforced read-only transaction."""
+    with engine.connect() as connection:
+        with connection.begin():
+            if connection.dialect.name == "postgresql":
+                connection.execute(text("SET TRANSACTION READ ONLY"))
+                connection.execute(text(f"SET LOCAL statement_timeout = {POSTGRES_ANALYTICS_STATEMENT_TIMEOUT_MS}"))
+            return pd.read_sql(text(bounded_sql), connection, params={"max_rows": max_rows})
 
 
 def _load_csv_tables() -> dict[str, pd.DataFrame]:

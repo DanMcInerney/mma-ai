@@ -68,6 +68,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "/vendor/plotly.min.js" in agents
     assert "static/icons.js" in agents
     assert "features.fight_stats_fe" in agents
+    assert "database-enforced read-only" in agents
+    assert "query-only mode" in agents
     assert "MMA_AI_DATA_DIR" in agents
     assert "output directory" in agents
     assert "YYYY-MM-DD" in agents
@@ -79,6 +81,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "/static/icons.js" in claude
     assert "output directory" in claude
     assert "YYYY-MM-DD" in claude
+    assert "read-only transaction" in claude
+    assert "SQLite query-only mode" in claude
 
     assert "dashboard release candidate" in release_notes
     assert "setup.ps1" in release_notes
@@ -86,6 +90,9 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "uv run mma-web" in release_notes
     assert "docker compose up --build" in release_notes
     assert "Data tab" in release_notes
+    assert "read-only Postgres" in release_notes
+    assert "transaction with a statement timeout" in release_notes
+    assert "SQLite query-only mode" in release_notes
     assert "Train tab" in release_notes
     assert "Predict tab" in release_notes
     assert "mma-evaluate" in release_notes

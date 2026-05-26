@@ -200,6 +200,9 @@ dashboard/API `manual_odds` mapping and pass it to `predict.py` with
 Analytics queries must be read-only. Only run a single `SELECT` or `WITH` query.
 Reject mutation keywords such as `insert`, `update`, `delete`, `drop`, `create`,
 `alter`, `copy`, `truncate`, or `vacuum`.
+The dashboard also wraps Postgres analytics in a database-enforced read-only
+transaction with a statement timeout, and CSV fallback analytics use SQLite
+query-only mode after loading the finalized CSVs.
 
 Prefer these sources in order:
 

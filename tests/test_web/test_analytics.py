@@ -5,7 +5,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import pandas as pd
 
-from libs.web.analytics import database_context, is_read_only_sql, parse_llm_json, run_analytics
+from libs.web.analytics import _execute_read_only_query, database_context, is_read_only_sql, parse_llm_json, run_analytics
 
 
 def clear_llm_env(monkeypatch):
@@ -107,6 +107,71 @@ def test_run_analytics_executes_against_finalized_csv_fallback(monkeypatch, tmp_
 
     assert result["rows"] == [{"fighter1_name": "a", "y_true": 1, "feature_diff": 0.4}]
     assert result["chart"] is not None
+
+
+def test_database_analytics_runs_inside_postgres_read_only_transaction(monkeypatch):
+    executed = []
+
+    class FakeTransaction:
+        def __enter__(self):
+            executed.append("BEGIN")
+            return self
+
+        def __exit__(self, *_args):
+            executed.append("END")
+            return False
+
+    class FakeConnection:
+        dialect = SimpleNamespace(name="postgresql")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def begin(self):
+            return FakeTransaction()
+
+        def execute(self, statement, params=None):
+            executed.append((str(statement), params))
+
+    class FakeEngine:
+        def __init__(self):
+            self.disposed = False
+
+        def connect(self):
+            return FakeConnection()
+
+        def dispose(self):
+            self.disposed = True
+            executed.append("DISPOSE")
+
+    fake_engine = FakeEngine()
+
+    def fake_read_sql(statement, connection, params):
+        executed.append(("READ", str(statement), params, connection.dialect.name))
+        return pd.DataFrame([{"rows": 1}])
+
+    monkeypatch.setattr("libs.web.analytics.database_url", lambda: "postgresql://postgres@localhost:5432/mma-ai")
+    monkeypatch.setattr("libs.web.analytics.create_engine", lambda _url: fake_engine)
+    monkeypatch.setattr("libs.web.analytics.pd.read_sql", fake_read_sql)
+
+    result = _execute_read_only_query("select count(*) as rows from features.fight_mapping", max_rows=5)
+
+    assert result.to_dict(orient="records") == [{"rows": 1}]
+    assert executed[:3] == [
+        "BEGIN",
+        ("SET TRANSACTION READ ONLY", None),
+        ("SET LOCAL statement_timeout = 30000", None),
+    ]
+    assert executed[3] == (
+        "READ",
+        "SELECT * FROM (select count(*) as rows from features.fight_mapping) AS analytics_query LIMIT :max_rows",
+        {"max_rows": 5},
+        "postgresql",
+    )
+    assert executed[-2:] == ["END", "DISPOSE"]
 
 
 def test_run_analytics_uses_google_api_key_alias(monkeypatch, tmp_path):

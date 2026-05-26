@@ -48,7 +48,10 @@ badge.
   read-only analytics. The default data run incrementally merges new UFCStats
   rows into the shipped seed CSVs and recreates generated schemas from those
   CSVs. Completed data jobs return before/after row deltas so users can verify
-  how many raw and finalized rows changed during the refresh.
+  how many raw and finalized rows changed during the refresh. Analytics SQL is
+  constrained to one read-only query, runs inside a read-only Postgres
+  transaction with a statement timeout, and uses SQLite query-only mode for
+  finalized CSV fallbacks.
 - Train tab: run `libs/modeling/train.py` defaults through a compact UI, keep
   advanced knobs collapsed, and summarize saved model evaluation artifacts with
   metrics and charts. Completed dashboard training jobs write
