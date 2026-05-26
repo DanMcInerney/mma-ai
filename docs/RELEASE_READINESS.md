@@ -122,6 +122,10 @@ docker compose build web
 uv run mma-docker-smoke
 ```
 
+The Docker smoke command starts the built web image, checks `/api/health`, fetches
+the dashboard HTML, `/vendor/plotly.min.js`, and `/static/icons.js` from inside
+the container, then verifies the runtime image does not include test tooling.
+
 Security and hygiene scans:
 
 ```bash

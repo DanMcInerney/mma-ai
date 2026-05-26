@@ -19,10 +19,18 @@ def test_docker_smoke_runs_container_checks_health_deps_and_stops(monkeypatch, c
         if args[:3] == ["docker", "run", "-d"]:
             return completed(args, stdout="container-id\n")
         if args[:4] == ["docker", "exec", "smoke-test", "curl"]:
-            health_attempts["count"] += 1
-            if health_attempts["count"] == 1:
-                return completed(args, returncode=7, stderr="connection refused")
-            return completed(args, stdout='{"status":"ok"}')
+            url = args[-1]
+            if url.endswith("/api/health"):
+                health_attempts["count"] += 1
+                if health_attempts["count"] == 1:
+                    return completed(args, returncode=7, stderr="connection refused")
+                return completed(args, stdout='{"status":"ok"}')
+            if url.endswith("/vendor/plotly.min.js"):
+                return completed(args, stdout="window.Plotly = Plotly;")
+            if url.endswith("/static/icons.js"):
+                return completed(args, stdout="window.lucide = { createIcons };")
+            if url.endswith("/"):
+                return completed(args, stdout="<title>MMA AI</title>")
         if args[:4] == ["docker", "exec", "smoke-test", "/app/.venv/bin/python"]:
             return completed(
                 args,
@@ -42,8 +50,36 @@ def test_docker_smoke_runs_container_checks_health_deps_and_stops(monkeypatch, c
     assert health_attempts["count"] == 2
     output = capsys.readouterr().out
     assert "health ok" in output
+    assert "dashboard assets ok" in output
     assert "runtime dependency check ok" in output
     assert "passed" in output
+
+
+def test_docker_smoke_stops_container_when_asset_check_fails(monkeypatch):
+    calls = []
+
+    def fake_run(args, **_kwargs):
+        calls.append(args)
+        if args[:3] == ["docker", "run", "-d"]:
+            return completed(args, stdout="container-id\n")
+        if args[:4] == ["docker", "exec", "smoke-test", "curl"]:
+            url = args[-1]
+            if url.endswith("/api/health"):
+                return completed(args, stdout='{"status":"ok"}')
+            if url.endswith("/"):
+                return completed(args, stdout="<title>MMA AI</title>")
+            if url.endswith("/vendor/plotly.min.js"):
+                return completed(args, stdout="missing bundled plotly")
+        if args == ["docker", "stop", "smoke-test"]:
+            return completed(args)
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(docker_smoke.subprocess, "run", fake_run)
+
+    with pytest.raises(docker_smoke.SmokeError, match="Dashboard asset check failed"):
+        docker_smoke.run_smoke("mma-ai-web:test", timeout_seconds=10, container_name="smoke-test")
+
+    assert ["docker", "stop", "smoke-test"] in calls
 
 
 def test_docker_smoke_stops_container_when_dependency_check_fails(monkeypatch):
@@ -54,7 +90,15 @@ def test_docker_smoke_stops_container_when_dependency_check_fails(monkeypatch):
         if args[:3] == ["docker", "run", "-d"]:
             return completed(args, stdout="container-id\n")
         if args[:4] == ["docker", "exec", "smoke-test", "curl"]:
-            return completed(args, stdout='{"status":"ok"}')
+            url = args[-1]
+            if url.endswith("/api/health"):
+                return completed(args, stdout='{"status":"ok"}')
+            if url.endswith("/vendor/plotly.min.js"):
+                return completed(args, stdout="window.Plotly = Plotly;")
+            if url.endswith("/static/icons.js"):
+                return completed(args, stdout="window.lucide = { createIcons };")
+            if url.endswith("/"):
+                return completed(args, stdout="<title>MMA AI</title>")
         if args[:4] == ["docker", "exec", "smoke-test", "/app/.venv/bin/python"]:
             return completed(args, returncode=1, stderr="test tooling present in runtime image: pytest")
         if args == ["docker", "stop", "smoke-test"]:

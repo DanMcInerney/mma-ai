@@ -115,6 +115,24 @@ def check_runtime_dependencies(container_name: str) -> None:
     print(f"[docker-smoke] {result.stdout.strip()}")
 
 
+def check_dashboard_assets(container_name: str) -> None:
+    """Verify the runtime image serves the packaged dashboard and local JS assets."""
+    checks = [
+        ("/", "MMA AI"),
+        ("/vendor/plotly.min.js", "Plotly"),
+        ("/static/icons.js", "window.lucide"),
+    ]
+    for path, expected_text in checks:
+        result = _docker_exec(
+            container_name,
+            ["curl", "-fsS", f"http://127.0.0.1:8000{path}"],
+            timeout=10,
+        )
+        if expected_text not in result.stdout:
+            raise SmokeError(f"Dashboard asset check failed for {path}: expected {expected_text!r}.")
+    print("[docker-smoke] dashboard assets ok")
+
+
 def run_smoke(image: str = DEFAULT_IMAGE, timeout_seconds: int = 90, container_name: str | None = None) -> None:
     """Run the Docker smoke test and clean up the container."""
     name = container_name or f"mma-ai-smoke-{uuid.uuid4().hex[:12]}"
@@ -122,6 +140,7 @@ def run_smoke(image: str = DEFAULT_IMAGE, timeout_seconds: int = 90, container_n
     _run(["docker", "run", "-d", "--rm", "--name", name, image], timeout=30)
     try:
         wait_for_health(name, timeout_seconds)
+        check_dashboard_assets(name)
         check_runtime_dependencies(name)
         print("[docker-smoke] passed")
     finally:

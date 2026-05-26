@@ -227,7 +227,8 @@ fork a separate feature or prediction implementation.
   prediction, feature semantics, and test expectations.
 - `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
   and the FastAPI dashboard. After building the web image, `uv run
-  mma-docker-smoke` runs the container, checks `/api/health`, and verifies the
+  mma-docker-smoke` runs the container, checks `/api/health`, verifies the
+  dashboard HTML plus local Plotly/icon assets are served, and confirms the
   runtime image does not include test tooling.
 - `libs/web`: FastAPI app, background jobs, web service adapters, analytics,
   evaluation summaries, and static UI.
