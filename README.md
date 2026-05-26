@@ -229,6 +229,10 @@ available:
 $env:MMA_AI_RUN_BROWSER_E2E='1'; uv run pytest tests/e2e/test_predict_tab_next_event.py::test_predict_tab_browser_predicts_next_ufc_event -q
 ```
 
+```bash
+MMA_AI_RUN_BROWSER_E2E=1 uv run pytest tests/e2e/test_predict_tab_next_event.py::test_predict_tab_browser_predicts_next_ufc_event -q
+```
+
 The dashboard uses the same command paths in background jobs so the UI does not
 fork a separate feature or prediction implementation.
 

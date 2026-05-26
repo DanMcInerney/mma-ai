@@ -137,6 +137,12 @@ docker compose build web
 uv run mma-docker-smoke
 ```
 
+When Chrome is available, run the real-browser Predict tab e2e before release:
+
+```bash
+MMA_AI_RUN_BROWSER_E2E=1 uv run pytest tests/e2e/test_predict_tab_next_event.py::test_predict_tab_browser_predicts_next_ufc_event -q
+```
+
 The Docker smoke command starts the built web image, checks `/api/health`, fetches
 the dashboard HTML, `/vendor/plotly.min.js`, and `/static/icons.js` from inside
 the container, then verifies the runtime image does not include test tooling.

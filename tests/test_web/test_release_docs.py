@@ -38,6 +38,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Predict: choose a model" in readme
     assert "uv run mma-evaluate" in readme
     assert "uv run mma-docker-smoke" in readme
+    assert "MMA_AI_RUN_BROWSER_E2E=1" in readme
+    assert "test_predict_tab_browser_predicts_next_ufc_event" in readme
     assert "uv run mma-release-audit" in readme
     assert "dashboard HTML plus local Plotly/icon assets are served" in readme
     assert "docker compose up --build db web" in readme
@@ -114,6 +116,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "uv run mma-docker-smoke" in release_notes
     assert "uv run pytest -q" in release_notes
     assert "uv run mma-release-audit" in release_notes
+    assert "MMA_AI_RUN_BROWSER_E2E=1" in release_notes
+    assert "test_predict_tab_browser_predicts_next_ufc_event" in release_notes
     assert "/vendor/plotly.min.js" in release_notes
     assert "/static/icons.js" in release_notes
 
