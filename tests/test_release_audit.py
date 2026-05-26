@@ -84,6 +84,7 @@ def test_release_audit_requires_dockerignore_to_protect_public_context(tmp_path)
                 ".env",
                 ".env.local",
                 "*.log",
+                "*.csv",
                 "logs",
                 "artifacts",
                 "AutoGluonModels",
@@ -94,6 +95,7 @@ def test_release_audit_requires_dockerignore_to_protect_public_context(tmp_path)
                 "!data/raw/",
                 "!data/raw/ufcstats/",
                 "!data/raw/ufcstats/competitions.csv",
+                "!libs/web/static/index.html",
             ]
         ),
         encoding="utf-8",
@@ -105,6 +107,39 @@ def test_release_audit_requires_dockerignore_to_protect_public_context(tmp_path)
         ("incomplete_dockerignore", ".dockerignore")
     ]
     assert "!data/raw/ufcstats/individuals.csv" in issues[0].detail
+
+
+def test_release_audit_requires_dockerignore_to_exclude_generated_root_reports(tmp_path):
+    (tmp_path / ".dockerignore").write_text(
+        "\n".join(
+            [
+                ".env",
+                ".env.local",
+                "*.log",
+                "logs",
+                "artifacts",
+                "AutoGluonModels",
+                "AutogluonModels",
+                "tests",
+                "data/**",
+                "!data/",
+                "!data/raw/",
+                "!data/raw/ufcstats/",
+                "!data/raw/ufcstats/competitions.csv",
+                "!data/raw/ufcstats/individuals.csv",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    issues = find_dockerignore_issues(tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("incomplete_dockerignore", ".dockerignore")
+    ]
+    assert "*.csv" in issues[0].detail
+    assert "*.html" in issues[0].detail
+    assert "!libs/web/static/index.html" in issues[0].detail
 
 
 def test_release_audit_requires_git_attributes_for_cross_platform_setup_scripts(tmp_path):

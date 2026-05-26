@@ -10,6 +10,8 @@ tests
 __pycache__
 *.pyc
 *.log
+*.csv
+*.html
 logs
 artifacts
 AutoGluonModels
@@ -20,6 +22,7 @@ data/**
 !data/raw/ufcstats/
 !data/raw/ufcstats/competitions.csv
 !data/raw/ufcstats/individuals.csv
+!libs/web/static/index.html
 pics
 visualizations
 walk_forward_test_run

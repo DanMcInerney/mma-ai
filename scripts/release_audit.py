@@ -60,6 +60,8 @@ REQUIRED_DOCKERIGNORE_LINES = {
     ".env",
     ".env.local",
     "*.log",
+    "*.csv",
+    "*.html",
     "logs",
     "artifacts",
     "AutoGluonModels",
@@ -71,6 +73,7 @@ REQUIRED_DOCKERIGNORE_LINES = {
     "!data/raw/ufcstats/",
     "!data/raw/ufcstats/competitions.csv",
     "!data/raw/ufcstats/individuals.csv",
+    "!libs/web/static/index.html",
 }
 REQUIRED_PACKAGE_DATA = {
     "libs.web": {"static/*"},

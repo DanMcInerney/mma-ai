@@ -165,9 +165,12 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert ".webapp*.log" in dockerignore
     assert "tests" in dockerignore
     assert "*.log" in dockerignore
+    assert "*.csv" in dockerignore
+    assert "*.html" in dockerignore
     assert "logs" in dockerignore
     assert "AutogluonModels" in dockerignore
     assert "AutoGluonModels" in dockerignore
+    assert "!libs/web/static/index.html" in dockerignore
     assert "AutogluonModels/" in gitignore
     assert "AutoGluonModels/" in gitignore
     assert postgres_init.strip() == "CREATE DATABASE odds;"
