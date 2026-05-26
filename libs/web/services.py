@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -210,17 +211,9 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
     )
 
     if request.scrape:
-        from libs.scraping.ufcstats import scrape_ufcstats
-
-        print("[data-refresh] starting UFCStats scraper")
-        counts = scrape_ufcstats(
-            output_dir=raw_dir,
-            fighters=True,
-            fights=True,
-            force_full=request.force_full,
-            log_level=request.log_level,
-        )
-        print(f"[data-refresh] scraper finished: {counts}")
+        print("[data-refresh] starting UFCStats scraper subprocess")
+        counts = _run_scrape_command(request, raw_dir)
+        print(f"[data-refresh] scraper subprocess finished: {counts}")
 
     if request.rebuild:
         from main import main as rebuild_main
@@ -237,6 +230,50 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
         print("[data-refresh] feature-store rebuild finished")
 
     return {"scrape_counts": counts, "status": get_data_status()}
+
+
+def _run_scrape_command(request: DataRefreshRequest, raw_dir: Path) -> dict[str, int]:
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "scrape_ufcstats.py"),
+        "--output-dir",
+        str(raw_dir),
+        "--log-level",
+        request.log_level,
+    ]
+    if request.force_full:
+        command.append("--force-full")
+
+    print(f"[data-refresh] command: {subprocess.list2cmdline(command)}")
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=os.environ.copy(),
+    )
+    print(f"[data-refresh] scraper exit_code={completed.returncode}")
+    if completed.stdout:
+        print("[data-refresh] scraper stdout begin")
+        print(completed.stdout.rstrip())
+        print("[data-refresh] scraper stdout end")
+    if completed.stderr:
+        print("[data-refresh] scraper stderr begin")
+        print(completed.stderr.rstrip())
+        print("[data-refresh] scraper stderr end")
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr or completed.stdout or f"UFCStats scrape failed with exit code {completed.returncode}")
+    return _parse_scrape_counts(completed.stdout)
+
+
+def _parse_scrape_counts(stdout: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for line in stdout.splitlines():
+        match = re.match(r"^\s*(fighters|fights):\s*(\d+)\s+total rows\s*$", line, flags=re.IGNORECASE)
+        if match:
+            counts[match.group(1).lower()] = int(match.group(2))
+    return counts
 
 
 def _is_loadable_prediction_model_dir(path: Path) -> bool:

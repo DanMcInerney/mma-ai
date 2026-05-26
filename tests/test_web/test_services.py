@@ -276,6 +276,65 @@ def test_run_data_refresh_passes_odds_flag_to_rebuild(monkeypatch, tmp_path, odd
     assert captured["kwargs"]["reset_db"] is True
 
 
+def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, capsys):
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="Scrapy log line\nfighters: 42 total rows\nfights: 99 total rows\n",
+            stderr="crawler debug stderr\n",
+        )
+
+    def fake_rebuild_main(**kwargs):
+        captured["rebuild_kwargs"] = kwargs
+
+    fake_main_module = ModuleType("main")
+    fake_main_module.main = fake_rebuild_main
+    monkeypatch.setitem(sys.modules, "main", fake_main_module)
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+
+    result = run_data_refresh(
+        DataRefreshRequest(
+            scrape=True,
+            rebuild=True,
+            force_full=True,
+            reset_db=True,
+            log_level="DEBUG",
+        )
+    )
+
+    command = captured["command"]
+    assert command[0] == sys.executable
+    assert command[1].endswith("scripts\\scrape_ufcstats.py") or command[1].endswith("scripts/scrape_ufcstats.py")
+    assert command[command.index("--output-dir") + 1] == str(raw_dir)
+    assert command[command.index("--log-level") + 1] == "DEBUG"
+    assert "--force-full" in command
+    assert captured["kwargs"]["cwd"] == Path(__file__).resolve().parents[2]
+    assert result["scrape_counts"] == {"fighters": 42, "fights": 99}
+    assert captured["rebuild_kwargs"]["raw_data_dir"] == raw_dir
+    assert "scraper stdout begin" in capsys.readouterr().out
+
+
+def test_run_data_refresh_surfaces_scraper_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 1, stdout="partial stdout", stderr="reactor error")
+
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="reactor error"):
+        run_data_refresh(DataRefreshRequest(scrape=True, rebuild=False))
+
+
 def test_list_fighters_supports_prediction_data_shapes(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"
