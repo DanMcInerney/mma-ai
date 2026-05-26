@@ -2,6 +2,7 @@ from pathlib import Path
 
 from scripts.release_audit import (
     audit_repository,
+    find_dockerignore_issues,
     find_file_mode_issues,
     find_forbidden_artifacts,
     find_hardcoded_local_database_urls,
@@ -72,6 +73,36 @@ def test_release_audit_requires_setup_sh_to_stay_executable():
         ("non_executable_setup_script", "setup.sh")
     ]
     assert find_file_mode_issues({"setup.sh": "100755"}) == []
+
+
+def test_release_audit_requires_dockerignore_to_protect_public_context(tmp_path):
+    (tmp_path / ".dockerignore").write_text(
+        "\n".join(
+            [
+                ".env",
+                ".env.local",
+                "*.log",
+                "logs",
+                "artifacts",
+                "AutoGluonModels",
+                "AutogluonModels",
+                "tests",
+                "data/**",
+                "!data/",
+                "!data/raw/",
+                "!data/raw/ufcstats/",
+                "!data/raw/ufcstats/competitions.csv",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    issues = find_dockerignore_issues(tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("incomplete_dockerignore", ".dockerignore")
+    ]
+    assert "!data/raw/ufcstats/individuals.csv" in issues[0].detail
 
 
 def test_release_audit_requires_public_entrypoints_and_seed_data():

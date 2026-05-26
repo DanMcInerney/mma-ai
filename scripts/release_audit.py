@@ -54,6 +54,22 @@ FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb", ".log")
 ASCII_RUNTIME_LOG_FILES = {"predict.py"}
 MIN_SEED_ROWS = 1000
 MIN_SEED_COLUMNS = 6
+REQUIRED_DOCKERIGNORE_LINES = {
+    ".env",
+    ".env.local",
+    "*.log",
+    "logs",
+    "artifacts",
+    "AutoGluonModels",
+    "AutogluonModels",
+    "tests",
+    "data/**",
+    "!data/",
+    "!data/raw/",
+    "!data/raw/ufcstats/",
+    "!data/raw/ufcstats/competitions.csv",
+    "!data/raw/ufcstats/individuals.csv",
+}
 
 SENSITIVE_PATTERNS = {
     "local_windows_path": re.compile(r"\b[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s\"'`<>]+", re.IGNORECASE),
@@ -138,6 +154,29 @@ def find_file_mode_issues(file_modes: Mapping[str, str]) -> list[AuditIssue]:
             )
         ]
     return []
+
+
+def find_dockerignore_issues(root: Path = ROOT) -> list[AuditIssue]:
+    path = root / ".dockerignore"
+    try:
+        lines = {
+            line.strip()
+            for line in path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        }
+    except OSError as exc:
+        return [AuditIssue("unreadable_dockerignore", ".dockerignore", str(exc))]
+
+    missing = sorted(REQUIRED_DOCKERIGNORE_LINES - lines)
+    if not missing:
+        return []
+    return [
+        AuditIssue(
+            kind="incomplete_dockerignore",
+            path=".dockerignore",
+            detail="Missing required Docker context rule(s): " + ", ".join(missing),
+        )
+    ]
 
 
 def find_misplaced_test_scripts(paths: Iterable[str]) -> list[AuditIssue]:
@@ -311,6 +350,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_seed_data_issues(tracked, root),
         *find_forbidden_artifacts(tracked),
         *find_file_mode_issues(file_modes),
+        *find_dockerignore_issues(root),
         *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),
