@@ -8,7 +8,7 @@ Train, and Predict dashboard.
 ## Main Entry Points
 
 - Web app: `libs.web.app:app`
-- First-time setup: `setup.ps1` on Windows or `setup.sh` on macOS/Linux
+- First-time setup: `setup.ps1` on Windows or `./setup.sh` on macOS/Linux
 - Web command: `uv run mma-web`
 - Docker: `docker compose up --build`
 - Docker Postgres init: `docker/postgres-init/01-create-odds.sql` creates the

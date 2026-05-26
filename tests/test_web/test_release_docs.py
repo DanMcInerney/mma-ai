@@ -67,6 +67,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert 'CMD ["uv", "run"' not in dockerfile
 
     assert "Data tab" in agents
+    assert "./setup.sh" in agents
     assert "Train tab" in agents
     assert "Predict tab" in agents
     assert "01-create-odds.sql" in agents
@@ -79,6 +80,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "output directory" in agents
     assert "YYYY-MM-DD" in agents
     assert "prediction_data.csv" in claude
+    assert "./setup.sh" in claude
     assert "training_data.csv" in claude
     assert "MMA_AI_DATA_DIR" in claude
     assert "01-create-odds.sql" in claude

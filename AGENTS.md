@@ -8,7 +8,7 @@ model training, analytics, and fight prediction.
 ## Current App Surface
 
 - Web app entry point: `libs.web.app:app`
-- First-time setup: `setup.ps1` on Windows or `setup.sh` on macOS/Linux. The
+- First-time setup: `setup.ps1` on Windows or `./setup.sh` on macOS/Linux. The
   scripts download Hugging Face artifacts, restore both Docker Postgres
   databases, copy processed CSVs, extract the starter model, optionally
   configure `LLM_PROVIDER`/`LLM_MODEL` plus provider API keys, and start the
