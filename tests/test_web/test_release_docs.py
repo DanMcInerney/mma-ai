@@ -140,7 +140,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "/vendor/plotly.min.js" in release_notes
     assert "/static/icons.js" in release_notes
 
-    assert "postgres:17" in compose
+    assert "postgres:18.1" in compose
     assert '"127.0.0.1:${MMA_AI_WEB_PORT:-8000}:8000"' in compose
     assert "MMA_AI_DATA_DIR: /app/data" in compose
     assert "./docker/postgres-init:/docker-entrypoint-initdb.d:ro" in compose

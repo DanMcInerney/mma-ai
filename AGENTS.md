@@ -15,7 +15,7 @@ model training, analytics, and fight prediction.
   dashboard.
 - Local web command: `uv run mma-web`
 - Docker command: `docker compose up --build`
-- Docker Postgres 17 initializes both `mma-ai` and `odds`; keep
+- Docker Postgres 18.1 initializes both `mma-ai` and `odds`; keep
   `docker/postgres-init/01-create-odds.sql` mounted in Compose while
   `ODDS_DATABASE_URL` points at the `odds` database.
 - Browser charts use the local `/vendor/plotly.min.js` route backed by the

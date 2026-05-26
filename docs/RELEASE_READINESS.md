@@ -89,7 +89,7 @@ badge.
   write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL` values for
   local CLI commands, start the web service, wait for `/api/readiness`, and open
   the dashboard.
-- Docker stack: `postgres:17` plus the FastAPI web service. Compose initializes
+- Docker stack: `postgres:18.1` plus the FastAPI web service. Compose initializes
   the auxiliary `odds` database with `docker/postgres-init/01-create-odds.sql`.
   `MMA_AI_COMPOSE_DATABASE_URL` and `MMA_AI_COMPOSE_ODDS_DATABASE_URL` let the
   Docker web service use an existing host PostgreSQL instance instead; in that
