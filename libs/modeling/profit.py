@@ -24,24 +24,29 @@ import random # <-- Add this import
 import matplotlib.pyplot as plt # <-- Add this import
 import seaborn as sns # <-- Add this import for potentially nicer plots
 
-# Configure logging to write to both file and console
-# Set up logging early so all log messages are captured
 log_filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'profit_analysis.log')
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_filename, mode='w'),  # 'w' to overwrite on each run, use 'a' to append
-        logging.StreamHandler()  # Console output
-    ]
-)
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.NullHandler())
+
+
+def configure_profit_logging(level=logging.INFO):
+    """Configure profit-analysis logging only when running that workflow."""
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_filename, mode='w'),
+            logging.StreamHandler(),
+        ],
+        force=True,
+    )
 
 # Import AutoGluonWrapper for calibrator loading
 try:
     from libs.modeling.autogluon_wrapper import AutoGluonWrapper
-    logging.info("Successfully imported AutoGluonWrapper from autogluon_wrapper.py")
+    logger.debug("Successfully imported AutoGluonWrapper from autogluon_wrapper.py")
 except ImportError as e:
-    logging.warning(f"Could not import AutoGluonWrapper from autogluon_wrapper.py: {e}")
+    logger.warning("Could not import AutoGluonWrapper from autogluon_wrapper.py: %s", e)
     AutoGluonWrapper = None
 
 # Suppress matplotlib debug logs
@@ -2467,6 +2472,7 @@ def visualize_backtest_results(final_summary, model_path):
 
 
 if __name__ == "__main__":
+    configure_profit_logging()
     # === CONFIGURATION FLAGS ===
     USE_CALIBRATION = False  # Set to False to use uncalibrated predictions
     #USE_CALIBRATION = True

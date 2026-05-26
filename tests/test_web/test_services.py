@@ -717,6 +717,39 @@ def test_list_upcoming_events_uses_scheduled_event_dates_before_link_order(monke
     assert result["events"][0]["source_url"] == "https://example.test/UFC_Next"
 
 
+def test_list_upcoming_events_prefers_scheduled_event_name_for_dropdown(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_scheduled_events(self):
+            return [
+                {
+                    "url": "https://example.test/UFC_319",
+                    "name": "UFC 319: Du Plessis vs Chimaev",
+                    "date": pd.Timestamp("2026-06-01"),
+                }
+            ]
+
+        def get_upcoming_cards(self, links):
+            return {
+                links[0].rsplit("/", 1)[1]: [
+                    (pd.Timestamp("2026-06-01"), "fighter one", "fighter two"),
+                ]
+            }
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    result = list_upcoming_events(str(prediction_csv), limit=1)
+
+    assert result["events"][0]["name"] == "UFC 319: Du Plessis vs Chimaev"
+    assert result["events"][0]["fights"][0]["fighter1"] == "fighter one"
+
+
 def test_list_upcoming_events_falls_back_when_scheduled_metadata_fails(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"

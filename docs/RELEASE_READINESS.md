@@ -15,7 +15,7 @@ uv run mma-rebuild-db --help
 uv run mma-train --help
 uv run mma-evaluate --help
 uv run mma-predict --help
-uv run mma-web
+uv run mma-web --help
 ```
 
 Docker smoke path:

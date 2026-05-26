@@ -1,6 +1,12 @@
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from libs.web import cli
+
+
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_web_cli_help_exits_without_starting_server(monkeypatch, capsys):
@@ -52,3 +58,19 @@ def test_web_cli_keeps_legacy_port_env_precedence(monkeypatch):
     assert cli.main([]) == 0
 
     assert captured["port"] == 9000
+
+
+def test_train_cli_help_is_quiet_and_non_blocking():
+    result = subprocess.run(
+        ["uv", "run", "mma-train", "--help"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
+    combined = result.stdout + result.stderr
+
+    assert result.returncode == 0, combined
+    assert "Train an MMA prediction model" in result.stdout
+    assert "Successfully imported AutoGluonWrapper" not in combined

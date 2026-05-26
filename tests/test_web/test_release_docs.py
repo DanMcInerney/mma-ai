@@ -106,7 +106,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "setup.ps1" in release_notes
     assert "setup.sh" in release_notes
     assert "./setup.sh" in release_notes
-    assert "uv run mma-web" in release_notes
+    assert "uv run mma-web --help" in release_notes
     assert "docker compose up --build" in release_notes
     assert "Data tab" in release_notes
     assert "recalculates odds features from the imported" in release_notes

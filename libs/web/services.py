@@ -555,7 +555,7 @@ def _load_upcoming_events(path: Path, limit: int | None = None) -> dict[str, Any
         warnings.append(f"Could not load scheduled event metadata from Wikipedia: {exc}")
 
     if scheduled_events:
-        selected_events = scheduled_events
+        selected_events = [{**event, "_prefer_scheduled_name": True} for event in scheduled_events]
     else:
         try:
             event_links = scraper.get_upcoming_event_links()
@@ -605,10 +605,11 @@ def _load_upcoming_events(path: Path, limit: int | None = None) -> dict[str, Any
             )
             continue
         for event_name, fights in event_map.items():
+            display_name = scheduled_event.get("name") if scheduled_event.get("_prefer_scheduled_name") else None
             events.append(
                 {
                     "upcoming_number": upcoming_number,
-                    "name": _clean_event_name(event_name),
+                    "name": _clean_event_name(display_name or event_name),
                     "date": _iso_datetime(scheduled_event.get("date")),
                     "source_url": event_link,
                     "fights": [
