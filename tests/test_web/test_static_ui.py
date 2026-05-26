@@ -198,6 +198,7 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     assert "function updateEventPreview()" in app_js
     assert "const params = new URLSearchParams();" in app_js
     assert 'api(`/api/predict/upcoming${query ? `?${query}` : ""}`)' in app_js
+    assert '<option value="${event.upcoming_number}">${escapeHtml(event.name)}</option>' in app_js
     assert 'qs("#predict-event").addEventListener("change"' in app_js
     assert 'upcoming_number: upcomingNumber' in app_js
     assert "Choose an upcoming event before prediction." in app_js

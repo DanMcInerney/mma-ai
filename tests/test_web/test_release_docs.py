@@ -122,7 +122,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "bestfightodds.bfo" in release_notes
     assert "Dashboard jobs are serialized" in release_notes
     assert "docker compose up --build db web" in release_notes
-    assert "docker compose up --build web" in release_notes
+    assert "docker compose up --no-deps --build web" in readme
+    assert "docker compose up --no-deps --build web" in release_notes
     assert "uv run mma-docker-smoke" in release_notes
     assert "uv run pytest -q" in release_notes
     assert "uv run mma-release-audit" in release_notes

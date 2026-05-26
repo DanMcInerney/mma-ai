@@ -492,7 +492,7 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int | No
             events.append(
                 {
                     "upcoming_number": upcoming_number,
-                    "name": event_name,
+                    "name": _clean_event_name(event_name),
                     "fights": [
                         {
                             "date": fight[0].isoformat() if hasattr(fight[0], "isoformat") else str(fight[0]),
@@ -520,8 +520,12 @@ def _empty_upcoming_event(event_link: str, upcoming_number: int, warning: str) -
 
 def _event_name_from_url(event_link: str) -> str:
     slug = event_link.rstrip("/").rsplit("/", 1)[-1]
-    name = unquote(slug).replace("_", " ").strip()
+    name = _clean_event_name(slug)
     return name or f"Upcoming UFC event {event_link}"
+
+
+def _clean_event_name(raw_name: str) -> str:
+    return unquote(str(raw_name)).replace("_", " ").strip()
 
 
 def _upcoming_event_sort_key(event: dict[str, Any]) -> tuple[datetime, int]:

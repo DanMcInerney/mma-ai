@@ -171,11 +171,11 @@ MMA_AI_COMPOSE_DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:
 MMA_AI_COMPOSE_ODDS_DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5432/odds
 ```
 
-Then run only the web service so Compose does not also start its bundled
-Postgres service on port 5432:
+Then run only the web service without Compose dependencies, so Compose does not
+also start its bundled Postgres service on port 5432:
 
 ```bash
-docker compose up --build web
+docker compose up --no-deps --build web
 ```
 
 If you want a fully isolated Docker database instead, leave those Compose URLs

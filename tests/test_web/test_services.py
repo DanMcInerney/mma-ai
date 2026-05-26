@@ -600,6 +600,32 @@ def test_list_upcoming_events_uses_wikipedia_scraper_adapter(monkeypatch, tmp_pa
     assert result["events"][0]["fights"][0]["fighter1"] == "fighter one"
 
 
+def test_list_upcoming_events_cleans_wikipedia_event_names(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+
+    class FakeUpcomingFights:
+        def __init__(self, df, upcoming_number):
+            self.upcoming_number = upcoming_number
+
+        def get_upcoming_event_links(self):
+            return ["https://example.test/UFC_Test%3A_Main_Event"]
+
+        def get_upcoming_cards(self, links):
+            return {
+                "UFC_Test%3A_Main_Event": [
+                    (pd.Timestamp("2026-06-01"), "fighter one", "fighter two"),
+                ]
+            }
+
+    monkeypatch.setattr("libs.upcoming_fights.UpcomingFights", FakeUpcomingFights)
+
+    result = list_upcoming_events(str(prediction_csv), limit=1)
+
+    assert result["events"][0]["name"] == "UFC Test: Main Event"
+
+
 def test_list_upcoming_events_defaults_to_all_scheduled_events(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     prediction_csv = tmp_path / "prediction_data.csv"
