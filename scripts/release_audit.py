@@ -242,6 +242,63 @@ def find_package_data_issues(root: Path = ROOT) -> list[AuditIssue]:
     return issues
 
 
+def _parse_bash_setup_artifact_pins(text: str) -> dict[str, str]:
+    match = re.search(r"(?ms)^ARTIFACTS=\(\s*(?P<body>.*?)^\)", text)
+    body = match.group("body") if match else ""
+    return {
+        path: sha.upper()
+        for path, sha in re.findall(r'"([^"|]+)\|([^"]*)"', body)
+    }
+
+
+def _parse_powershell_setup_artifact_pins(text: str) -> dict[str, str]:
+    return {
+        match.group(1): match.group(2).upper()
+        for match in re.finditer(
+            r'\[pscustomobject\]@\{\s*Path\s*=\s*"([^"]+)"\s*;\s*Sha256\s*=\s*"([^"]*)"\s*\}',
+            text,
+            flags=re.DOTALL,
+        )
+    }
+
+
+def find_setup_artifact_pin_issues(root: Path = ROOT) -> list[AuditIssue]:
+    """Require Windows and Unix first-time setup scripts to restore the same artifacts."""
+    try:
+        powershell_text = (root / "setup.ps1").read_text(encoding="utf-8", errors="replace")
+        bash_text = (root / "setup.sh").read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return [AuditIssue("unreadable_setup_pins", "setup.ps1/setup.sh", str(exc))]
+
+    powershell_pins = _parse_powershell_setup_artifact_pins(powershell_text)
+    bash_pins = _parse_bash_setup_artifact_pins(bash_text)
+    details = []
+    bash_only = sorted(set(bash_pins) - set(powershell_pins))
+    powershell_only = sorted(set(powershell_pins) - set(bash_pins))
+    mismatched = sorted(
+        path for path in set(bash_pins) & set(powershell_pins)
+        if bash_pins[path] != powershell_pins[path]
+    )
+    if bash_only:
+        details.append("only in setup.sh: " + ", ".join(bash_only))
+    if powershell_only:
+        details.append("only in setup.ps1: " + ", ".join(powershell_only))
+    if mismatched:
+        details.append("checksum mismatch: " + ", ".join(mismatched))
+    if not bash_pins or not powershell_pins:
+        details.append("could not parse artifact pins from one or both setup scripts")
+
+    if not details:
+        return []
+    return [
+        AuditIssue(
+            kind="setup_artifact_pin_drift",
+            path="setup.ps1/setup.sh",
+            detail="; ".join(details),
+        )
+    ]
+
+
 def find_misplaced_test_scripts(paths: Iterable[str]) -> list[AuditIssue]:
     issues: list[AuditIssue] = []
     for path in paths:
@@ -416,6 +473,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_dockerignore_issues(root),
         *find_gitattributes_issues(root),
         *find_package_data_issues(root),
+        *find_setup_artifact_pin_issues(root),
         *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),

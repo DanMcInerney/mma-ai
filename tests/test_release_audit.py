@@ -14,6 +14,7 @@ from scripts.release_audit import (
     find_package_data_issues,
     find_seed_data_issues,
     find_sensitive_text,
+    find_setup_artifact_pin_issues,
 )
 
 
@@ -189,6 +190,45 @@ def test_release_audit_requires_dashboard_static_assets_in_package_data(tmp_path
     )
 
     assert find_package_data_issues(tmp_path) == []
+
+
+def test_release_audit_requires_setup_artifact_pins_to_match_across_platforms(tmp_path):
+    (tmp_path / "setup.sh").write_text(
+        'ARTIFACTS=(\n'
+        '  "manifest.json|"\n'
+        '  "processed/prediction_data.csv|AAA111"\n'
+        '  "models/model.tar.gz|BBB222"\n'
+        ')\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "setup.ps1").write_text(
+        '$Artifacts = @(\n'
+        '    [pscustomobject]@{ Path = "manifest.json"; Sha256 = "" },\n'
+        '    [pscustomobject]@{ Path = "processed/prediction_data.csv"; Sha256 = "AAA111" },\n'
+        '    [pscustomobject]@{ Path = "models/model.tar.gz"; Sha256 = "CCC333" },\n'
+        '    [pscustomobject]@{ Path = "dumps/extra.postgres-custom"; Sha256 = "DDD444" }\n'
+        ')\n',
+        encoding="utf-8",
+    )
+
+    issues = find_setup_artifact_pin_issues(tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("setup_artifact_pin_drift", "setup.ps1/setup.sh")
+    ]
+    assert "checksum mismatch: models/model.tar.gz" in issues[0].detail
+    assert "only in setup.ps1: dumps/extra.postgres-custom" in issues[0].detail
+
+    (tmp_path / "setup.ps1").write_text(
+        '$Artifacts = @(\n'
+        '    [pscustomobject]@{ Path = "manifest.json"; Sha256 = "" },\n'
+        '    [pscustomobject]@{ Path = "processed/prediction_data.csv"; Sha256 = "AAA111" },\n'
+        '    [pscustomobject]@{ Path = "models/model.tar.gz"; Sha256 = "BBB222" }\n'
+        ')\n',
+        encoding="utf-8",
+    )
+
+    assert find_setup_artifact_pin_issues(tmp_path) == []
 
 
 def test_release_audit_requires_public_entrypoints_and_seed_data():
