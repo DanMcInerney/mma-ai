@@ -49,7 +49,10 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "--force-download" in readme
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
-    assert "/api/health" in read_text("Dockerfile")
+    dockerfile = read_text("Dockerfile")
+    assert "/api/health" in dockerfile
+    assert 'CMD ["/app/.venv/bin/uvicorn"' in dockerfile
+    assert 'CMD ["uv", "run"' not in dockerfile
 
     assert "Data tab" in agents
     assert "Train tab" in agents
