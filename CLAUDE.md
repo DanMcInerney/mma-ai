@@ -31,7 +31,9 @@ Train, and Predict dashboard.
   collapsed UI controls. The Evaluations subtab reads saved model artifacts and
   charts holdout prediction metrics including accuracy, log loss, Brier score,
   ROC AUC, calibration, confidence, feature importance, and best-practice
-  checks. `mma-evaluate` emits the same summary as JSON.
+  checks. Completed dashboard training jobs write `dashboard_evaluation_summary.json`
+  and `dashboard_evaluation.md`; `mma-evaluate --write-report --format text`
+  emits the same report artifacts.
 - Predict: select a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict the selected event, and run
   manual fighter matchups through the same inference path. Odds are only for EV

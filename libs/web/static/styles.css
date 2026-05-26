@@ -427,6 +427,53 @@ summary {
   background: #f9fafb;
 }
 
+.event-preview {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.upcoming-event-summary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.upcoming-event-summary strong {
+  display: block;
+  margin-top: 2px;
+}
+
+.event-number {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  padding: 4px 9px;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.fight-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fight-chip {
+  border: 1px solid #dbe3ea;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 5px 9px;
+  color: #334155;
+  font-size: 12px;
+}
+
 .event-list {
   display: grid;
   gap: 10px;
@@ -484,8 +531,71 @@ summary {
   box-shadow: 0 10px 26px rgba(15, 23, 42, 0.06);
 }
 
+.pretty-prediction.has-value {
+  border-color: rgba(15, 118, 110, 0.42);
+}
+
 .prediction-result + .prediction-result {
   margin-top: 12px;
+}
+
+.prediction-set {
+  display: grid;
+  gap: 14px;
+}
+
+.prediction-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 12px;
+  border-radius: 8px;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 14px;
+}
+
+.prediction-hero strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 24px;
+}
+
+.prediction-hero p {
+  color: #cbd5e1;
+}
+
+.prediction-kicker {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.prediction-hero .prediction-kicker {
+  color: #99f6e4;
+}
+
+.confidence-pill {
+  display: grid;
+  align-content: center;
+  justify-items: end;
+  min-width: 112px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(15, 118, 110, 0.18);
+}
+
+.confidence-pill span {
+  color: #cbd5e1;
+  font-size: 11px;
+}
+
+.confidence-pill strong {
+  font-size: 22px;
 }
 
 .prediction-title,
@@ -686,6 +796,11 @@ footer {
     grid-template-columns: 1fr;
   }
 
+  .prediction-hero,
+  .upcoming-event-summary {
+    flex-direction: column;
+  }
+
   .prediction-callout {
     flex-direction: column;
   }
@@ -693,7 +808,8 @@ footer {
   .prediction-title,
   .prediction-foot,
   .fighter-prob-top,
-  .prediction-callout {
+  .prediction-callout,
+  .confidence-pill {
     align-items: flex-start;
   }
 

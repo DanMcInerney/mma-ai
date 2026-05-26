@@ -5,6 +5,7 @@ let activeMatchupJobId = null;
 let activeTrainingJobId = null;
 let activeDataJobId = null;
 let selectedUpcomingNumber = 1;
+let upcomingEventsCache = [];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -184,7 +185,7 @@ function renderPredictionGraphic(target, predictions) {
     qs(target).innerHTML = `<div class="muted">No prediction rows were produced.</div>`;
     return;
   }
-  qs(target).innerHTML = predictions.map((row) => {
+  qs(target).innerHTML = `<div class="prediction-set">${predictions.map((row) => {
     const evPositive = String(row.EV) === "1";
     const confidence = numberOrNull(row.Confidence);
     const f1Prob = probabilityWidth(row.Fighter1_AI_Prob);
@@ -193,12 +194,20 @@ function renderPredictionGraphic(target, predictions) {
     const f1Winner = row.AI_Pick === row.Fighter1;
     const f2Winner = row.AI_Pick === row.Fighter2;
     return `
-      <article class="prediction-result pretty-prediction">
-        <div class="prediction-title">
+      <article class="prediction-result pretty-prediction${evPositive ? " has-value" : ""}">
+        <div class="prediction-hero">
           <div>
-            <strong>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</strong>
-            <p>Model pick: ${escapeHtml(row.AI_Pick || "N/A")} at ${confidence === null ? "N/A" : `${confidence.toFixed(1)}%`} confidence</p>
+            <span class="prediction-kicker">Model Pick</span>
+            <strong>${escapeHtml(row.AI_Pick || "N/A")}</strong>
+            <p>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</p>
           </div>
+          <div class="confidence-pill">
+            <span>Confidence</span>
+            <strong>${confidence === null ? "N/A" : `${confidence.toFixed(1)}%`}</strong>
+          </div>
+        </div>
+        <div class="prediction-title">
+          <strong>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</strong>
           <span class="${evPositive ? "ev-positive" : "ev-neutral"}">${evPositive ? "Positive EV" : "No positive EV"}</span>
         </div>
         <div class="fighter-prob-grid">
@@ -235,7 +244,7 @@ function renderPredictionGraphic(target, predictions) {
           <span>EV: <strong>${evPositive ? "Yes" : "No"}</strong></span>
         </div>
       </article>`;
-  }).join("");
+  }).join("")}</div>`;
 }
 
 function renderUpcomingEvents(payload) {
@@ -247,6 +256,7 @@ function renderUpcomingEvents(payload) {
     if (rightDate) return 1;
     return Number(left.upcoming_number || 0) - Number(right.upcoming_number || 0);
   });
+  upcomingEventsCache = events;
   const select = qs("#predict-event");
   if (!events.length) {
     if (select) {
@@ -254,7 +264,8 @@ function renderUpcomingEvents(payload) {
       select.disabled = true;
     }
     selectedUpcomingNumber = null;
-    qs("#events-output").innerHTML = `<div class="muted">${escapeHtml(payload?.warning || "No upcoming UFC events found.")}</div>`;
+    qs("#event-preview").innerHTML = `<div class="muted">${escapeHtml(payload?.warning || "No upcoming UFC events found.")}</div>`;
+    qs("#events-output").innerHTML = "";
     return;
   }
 
@@ -269,35 +280,34 @@ function renderUpcomingEvents(payload) {
     select.value = String(selectedUpcomingNumber);
   }
 
-  qs("#events-output").innerHTML = `
-    <div class="event-list">
-      ${events.map((event, index) => {
-        const date = formatEventDate(event);
-        const selected = Number(event.upcoming_number) === selectedUpcomingNumber || (selectedUpcomingNumber === null && index === 0);
-        const preview = (event.fights || []).slice(0, 4)
-          .map((fight) => `<li>${escapeHtml(fight.fighter1)} vs ${escapeHtml(fight.fighter2)}</li>`)
-          .join("");
-        return `
-          <button class="event-card${selected ? " selected" : ""}" data-upcoming-number="${event.upcoming_number}">
-            <span class="event-card-top">
-              <strong>${escapeHtml(event.name)}</strong>
-              <span>${escapeHtml(date)}</span>
-            </span>
-            <span class="event-card-meta">${event.fights?.length || 0} fights - event #${event.upcoming_number}</span>
-            <ul>${preview || "<li>No matched fights yet</li>"}</ul>
-          </button>`;
-      }).join("")}
-    </div>
-    ${payload.warning ? `<div class="muted">${escapeHtml(payload.warning)}</div>` : ""}`;
+  updateEventPreview();
+  qs("#events-output").innerHTML = payload.warning ? `<div class="muted">${escapeHtml(payload.warning)}</div>` : "";
+}
 
-  qsa(".event-card").forEach((card) => {
-    card.addEventListener("click", () => {
-      selectedUpcomingNumber = Number(card.dataset.upcomingNumber);
-      if (select) select.value = String(selectedUpcomingNumber);
-      qsa(".event-card").forEach((item) => item.classList.remove("selected"));
-      card.classList.add("selected");
-    });
-  });
+function selectedUpcomingEvent() {
+  return upcomingEventsCache.find((event) => Number(event.upcoming_number) === Number(selectedUpcomingNumber));
+}
+
+function updateEventPreview() {
+  const event = selectedUpcomingEvent();
+  if (!event) {
+    qs("#event-preview").innerHTML = `<div class="muted">Choose an upcoming event to preview the matched fights.</div>`;
+    return;
+  }
+  const fights = event.fights || [];
+  const preview = fights.slice(0, 6)
+    .map((fight) => `<span class="fight-chip">${escapeHtml(fight.fighter1)} vs ${escapeHtml(fight.fighter2)}</span>`)
+    .join("");
+  qs("#event-preview").innerHTML = `
+    <div class="upcoming-event-summary">
+      <div>
+        <span class="prediction-kicker">Selected Event</span>
+        <strong>${escapeHtml(event.name)}</strong>
+        <p>${escapeHtml(formatEventDate(event))} | ${fights.length} matched fights</p>
+      </div>
+      <span class="event-number">#${escapeHtml(event.upcoming_number)}</span>
+    </div>
+    <div class="fight-chip-list">${preview || `<span class="muted">No matched fights yet.</span>`}</div>`;
 }
 
 function renderDataRefreshResult(result) {
@@ -347,10 +357,12 @@ function renderEvaluation(summary) {
   const features = (summary.feature_importance || []).slice(0, 10);
   const weights = summary.model_weights || [];
   const checks = summary.best_practices || [];
+  const reportPaths = summary.report_paths || {};
   qs("#eval-output").innerHTML = `
     <div>
       <h2>${escapeHtml(summary.model_name)}</h2>
       <p>${escapeHtml(summary.model_path)}</p>
+      ${reportPaths.markdown ? `<p>Evaluation report: ${escapeHtml(reportPaths.markdown)}</p>` : ""}
     </div>
     <div class="eval-grid">
       ${metricCards.map(([label, value]) => `<div class="eval-card"><strong>${formatMetric(value)}</strong><span>${label}</span></div>`).join("")}
@@ -600,7 +612,8 @@ async function loadUpcomingEvents() {
     select.disabled = true;
     select.innerHTML = `<option value="">Loading upcoming events...</option>`;
   }
-  qs("#events-output").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`;
+  qs("#event-preview").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`;
+  qs("#events-output").innerHTML = "";
   const params = new URLSearchParams({ limit: "20" });
   const predictionCsv = predictionDataCsv();
   if (predictionCsv) params.set("prediction_data_csv", predictionCsv);
@@ -610,9 +623,7 @@ async function loadUpcomingEvents() {
 function wirePrediction() {
   qs("#predict-event").addEventListener("change", () => {
     selectedUpcomingNumber = Number(qs("#predict-event").value || 0) || null;
-    qsa(".event-card").forEach((card) => {
-      card.classList.toggle("selected", Number(card.dataset.upcomingNumber) === selectedUpcomingNumber);
-    });
+    updateEventPreview();
   });
   qs("#load-events").addEventListener("click", async () => {
     try {

@@ -49,8 +49,10 @@ badge.
   CSVs.
 - Train tab: run `libs/modeling/train.py` defaults through a compact UI, keep
   advanced knobs collapsed, and summarize saved model evaluation artifacts with
-  metrics and charts. `mma-evaluate` emits the same evaluation summary as JSON
-  for automation.
+  metrics and charts. Completed dashboard training jobs write
+  `dashboard_evaluation_summary.json` and `dashboard_evaluation.md` into the
+  model directory; `mma-evaluate --write-report --format text` emits the same
+  report artifacts for automation and local inspection.
 - Predict tab: list models, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, run manual
   fighter matchups, and show AI probability, market probability, AI odds, and

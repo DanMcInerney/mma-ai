@@ -20,7 +20,7 @@ from typing import Any
 import pandas as pd
 
 from libs.paths import PROJECT_ROOT, data_dir, data_file, database_url, models_dir, odds_database_url, raw_ufcstats_dir
-from libs.web.evaluations import summarize_model_evaluation
+from libs.web.evaluations import summarize_model_evaluation, write_model_evaluation_report
 from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupPredictionRequest, TrainingRequest
 from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, resolve_model_dir
 
@@ -416,7 +416,12 @@ def _safe_evaluation(model_path: str) -> dict[str, Any] | None:
     if not model_path:
         return None
     try:
-        return summarize_model_evaluation(model_path)
+        summary = summarize_model_evaluation(model_path)
+        report_paths = write_model_evaluation_report(summary)
+        if report_paths:
+            summary["report_paths"] = report_paths
+            print(f"[training] evaluation report written: {report_paths}")
+        return summary
     except Exception as exc:
         return {"available": False, "message": str(exc), "model_path": model_path}
 

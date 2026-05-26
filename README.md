@@ -179,6 +179,8 @@ run the Data and Train tabs to create them.
   defaults, keep all training knobs collapsed under Advanced Training Knobs, and
   inspect saved evaluation artifacts with accuracy, log loss, Brier score, ROC
   AUC, calibration, confidence, feature-importance, and best-practice summaries.
+  Completed dashboard training jobs also write `dashboard_evaluation_summary.json`
+  and `dashboard_evaluation.md` into the model directory.
 - Predict: choose a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, or run a
   manual fighter-vs-fighter matchup with positive-EV output cards. Odds are used
@@ -195,7 +197,7 @@ Each long-running Data, Train, or Predict job writes a debug log under
 uv run mma-scrape-ufcstats
 uv run mma-rebuild-db
 uv run mma-train
-uv run mma-evaluate
+uv run mma-evaluate --write-report --format text
 uv run mma-predict
 uv run pytest
 ```

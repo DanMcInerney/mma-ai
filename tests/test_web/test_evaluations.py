@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from libs.web.evaluations import cli, summarize_model_evaluation
+from libs.web.evaluations import cli, summarize_model_evaluation, write_model_evaluation_report
 
 
 def write_model_artifacts(model_dir: Path):
@@ -82,6 +82,31 @@ def test_summarize_model_evaluation_warns_when_core_artifacts_missing(monkeypatc
     assert "evals.txt" in checks["Artifact completeness"]["detail"]
 
 
+def test_summarize_model_evaluation_normalizes_test_and_val_metrics(monkeypatch, tmp_path):
+    models_root = tmp_path / "models"
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_root))
+    model_dir = models_root / "ag-test-labels"
+    model_dir.mkdir(parents=True)
+    (model_dir / "feats.txt").write_text("feature_a\n", encoding="utf-8")
+    (model_dir / "evals.txt").write_text(
+        "Train accuracy: 0.8000\n"
+        "Train log loss: 0.4000\n"
+        "Val accuracy: 0.7000\n"
+        "Val log loss: 0.5500\n"
+        "Test accuracy: 0.6500\n"
+        "Test log loss: 0.6200\n"
+        "Test brier score: 0.2100\n",
+        encoding="utf-8",
+    )
+
+    summary = summarize_model_evaluation(model_dir)
+
+    assert summary["metrics"]["training"]["accuracy"] == 0.8
+    assert summary["metrics"]["validation"]["log_loss"] == 0.55
+    assert summary["metrics"]["holdout"]["accuracy"] == 0.65
+    assert summary["metrics"]["holdout"]["brier_score"] == 0.21
+
+
 def test_summarize_model_evaluation_uses_latest_model_from_env(monkeypatch, tmp_path):
     models_root = tmp_path / "models"
     older = models_root / "ag-older"
@@ -107,3 +132,46 @@ def test_evaluation_cli_writes_json_summary(monkeypatch, tmp_path, capsys):
     assert exit_code == 0
     assert '"model_name": "ag-cli"' in output_path.read_text(encoding="utf-8")
     assert '"Holdout coverage"' in capsys.readouterr().out
+
+
+def test_write_model_evaluation_report_creates_readable_artifacts(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "models"))
+    model_dir = tmp_path / "models" / "ag-report"
+    write_model_artifacts(model_dir)
+    summary = summarize_model_evaluation(model_dir)
+
+    report_paths = write_model_evaluation_report(summary)
+
+    json_report = Path(report_paths["json"])
+    markdown_report = Path(report_paths["markdown"])
+    assert json_report.exists()
+    assert markdown_report.exists()
+    assert "dashboard_evaluation_summary.json" == json_report.name
+    markdown = markdown_report.read_text(encoding="utf-8")
+    assert "Model Evaluation Report: ag-report" in markdown
+    assert "Holdout Accuracy" in markdown
+    assert "Holdout Log Loss" in markdown
+    assert "Brier Score" in markdown
+
+
+def test_evaluation_cli_can_write_markdown_and_text_output(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "models"))
+    model_dir = tmp_path / "models" / "ag-cli-report"
+    markdown_path = tmp_path / "eval.md"
+    write_model_artifacts(model_dir)
+
+    exit_code = cli([
+        "--model-path",
+        str(model_dir),
+        "--output-markdown",
+        str(markdown_path),
+        "--write-report",
+        "--format",
+        "text",
+    ])
+
+    assert exit_code == 0
+    assert "Model Evaluation Report: ag-cli-report" in markdown_path.read_text(encoding="utf-8")
+    assert "Best-Practice Checks" in capsys.readouterr().out
+    assert (model_dir / "dashboard_evaluation_summary.json").exists()
+    assert (model_dir / "dashboard_evaluation.md").exists()

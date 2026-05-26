@@ -14,6 +14,8 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert "cdn.plot.ly" not in html
     assert "unpkg.com" not in html
     assert "Value Side" in app_js
+    assert "Model Pick" in app_js
+    assert "confidence-pill" in app_js
     assert "Fighter1_Market_Prob" in app_js
     assert "Fighter2_Market_Prob" in app_js
     assert "Fighter1_Odds" in app_js
@@ -154,13 +156,16 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
     assert 'id="predict-event"' in html
+    assert 'id="event-preview"' in html
     assert "Loading upcoming events..." in html
     assert "Odds are not included in the model" in html
     assert "async function loadUpcomingEvents()" in app_js
+    assert "function updateEventPreview()" in app_js
     assert 'new URLSearchParams({ limit: "20" })' in app_js
     assert 'qs("#predict-event").addEventListener("change"' in app_js
     assert 'upcoming_number: upcomingNumber' in app_js
     assert "Choose an upcoming event before prediction." in app_js
+    assert 'qs("#event-preview").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`' in app_js
 
 
 def test_analytics_options_expose_bounded_row_limit():

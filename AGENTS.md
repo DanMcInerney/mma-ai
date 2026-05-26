@@ -30,8 +30,10 @@ model training, analytics, and fight prediction.
   - Train tab: launch AutoGluon training with defaults from `libs/modeling/train.py`; advanced knobs stay collapsed.
     The Evaluations subtab summarizes saved artifacts such as `evals.txt`,
     `model_stats.txt`, `test_predictions.csv`, `all_predictions.csv`, and
-    `calibration_curve.png`; the `mma-evaluate` script produces the same summary
-    as JSON for automation.
+    `calibration_curve.png`; completed dashboard training jobs also write
+    `dashboard_evaluation_summary.json` and `dashboard_evaluation.md`, and the
+    `mma-evaluate --write-report --format text` script produces the same report
+    artifacts for automation.
   - Predict tab: choose a model, automatically load upcoming events from
     Wikipedia into an event-name dropdown, run event prediction, and validate
     manual fighter matchups. Odds are not model inputs; they are only for market

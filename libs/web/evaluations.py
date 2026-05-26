@@ -14,7 +14,13 @@ from libs.paths import models_dir
 from libs.web.path_safety import resolve_model_dir
 
 
-METRIC_LINE = re.compile(r"^(?P<label>Training|Validation|Holdout)\s+(?P<metric>accuracy|log loss):\s+(?P<value>-?\d+(?:\.\d+)?)$", re.IGNORECASE)
+METRIC_LINE = re.compile(
+    r"^(?P<label>Training|Train|Validation|Val|Holdout|Test)\s+"
+    r"(?P<metric>accuracy|log loss|brier score):\s+(?P<value>-?\d+(?:\.\d+)?)$",
+    re.IGNORECASE,
+)
+REPORT_JSON_NAME = "dashboard_evaluation_summary.json"
+REPORT_MARKDOWN_NAME = "dashboard_evaluation.md"
 
 
 def summarize_model_evaluation(model_path: str | Path | None = None) -> dict[str, Any]:
@@ -62,6 +68,27 @@ def summarize_model_evaluation(model_path: str | Path | None = None) -> dict[str
     }
 
 
+def write_model_evaluation_report(summary: dict[str, Any], output_dir: str | Path | None = None) -> dict[str, str]:
+    """Write dashboard-friendly evaluation artifacts beside a trained model."""
+    if not summary.get("available"):
+        return {}
+
+    target_value = output_dir or summary.get("model_path")
+    if not target_value:
+        return {}
+
+    target_dir = Path(target_value)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    report_paths = {
+        "json": str(target_dir / REPORT_JSON_NAME),
+        "markdown": str(target_dir / REPORT_MARKDOWN_NAME),
+    }
+    report_summary = {**summary, "report_paths": report_paths}
+    Path(report_paths["json"]).write_text(json.dumps(report_summary, indent=2) + "\n", encoding="utf-8")
+    Path(report_paths["markdown"]).write_text(_format_markdown_summary(report_summary) + "\n", encoding="utf-8")
+    return report_paths
+
+
 def _resolve_model_path(model_path: str | Path | None) -> Path | None:
     if model_path:
         return resolve_model_dir(model_path)
@@ -89,6 +116,8 @@ def _collect_artifacts(model_path: Path) -> list[dict[str, Any]]:
         "calibration_curve.png",
         "feats.txt",
         "holdout_fight_ids.txt",
+        REPORT_JSON_NAME,
+        REPORT_MARKDOWN_NAME,
     ]
     artifacts = []
     for name in artifact_names:
@@ -113,13 +142,24 @@ def _parse_evals_metrics(text: str) -> dict[str, Any]:
         match = METRIC_LINE.match(raw_line.strip())
         if not match:
             continue
-        split_name = match.group("label").lower()
+        split_name = _normalize_split_name(match.group("label"))
         metric_name = match.group("metric").lower().replace(" ", "_")
         metrics.setdefault(split_name, {})[metric_name] = float(match.group("value"))
     best_model = _find_after_label(text, "Best Model")
     if best_model:
         metrics["best_model"] = best_model
     return metrics
+
+
+def _normalize_split_name(label: str) -> str:
+    normalized = label.lower()
+    if normalized == "train":
+        return "training"
+    if normalized == "val":
+        return "validation"
+    if normalized == "test":
+        return "holdout"
+    return normalized
 
 
 def _parse_model_stats(text: str) -> dict[str, Any]:
@@ -425,6 +465,82 @@ def _check(name: str, status: str, detail: str) -> dict[str, str]:
     return {"name": name, "status": status, "detail": detail}
 
 
+def _summary_metric(summary: dict[str, Any], *path: str) -> Any:
+    current: Any = summary
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _format_value(value: Any) -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, (int, float)):
+        return f"{value:.4f}" if abs(value) <= 1 else f"{value:.2f}"
+    return str(value)
+
+
+def _format_markdown_summary(summary: dict[str, Any]) -> str:
+    metrics = [
+        ("Samples", _summary_metric(summary, "metrics", "holdout_predictions", "samples")),
+        ("Holdout Accuracy", _first_present(_summary_metric(summary, "metrics", "holdout_predictions", "accuracy"), _summary_metric(summary, "metrics", "holdout", "accuracy"))),
+        ("Holdout Log Loss", _first_present(_summary_metric(summary, "metrics", "holdout_predictions", "log_loss"), _summary_metric(summary, "metrics", "holdout", "log_loss"))),
+        ("Brier Score", _summary_metric(summary, "metrics", "holdout_predictions", "brier_score")),
+        ("ROC AUC", _summary_metric(summary, "metrics", "holdout_predictions", "roc_auc")),
+        ("Train Accuracy", _summary_metric(summary, "metrics", "training", "accuracy")),
+        ("Validation Accuracy", _summary_metric(summary, "metrics", "validation", "accuracy")),
+        ("Mean Probability", _summary_metric(summary, "metrics", "holdout_predictions", "mean_probability")),
+    ]
+    lines = [
+        f"# Model Evaluation Report: {summary.get('model_name') or 'Unknown Model'}",
+        "",
+        f"Model path: `{summary.get('model_path') or 'N/A'}`",
+        "",
+        "## Metrics",
+        "",
+        "| Metric | Value |",
+        "| --- | ---: |",
+    ]
+    lines.extend(f"| {label} | {_format_value(value)} |" for label, value in metrics)
+
+    checks = summary.get("best_practices") or []
+    lines.extend(["", "## Best-Practice Checks", ""])
+    if checks:
+        lines.extend(f"- **{check['name']}** ({check['status']}): {check['detail']}" for check in checks)
+    else:
+        lines.append("- No best-practice checks were available.")
+
+    features = (summary.get("feature_importance") or [])[:10]
+    lines.extend(["", "## Top Features", ""])
+    if features:
+        lines.extend(f"{index}. `{row['feature']}`: {_format_value(row['importance'])}" for index, row in enumerate(features, start=1))
+    else:
+        lines.append("No feature importance artifact was found.")
+
+    artifacts = summary.get("artifacts") or []
+    lines.extend(["", "## Artifacts", ""])
+    if artifacts:
+        lines.extend(f"- `{artifact['name']}` ({artifact['size_bytes']} bytes)" for artifact in artifacts)
+    else:
+        lines.append("No evaluation artifacts were found.")
+
+    return "\n".join(lines)
+
+
+def _format_text_summary(summary: dict[str, Any]) -> str:
+    markdown = _format_markdown_summary(summary)
+    return re.sub(r"`([^`]+)`", r"\1", markdown.replace("# ", "").replace("## ", ""))
+
+
 def cli(argv: list[str] | None = None) -> int:
     """Write a portable model-evaluation summary for scripts and setup checks."""
     import argparse
@@ -432,14 +548,22 @@ def cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Summarize MMA AI model evaluation artifacts.")
     parser.add_argument("--model-path", help="Model directory to evaluate. Defaults to the latest model.")
     parser.add_argument("--output-json", help="Optional path to write the evaluation summary JSON.")
+    parser.add_argument("--output-markdown", help="Optional path to write a Markdown evaluation report.")
+    parser.add_argument("--write-report", action="store_true", help="Write dashboard_evaluation artifacts into the model directory.")
+    parser.add_argument("--format", choices=["json", "text"], default="json", help="Console output format.")
     args = parser.parse_args(argv)
 
     summary = summarize_model_evaluation(args.model_path)
+    if args.write_report:
+        summary["report_paths"] = write_model_evaluation_report(summary)
     output = json.dumps(summary, indent=2)
     if args.output_json:
         Path(args.output_json).parent.mkdir(parents=True, exist_ok=True)
         Path(args.output_json).write_text(output + "\n", encoding="utf-8")
-    print(output)
+    if args.output_markdown:
+        Path(args.output_markdown).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output_markdown).write_text(_format_markdown_summary(summary) + "\n", encoding="utf-8")
+    print(output if args.format == "json" else _format_text_summary(summary))
     return 0
 
 
