@@ -17,6 +17,7 @@ from curl_cffi import requests
 from bs4 import BeautifulSoup
 import urllib3
 import warnings
+from libs.bfo_scraper import BFOScraper
 from libs.paths import data_file, models_dir, picks_dir
 
 # Disable SSL warnings
@@ -29,107 +30,11 @@ class BFOLatestOddsOnly:
     Only fetches current odds for predictions - does not store or update any data.
     """
     
-    # Same name mappings as BFOScraper for consistency
-    NAME_MAPPINGS = {
-        "jose medina": "jose daniel medina",
-        "aj matthews": "a.j. matthews",
-        "aj mckee": "a.j. mckee",
-        "alatengheili": "heili alateng",
-        "alavutdin gadjiev": "alavutdin gadzhiyev",
-        "andre amado": "andre amade",
-        "antonio dos santos": "antonio dos santos jr.",
-        "artenus young": "artenas young",
-        "bazigit atajev": "bazigit ataev",
-        "bj penn": "b.j. penn",
-        "bret bergmark": "brett bergmark",
-        "cj keith": "c.j. keith",
-        "dan manasoiu": "daniel manasoiu",
-        "dmitry sosnovskiy": "dmitriy sosnovskiy",
-        "henrique shiguemoto": "henrique shigemoto",
-        "jaime alvarez": "jamie alvarez",
-        "jj ambrose": "j.j. ambrose",
-        "jonathan piersma": "johnathan piersma",
-        "joshua burkman": "josh burkman",
-        "joshua wang-kim": "josh wang-kim",
-        "kenyon jackson": "kenan jackson",
-        "kyeungpyo kim": "kyung pyo kim",
-        "luiz cane": "luis cane",
-        "michael aswell jr.": "michael aswell",
-        "ovince saint preux": "ovince st. preux",
-        "rafael freitas": "rafael de freitas",
-        "reyes cortez jr.": "reyes cortez",
-        "rilley dutro": "riley dutro",
-        "robert sanchez": "roberto sanchez",
-        "rodrigo de lima": "rodrigo lima",
-        "sangwon kim": "sang won kim",
-        "steve kennedy": "steven kennedy",
-        "suyoung you": "suyoung yu",
-        "talisson teixeira": "tallison teixeira",
-        "tj waldburger": "t.j. waldburger",
-        "zachary micklewright": "zach micklewright",
-        "jacare souza": "ronaldo souza",
-        "aj fonseca": "a.j. fonseca",
-        "jc cottrell": "j.c. cottrell",
-        "tj dillashaw": "t.j. dillashaw",
-        'cb dollaway': 'c.b. dollaway',
-        "alex torres": "alexander torres",
-        "alvaro herrera mendoza": "alvaro herrera",
-        "batgerel danaa": "danaa batgerel",
-        "benoit saint denis": "benoit saint-denis",
-        'da woon jung': 'da un jung',
-        'junyong park': 'jun yong park',
-        "changho lee": "chang ho lee",
-        "jesus aguilar": "jesus santos aguilar",
-        'donghun choi': "dong hoon choi",
-        "jianping yang": "yang jianping",
-        'jp buys': 'j.p. buys',
-        'montserrat conejo ruiz': 'montserrat conejo',
-        'mizuki': 'mizuki inoue',
-        'tj grant': 't.j. grant',
-        'raul rosas jr.': 'raul rosas jr',
-    }
-    
-    REVERSE_MAPPINGS = {v.lower(): k.lower() for k, v in NAME_MAPPINGS.items()}
-    
-    DUPE_NAMES = {'song kenan': ['kenan song'],
-                  'geoff neal': ['geoffrey neal'],
-                  'nate maness': ['nathan maness'],
-                  'daniel lacerda': ['daniel da silva lacerda'],
-                  'alexandr romanov': ['alexander romanov'],
-                  'jj aldrich': ['j.j. aldrich'],
-                  'raul rosas jr': ['raul rosas jr.'],
-                  'ricky glenn': ['rick glen'],
-                  'diego ferreira': ['carlos diego ferreira'],
-                  'maheshate': ['hayisaer maheshate', 'maheshate hayisaer'],
-                  'elizeu zaleski': ['elizeu zaleski dos santos'],
-                  'aoriqileng': ['aori qileng', 'qileng aori'],
-                  'dan argueta': ['daniel argueta', 'daniel argueta.'],
-                  'phil rowe': ['philip rowe', 'phillip rowe'],
-                  'abus magomedov': ['abusupiyan magomedov'],
-                  'elves brener': ['elves brenner', 'elves brenner.'],
-                  'yanal ashmouz': ['yanal ashmoz'],
-                  'aj dobson': ['a.j. dobson'],
-                  'chepe mariscal': ['jose mariscal'],
-                  'aj fletcher': ['a.j. fletcher'],
-                  'muhammad naimov': ['muhammadjon naimov'],
-                  'sergei pavlovich': ['sergey pavlovich'],
-                  'sumudaerji': ['sumudaerji sumudaerji', 'su mudaerji'],
-                  'hyunsung park': ['hyun sung park', 'park hyun-sung'],
-                  'charles radtke': ['charlie radtke'],
-                  'jeongyeong lee': ['lee jeong-yeong'],
-                  'steve erceg': ['stephen erceg.', 'stephen erceg'],
-                  "dooho choi": ['doo ho choi', 'choi doo ho'],
-                  "brendan o'reilly": ['brendan oreilly'],
-                  "sean o'malley": ['sean omalley'],
-                  "sean o'connell": ['sean oconnell'],
-                  "chuck o'neil": ['chuck oneil'],
-                  "anthony o'connor": ['anthony oconnor'],
-                  "da'mon blackshear": ['damon blackshear'],
-                  "don'tale mayes": ['dontale mayes'],
-                  "ode osbourne": ["ode' osbourne"],
-                  "jake o'brien": ['jake obrien'],
-                  "kj noons": ['k.j. noons'],
-    }
+    # Share the historical scraper's BFO aliases so dashboard predictions and
+    # odds-database refreshes resolve fighter names identically.
+    NAME_MAPPINGS = BFOScraper.NAME_MAPPINGS
+    REVERSE_MAPPINGS = BFOScraper.REVERSE_MAPPINGS
+    DUPE_NAMES = BFOScraper.DUPE_NAMES
     
     def __init__(self):
         self.base_url = "https://www.bestfightodds.com"
@@ -146,12 +51,16 @@ class BFOLatestOddsOnly:
     
     def get_mapped_name(self, fighter_name):
         """Get mapped BFO name if available, otherwise return original."""
+        if fighter_name is None:
+            return None
         if fighter_name.lower() in self.NAME_MAPPINGS:
             return self.NAME_MAPPINGS[fighter_name.lower()]
         return fighter_name
     
     def reverse_map_name(self, bfo_name):
         """Convert BFO name back to UFCStats format."""
+        if bfo_name is None:
+            return None
         if bfo_name.lower() in self.REVERSE_MAPPINGS:
             return self.REVERSE_MAPPINGS[bfo_name.lower()]
         

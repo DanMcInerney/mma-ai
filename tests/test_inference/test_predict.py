@@ -31,6 +31,7 @@ from predict import (
     parse_manual_odds_json,
     apply_manual_odds,
 )
+from libs.bfo_scraper import BFOScraper
 
 
 class TestBFOLatestOddsOnly:
@@ -44,6 +45,19 @@ class TestBFOLatestOddsOnly:
         assert isinstance(scraper.NAME_MAPPINGS, dict)
         assert isinstance(scraper.REVERSE_MAPPINGS, dict)
         assert isinstance(scraper.DUPE_NAMES, dict)
+
+    def test_latest_odds_uses_historical_scraper_name_mappings(self):
+        """Current-odds lookup should not drift from odds DB scraping aliases."""
+        scraper = BFOLatestOddsOnly()
+
+        assert BFOLatestOddsOnly.NAME_MAPPINGS is BFOScraper.NAME_MAPPINGS
+        assert BFOLatestOddsOnly.REVERSE_MAPPINGS is BFOScraper.REVERSE_MAPPINGS
+        assert BFOLatestOddsOnly.DUPE_NAMES is BFOScraper.DUPE_NAMES
+        assert scraper.get_mapped_name("yadier delvalle") == "yadier del valle"
+        assert scraper.get_mapped_name("asu almabayev") == "asu almabaev"
+        assert scraper.reverse_map_name("timothy cuamba") == "timmy cuamba"
+        assert scraper.get_mapped_name(None) is None
+        assert scraper.reverse_map_name(None) is None
 
     @patch('predict.requests.get')
     @patch('predict.BeautifulSoup')
@@ -959,8 +973,8 @@ class TestErrorHandling:
         
         # Test with None inputs
         assert scraper.sanitize_name(None) is None
-        # Note: get_mapped_name doesn't handle None properly - this is a bug in the original code
-        # assert scraper.get_mapped_name(None) is None
+        assert scraper.get_mapped_name(None) is None
+        assert scraper.reverse_map_name(None) is None
         
         # Test decimal conversion with invalid data
         result = scraper.decimal_to_american("not_a_number")

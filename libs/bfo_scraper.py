@@ -95,9 +95,9 @@ class BFOScraper:
     # Build the reverse mapping dictionary (BFO → UFCStats)
     REVERSE_MAPPINGS = {v.lower(): k.lower() for k, v in NAME_MAPPINGS.items()}
     
-    # TODO: do something with these
-    # Names that appears in BFO as multiple fighters but whose ufcstats name also works
-    # ufcstats name: bestfightodds duplicate name
+    # BFO aliases that can appear as duplicate fighter pages or opponent rows.
+    # Keys are UFCStats names; values are extra BestFightOdds names to try when
+    # searching, reverse-mapping scraped opponents, and normalizing before save.
     DUPE_NAMES = {"timmy cuamba": ['timothy cuamba'],
                   'asu almabayev': ['asu almabaev'],
                   'song kenan': ['kenan song'],
@@ -257,6 +257,9 @@ class BFOScraper:
         Returns:
             The mapped Best Fight Odds name or the original name if no mapping exists
         """
+        if fighter_name is None:
+            return None
+
         # Check the hardcoded mappings
         if fighter_name.lower() in self.NAME_MAPPINGS:
             mapped_name = self.NAME_MAPPINGS[fighter_name.lower()]
@@ -276,6 +279,9 @@ class BFOScraper:
         Returns:
             The mapped UFCStats name or the original name if no mapping exists
         """
+        if bfo_name is None:
+            return None
+
         # First check the regular reverse mappings
         if bfo_name.lower() in self.REVERSE_MAPPINGS:
             ufcstats_name = self.REVERSE_MAPPINGS[bfo_name.lower()]
