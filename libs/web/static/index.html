@@ -162,18 +162,19 @@
             <h2>Prediction Settings</h2>
           </div>
           <div class="form-grid">
-            <label>Target
-              <select id="predict-model-type">
-                <option value="win">Win</option>
-                <option value="decision">Decision</option>
-              </select>
-            </label>
             <label>Model <select id="predict-model"></select></label>
+            <label><input id="predict-shap" type="checkbox" /> Include SHAP</label>
             <p id="predict-model-status" class="field-note model-status span-two">Checking available models...</p>
           </div>
           <details>
             <summary>Advanced Prediction Knobs</summary>
             <div class="form-grid">
+              <label>Target
+                <select id="predict-model-type">
+                  <option value="win">Win</option>
+                  <option value="decision">Decision</option>
+                </select>
+              </label>
               <label class="span-two">Prediction Data CSV
                 <input id="predict-data-csv" placeholder="Default data/prediction_data.csv" />
               </label>
@@ -184,7 +185,6 @@
                 <input id="predict-output-dir" placeholder="Default predictions/latest or predictions/manual" />
               </label>
               <label><input id="predict-calibrated" type="checkbox" /> Calibrated probabilities</label>
-              <label><input id="predict-shap" type="checkbox" /> SHAP explanations</label>
             </div>
           </details>
         </section>
@@ -200,20 +200,19 @@
                   <option value="">Loading upcoming events...</option>
                 </select>
               </label>
-              <label><input id="predict-odds" type="checkbox" checked /> Odds for EV</label>
-              <p class="field-note span-two">Odds are not included in the model. They are only used to calculate market-implied probability and expected value.</p>
             </div>
             <div id="event-preview" class="event-preview">Upcoming events load automatically.</div>
             <details>
               <summary>Manual Event Odds</summary>
+              <p class="field-note">Odds are not included in the model. They are only used to calculate market-implied probability and expected value.</p>
               <textarea id="event-manual-odds" rows="5" placeholder="fighter name=-150&#10;other fighter=+200"></textarea>
             </details>
             <button id="run-event-predict" class="primary wide" disabled><i data-lucide="badge-dollar-sign"></i><span>Predict Event</span></button>
-            <div id="events-output" class="prediction-output"></div>
             <details open>
-              <summary>Debug Log</summary>
+              <summary>Output Log</summary>
               <pre id="events-log" class="debug-log">No event prediction logs yet.</pre>
             </details>
+            <div id="events-output" class="prediction-output"></div>
           </section>
 
           <section class="surface">
@@ -225,18 +224,22 @@
               <label>Fighter 1 <input id="fighter1" list="fighters-list" /></label>
               <label>Fighter 2 <input id="fighter2" list="fighters-list" /></label>
               <label>Fight Date <input id="fight-date" type="date" /></label>
-              <label>Fighter 1 Odds <input id="fighter1-odds" type="number" placeholder="-150" /></label>
-              <label>Fighter 2 Odds <input id="fighter2-odds" type="number" placeholder="+200" /></label>
-              <label><input id="matchup-odds" type="checkbox" checked /> Fetch odds when blank</label>
-              <p class="field-note span-two">Odds are not included in the model. They are only used to calculate market-implied probability and expected value.</p>
             </div>
+            <details>
+              <summary>Matchup Odds</summary>
+              <div class="form-grid">
+                <label>Fighter 1 Odds <input id="fighter1-odds" type="number" placeholder="-150" /></label>
+                <label>Fighter 2 Odds <input id="fighter2-odds" type="number" placeholder="+200" /></label>
+                <p class="field-note span-two">Odds are not included in the model. They are only used to calculate market-implied probability and expected value. Blank odds are fetched without prompting.</p>
+              </div>
+            </details>
             <datalist id="fighters-list"></datalist>
             <button id="run-matchup" class="primary wide" disabled><i data-lucide="swords"></i><span>Predict Matchup</span></button>
-            <div id="prediction-output" class="prediction-output"></div>
             <details open>
-              <summary>Debug Log</summary>
+              <summary>Output Log</summary>
               <pre id="prediction-log" class="debug-log">No matchup prediction logs yet.</pre>
             </details>
+            <div id="prediction-output" class="prediction-output"></div>
           </section>
         </div>
       </section>

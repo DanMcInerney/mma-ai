@@ -43,6 +43,7 @@ def test_runtime_dependencies_do_not_include_test_tooling():
     assert "pytest" not in normalized
     assert "pytest-mock" not in normalized
     assert "kaleido==0.2.1" in dependencies
+    assert "autogluon.tabular[mitra,tabicl,tabpfn]>=1.5.0" in dependencies
 
 
 def test_release_audit_allows_only_seed_raw_csvs_from_data():

@@ -34,7 +34,7 @@ def test_docker_smoke_runs_container_checks_health_deps_and_stops(monkeypatch, c
         if args[:4] == ["docker", "exec", "smoke-test", "/app/.venv/bin/python"]:
             return completed(
                 args,
-                stdout="runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1\n",
+                stdout="runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1, prediction imports present\n",
             )
         if args[:5] == ["docker", "exec", "smoke-test", "sh", "-lc"]:
             assert args[-1] == "test ! -e /app/tests"
@@ -151,6 +151,39 @@ def test_docker_smoke_stops_container_when_dependency_check_fails(monkeypatch):
     assert ["docker", "stop", "smoke-test"] in calls
 
 
+def test_docker_smoke_stops_container_when_prediction_imports_missing(monkeypatch):
+    calls = []
+
+    def fake_run(args, **_kwargs):
+        calls.append(args)
+        if args[:3] == ["docker", "run", "-d"]:
+            return completed(args, stdout="container-id\n")
+        if args[:4] == ["docker", "exec", "smoke-test", "curl"]:
+            url = args[-1]
+            if url.endswith("/api/health"):
+                return completed(args, stdout='{"status":"ok"}')
+            if url.endswith("/vendor/plotly.min.js"):
+                return completed(args, stdout="window.Plotly = Plotly;")
+            if url.endswith("/static/icons.js"):
+                return completed(args, stdout="window.lucide = { createIcons };")
+            if url.endswith("/"):
+                return completed(args, stdout="<title>MMA AI</title>")
+        if args[:4] == ["docker", "exec", "smoke-test", "/app/.venv/bin/python"]:
+            return completed(args, returncode=1, stderr="prediction runtime dependencies missing: loguru (MITRA model loading)")
+        if args[:5] == ["docker", "exec", "smoke-test", "sh", "-lc"]:
+            return completed(args)
+        if args == ["docker", "stop", "smoke-test"]:
+            return completed(args)
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(docker_smoke.subprocess, "run", fake_run)
+
+    with pytest.raises(docker_smoke.SmokeError, match="prediction runtime dependencies missing"):
+        docker_smoke.run_smoke("mma-ai-web:test", timeout_seconds=10, container_name="smoke-test")
+
+    assert ["docker", "stop", "smoke-test"] in calls
+
+
 def test_docker_smoke_stops_container_when_tests_tree_is_present(monkeypatch):
     calls = []
 
@@ -171,7 +204,7 @@ def test_docker_smoke_stops_container_when_tests_tree_is_present(monkeypatch):
         if args[:4] == ["docker", "exec", "smoke-test", "/app/.venv/bin/python"]:
             return completed(
                 args,
-                stdout="runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1\n",
+                stdout="runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1, prediction imports present\n",
             )
         if args[:5] == ["docker", "exec", "smoke-test", "sh", "-lc"]:
             return completed(args, returncode=1, stderr="/app/tests exists")

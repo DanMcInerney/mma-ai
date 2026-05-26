@@ -115,6 +115,8 @@ def check_runtime_dependencies(container_name: str) -> None:
         import importlib.util
         import sys
 
+        from libs.modeling.runtime_dependencies import prediction_runtime_dependency_report
+
         present = [name for name in ("pytest", "pytest_mock") if importlib.util.find_spec(name) is not None]
         if present:
             raise SystemExit(f"test tooling present in runtime image: {', '.join(present)}")
@@ -124,7 +126,14 @@ def check_runtime_dependencies(container_name: str) -> None:
         if version != "0.2.1":
             raise SystemExit(f"unexpected kaleido version: {version!r}")
 
-        print("runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1")
+        prediction_runtime = prediction_runtime_dependency_report()
+        if not prediction_runtime["ok"]:
+            missing = ", ".join(
+                f"{item['module']} ({item['reason']})" for item in prediction_runtime["missing"]
+            )
+            raise SystemExit(f"prediction runtime dependencies missing: {missing}")
+
+        print("runtime dependency check ok: pytest absent, pytest_mock absent, kaleido 0.2.1, prediction imports present")
         """
     ).strip()
     result = _docker_exec(container_name, ["/app/.venv/bin/python", "-c", code], timeout=30)

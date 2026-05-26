@@ -25,6 +25,7 @@ from urllib.parse import unquote
 import pandas as pd
 
 from libs.modeling.discovery import is_loadable_prediction_model_dir
+from libs.modeling.runtime_dependencies import assert_prediction_runtime_dependencies, prediction_runtime_dependency_report
 from libs.paths import PROJECT_ROOT, data_dir, data_file, database_url, models_dir, odds_database_url, raw_ufcstats_dir
 from libs.web.evaluations import summarize_model_evaluation, write_model_evaluation_report
 from libs.web.llm import llm_config, llm_config_hint
@@ -210,6 +211,7 @@ def get_readiness_status() -> dict[str, Any]:
     }
     checks["database"] = _database_ready(database_url(), required_tables=["features.fight_mapping"])
     checks["odds_database"] = _database_ready(odds_database_url(), required_tables=["bestfightodds.bfo"])
+    checks["prediction_runtime"] = prediction_runtime_dependency_report()
 
     ready = all(check["ok"] for check in checks.values())
     return {
@@ -923,6 +925,11 @@ def _validate_manual_odds_mapping(manual_odds: dict[str, int] | None) -> None:
 
 
 def _require_prediction_model_available(model_type: str, model_path: str | None) -> None:
+    try:
+        assert_prediction_runtime_dependencies()
+    except RuntimeError as exc:
+        raise ValueError(str(exc)) from exc
+
     if model_path:
         resolve_model_dir(model_path)
         return

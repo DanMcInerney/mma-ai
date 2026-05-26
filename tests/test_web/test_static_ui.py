@@ -132,6 +132,12 @@ def test_predict_model_dropdown_filters_with_selected_target():
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="predict-model-status"' in html
+    assert '<label>Model <select id="predict-model"></select></label>' in html
+    assert '<label><input id="predict-shap" type="checkbox" /> Include SHAP</label>' in html
+    assert html.index("Advanced Prediction Knobs") < html.index('id="predict-model-type"')
+    assert 'id="predict-odds"' not in html
+    assert 'id="matchup-odds"' not in html
+    assert 'odds: true' in app_js
     assert 'id="run-event-predict" class="primary wide" disabled' in html
     assert 'id="run-matchup" class="primary wide" disabled' in html
     assert 'api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`)' in app_js
@@ -243,8 +249,11 @@ def test_debug_logs_and_manual_event_odds_are_wired():
 
     assert "function parseManualOdds(value)" in app_js
     assert 'manual_odds: parseManualOdds(qs("#event-manual-odds").value)' in app_js
+    assert "function setLogText(selector, value)" in app_js
     assert "async function renderJobLog(target, jobId)" in app_js
     assert "/api/jobs/${jobId}/log" in app_js
+    assert "Prediction results will appear here when the job finishes." in app_js
+    assert "Output Log" in html
     assert ".debug-log" in styles
 
 
