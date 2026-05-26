@@ -5,6 +5,7 @@ import pandas as pd
 from typing import Set, List, Tuple, Dict
 from libs.feature_store.feature_utils import FeatureUtils
 from libs.feature_store.features import BASE_STATIC_FEATS
+from libs.feature_store.inference.loaders.base import select_duplicate_fighter_id
 from config.decay import get_decay_rate
 import math
 
@@ -71,7 +72,7 @@ class CreateInferenceData:
 
                 # Check for and handle multiple fighter_ids *before* creating static_data
                 if 'fighter_id' in fighter_data.columns:
-                    unique_ids = fighter_data['fighter_id'].unique()
+                    unique_ids = fighter_data['fighter_id'].dropna().unique()
                     if len(unique_ids) > 1:
                         print(f"Warning: Multiple fighter_ids found for {fighter_name}: {unique_ids}")
                         
@@ -93,21 +94,13 @@ class CreateInferenceData:
                                 print(f"  ID {fid}: No fight history found in the dataset for this specific ID.")
                         print("--- End of disambiguation information ---")
                         
-                        correct_fighter_id_str = input(f"Please enter the correct fighter_id for {fighter_name}: ")
-                        try:
-                            # Assuming fighter_id is numeric. Change dtype if necessary (e.g., int(), str())
-                            correct_fighter_id = pd.to_numeric(correct_fighter_id_str)
-                            if correct_fighter_id not in unique_ids:
-                                print(f"Error: Entered ID {correct_fighter_id} is not one of the found IDs {unique_ids}. Skipping fight involving {fighter_name}.")
-                                fights_to_remove.add((fight_date, fighter_1, fighter_2))
-                                continue # Skip processing this fighter for this fight
-                            # Filter fighter_data to use only the correct ID
-                            fighter_data = fighter_data[fighter_data['fighter_id'] == correct_fighter_id].copy()
-                            print(f"Using fighter_id {correct_fighter_id} for {fighter_name}.")
-                        except ValueError:
-                            print(f"Error: Invalid input '{correct_fighter_id_str}'. Skipping fight involving {fighter_name}.")
+                        correct_fighter_id = select_duplicate_fighter_id(fighter_data, fighter_name)
+                        if correct_fighter_id is None:
+                            print(f"Error: Could not select a fighter_id for {fighter_name}. Skipping fight involving {fighter_name}.")
                             fights_to_remove.add((fight_date, fighter_1, fighter_2))
                             continue # Skip processing this fighter for this fight
+                        # Filter fighter_data to use only the selected ID
+                        fighter_data = fighter_data[fighter_data['fighter_id'] == correct_fighter_id].copy()
                     elif len(unique_ids) == 0:
                          print(f"Warning: No fighter_id found for {fighter_name}. Skipping fight involving {fighter_name}.")
                          fights_to_remove.add((fight_date, fighter_1, fighter_2))
@@ -290,23 +283,15 @@ class CreateInferenceData:
 
                 # Check for and handle multiple fighter_ids *before* creating dynamic_data
                 if 'fighter_id' in fighter_data.columns:
-                    unique_ids = fighter_data['fighter_id'].unique()
+                    unique_ids = fighter_data['fighter_id'].dropna().unique()
                     if len(unique_ids) > 1:
                         print(f"Warning: Multiple fighter_ids found for {fighter_name} (dynamic data): {unique_ids}")
-                        correct_fighter_id_str = input(f"Please enter the correct fighter_id for {fighter_name}: ")
-                        try:
-                            # Assuming fighter_id is numeric. Change dtype if necessary (e.g., int(), str())
-                            correct_fighter_id = pd.to_numeric(correct_fighter_id_str)
-                            if correct_fighter_id not in unique_ids:
-                                print(f"Error: Entered ID {correct_fighter_id} is not one of the found IDs {unique_ids}. Skipping dynamic data for {fighter_name}.")
-                                # Note: We don't remove the fight here, just skip loading dynamic data for this fighter
-                                continue
-                            # Filter fighter_data to use only the correct ID
-                            fighter_data = fighter_data[fighter_data['fighter_id'] == correct_fighter_id].copy()
-                            print(f"Using fighter_id {correct_fighter_id} for {fighter_name} (dynamic data).")
-                        except ValueError:
-                            print(f"Error: Invalid input '{correct_fighter_id_str}'. Skipping dynamic data for {fighter_name}.")
+                        correct_fighter_id = select_duplicate_fighter_id(fighter_data, fighter_name)
+                        if correct_fighter_id is None:
+                            print(f"Error: Could not select a fighter_id for {fighter_name}. Skipping dynamic data for {fighter_name}.")
                             continue
+                        # Filter fighter_data to use only the selected ID
+                        fighter_data = fighter_data[fighter_data['fighter_id'] == correct_fighter_id].copy()
                     elif len(unique_ids) == 0:
                         print(f"Warning: No fighter_id found for {fighter_name} (dynamic data). Skipping dynamic data.")
                         continue

@@ -1,8 +1,54 @@
 """Base class for data loaders."""
 
 from abc import ABC, abstractmethod
-from typing import List, Tuple
+from typing import Any, List, Tuple
 import pandas as pd
+
+
+def select_duplicate_fighter_id(fighter_data: pd.DataFrame, fighter_name: str) -> Any | None:
+    """
+    Select a fighter_id deterministically when a fighter name maps to multiple IDs.
+
+    Prediction runs from the web UI cannot safely pause for stdin. The most useful
+    default for upcoming fights is the ID with the most recent event_date; row
+    count and ID text provide stable tie breakers.
+    """
+    if "fighter_id" not in fighter_data.columns:
+        return None
+
+    valid_data = fighter_data[fighter_data["fighter_id"].notna()].copy()
+    if valid_data.empty:
+        return None
+
+    candidates: list[dict[str, Any]] = []
+    for fighter_id, group in valid_data.groupby("fighter_id", sort=False):
+        if "event_date" in group.columns:
+            dates = pd.to_datetime(group["event_date"], errors="coerce")
+            latest = dates.max()
+        else:
+            latest = pd.NaT
+        latest_score = int(latest.value) if pd.notna(latest) else -(10**30)
+        latest_label = latest.strftime("%Y-%m-%d") if pd.notna(latest) else "unknown date"
+        candidates.append(
+            {
+                "latest_score": latest_score,
+                "rows": len(group),
+                "id_label": str(fighter_id),
+                "fighter_id": fighter_id,
+                "latest_label": latest_label,
+            }
+        )
+
+    candidates.sort(
+        key=lambda candidate: (candidate["latest_score"], candidate["rows"], candidate["id_label"]),
+        reverse=True,
+    )
+    selected = candidates[0]
+    print(
+        f"Auto-selected fighter_id {selected['fighter_id']} for {fighter_name} "
+        f"(latest fight {selected['latest_label']}, {selected['rows']} rows)."
+    )
+    return selected["fighter_id"]
 
 
 class DataLoader(ABC):
@@ -48,7 +94,7 @@ class DataLoader(ABC):
         if 'fighter_id' not in fighter_data.columns:
             return fighter_data
             
-        unique_ids = fighter_data['fighter_id'].unique()
+        unique_ids = fighter_data['fighter_id'].dropna().unique()
         if len(unique_ids) > 1:
             print(f"Warning: Multiple fighter_ids found for {fighter_name}: {unique_ids}")
             
@@ -71,17 +117,11 @@ class DataLoader(ABC):
                     print(f"  ID {fid}: No fight history found in the dataset for this specific ID.")
             print("--- End of disambiguation information ---")
             
-            correct_fighter_id_str = input(f"Please enter the correct fighter_id for {fighter_name}: ")
-            try:
-                correct_fighter_id = pd.to_numeric(correct_fighter_id_str)
-                if correct_fighter_id not in unique_ids:
-                    print(f"Error: Entered ID {correct_fighter_id} is not one of the found IDs {unique_ids}.")
-                    return pd.DataFrame()  # Return empty DataFrame to signal error
-                fighter_data = fighter_data[fighter_data['fighter_id'] == correct_fighter_id].copy()
-                print(f"Using fighter_id {correct_fighter_id} for {fighter_name}.")
-            except ValueError:
-                print(f"Error: Invalid input '{correct_fighter_id_str}'.")
+            correct_fighter_id = select_duplicate_fighter_id(fighter_data, fighter_name)
+            if correct_fighter_id is None:
+                print(f"Error: Could not select a fighter_id for {fighter_name}.")
                 return pd.DataFrame()
+            fighter_data = fighter_data[fighter_data['fighter_id'] == correct_fighter_id].copy()
         elif len(unique_ids) == 0:
             print(f"Warning: No fighter_id found for {fighter_name}.")
             return pd.DataFrame()
