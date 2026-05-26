@@ -167,7 +167,7 @@ def test_dashboard_controls_hydrate_from_defaults_endpoint():
     assert "selectedUpcomingNumber = Number(predict.upcoming_number || 1)" in app_js
     assert "const existingSelection = select?.value ? Number(select.value) : null" in app_js
     assert ": Number(events[0].upcoming_number)" in app_js
-    assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}))" in app_js
+    assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEventsWithStatus())" in app_js
 
 
 def test_dashboard_surfaces_setup_readiness_state():
@@ -196,14 +196,18 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     assert "Loading upcoming events..." in html
     assert "Odds are not included in the model" in html
     assert "async function loadUpcomingEvents()" in app_js
+    assert "function renderUpcomingEventsError(message)" in app_js
+    assert "async function loadUpcomingEventsWithStatus()" in app_js
     assert "function updateEventPreview()" in app_js
     assert "const params = new URLSearchParams();" in app_js
     assert 'api(`/api/predict/upcoming${query ? `?${query}` : ""}`)' in app_js
+    assert "Could not load upcoming events" in app_js
     assert '<option value="${event.upcoming_number}">${escapeHtml(event.name)}</option>' in app_js
     assert 'qs("#predict-event").addEventListener("change"' in app_js
     assert 'upcoming_number: upcomingNumber' in app_js
     assert "Choose an upcoming event before prediction." in app_js
     assert 'qs("#event-preview").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`' in app_js
+    assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEventsWithStatus())" in app_js
 
 
 def test_analytics_options_expose_bounded_row_limit():
@@ -251,4 +255,4 @@ def test_successful_background_jobs_refresh_dependent_dashboard_state():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
     assert "await refreshModels().catch(() => {});" in app_js
-    assert "await loadUpcomingEvents().catch(() => {});" in app_js
+    assert "await loadUpcomingEventsWithStatus();" in app_js

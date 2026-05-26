@@ -572,7 +572,7 @@ async function refreshJobs() {
     activeDataJobId = null;
     await refreshStatus().catch(() => {});
     await refreshReadiness().catch(() => {});
-    await loadUpcomingEvents().catch(() => {});
+    await loadUpcomingEventsWithStatus();
   } else if (dataJob?.state === "failed") {
     renderJson("#data-output", dataJob.error || "Data pipeline failed");
     activeDataJobId = null;
@@ -776,6 +776,25 @@ async function loadUpcomingEvents() {
   renderUpcomingEvents(await api(`/api/predict/upcoming${query ? `?${query}` : ""}`));
 }
 
+function renderUpcomingEventsError(message) {
+  const select = qs("#predict-event");
+  if (select) {
+    select.disabled = true;
+    select.innerHTML = `<option value="">Could not load upcoming events</option>`;
+  }
+  selectedUpcomingNumber = null;
+  qs("#event-preview").innerHTML = `<div class="muted">${escapeHtml(message || "Could not load upcoming UFC events.")}</div>`;
+  renderJson("#events-output", message || "Could not load upcoming UFC events.");
+}
+
+async function loadUpcomingEventsWithStatus() {
+  try {
+    await loadUpcomingEvents();
+  } catch (error) {
+    renderUpcomingEventsError(error.message);
+  }
+}
+
 function wirePrediction() {
   qs("#predict-model-type").addEventListener("change", () => {
     refreshModels().catch(() => {});
@@ -785,11 +804,7 @@ function wirePrediction() {
     updateEventPreview();
   });
   qs("#load-events").addEventListener("click", async () => {
-    try {
-      await loadUpcomingEvents();
-    } catch (error) {
-      renderJson("#events-output", error.message);
-    }
+    await loadUpcomingEventsWithStatus();
   });
   qs("#load-fighters").addEventListener("click", async () => {
     try {
@@ -878,7 +893,7 @@ wireTabs();
 wireData();
 wireTraining();
 wirePrediction();
-loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}));
+loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEventsWithStatus());
 refreshStatus().catch(() => {});
 refreshReadiness().catch(() => {});
 refreshAnalyticsStatus().catch(() => {});
