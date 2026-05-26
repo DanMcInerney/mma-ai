@@ -45,6 +45,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "uv run mma-release-audit" in readme
     assert "dashboard HTML plus local Plotly/icon assets are served" in readme
     assert "docker compose up --build db web" in readme
+    assert "PostgreSQL 18.1" in readme
+    assert "uv run mma-rebuild-db --scrape --reset-db --odds-features" in readme
     assert "MMA_AI_COMPOSE_DATABASE_URL" in readme
     assert "MMA_AI_POSTGRES_PORT" in readme
     assert "--postgres-port 55432" in readme
@@ -180,6 +182,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Local `uv run ...` commands load this" in huggingface_docs
     assert "--force-import" in huggingface_docs
     assert "processed/training_data_dec.csv" in huggingface_docs
+    assert "PostgreSQL 18.1 Docker service" in huggingface_docs
+    assert "uv run mma-rebuild-db --scrape --reset-db --odds-features" in huggingface_docs
     assert "postgresql://postgres:postgres@localhost:5432/mma-ai" in huggingface_docs
     assert "postgresql://postgres:postgres@localhost:5432/odds" in huggingface_docs
 

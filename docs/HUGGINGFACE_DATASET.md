@@ -58,7 +58,7 @@ The scripts save `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and optional
 | `models/ag-20260304_110750-win-extreme.tar.gz` | Pretrained AutoGluon win model. |
 
 The dumps use PostgreSQL custom archive format with gzip compression. Restore
-them with the repo's PostgreSQL 17 Docker service or a compatible local
+them with the repo's PostgreSQL 18.1 Docker service or a compatible local
 PostgreSQL version.
 
 ## Restore
@@ -102,7 +102,7 @@ UFCStats updates. Run the incremental scraper, then recreate the generated
 schemas and finalized CSVs from the merged raw CSVs:
 
 ```bash
-uv run mma-rebuild-db --scrape --reset-db
+uv run mma-rebuild-db --scrape --reset-db --odds-features
 ```
 
 The scraper skips fighter URLs and event URLs already present in the checked-in

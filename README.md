@@ -88,7 +88,7 @@ If you already bootstrapped artifacts and only want to start the app:
 docker compose up --build db web
 ```
 
-The Compose stack starts PostgreSQL 17 and initializes both the main `mma-ai`
+The Compose stack starts PostgreSQL 18.1 and initializes both the main `mma-ai`
 database and the auxiliary `odds` database used by odds-related workflows. The
 setup scripts restore the Hugging Face dumps into those databases. The web
 service waits for the PostgreSQL healthcheck before starting, so first-run
@@ -155,7 +155,7 @@ the pretrained `ag-20260304_110750-win-extreme` model as the initial Predict tab
 model. After that, normal data updates are:
 
 ```bash
-uv run mma-rebuild-db --scrape --reset-db
+uv run mma-rebuild-db --scrape --reset-db --odds-features
 ```
 
 The UFCStats scraper is incremental by default. It reads the existing CSVs,
