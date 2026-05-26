@@ -178,6 +178,7 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     assert readiness["checks"]["starter_model"]["models"] == ["ag-20260304_110750-win-extreme"]
     assert readiness["checks"]["database"]["ok"] is True
     assert readiness["checks"]["odds_database"]["ok"] is True
+    assert readiness["checks"]["prediction_runtime"]["ok"] is True
     assert captured_database_checks == [
         ("postgresql://postgres@localhost:5432/mma-ai", ["features.fight_mapping"]),
         ("postgresql://postgres@localhost:5432/odds", ["bestfightodds.bfo"]),
@@ -199,6 +200,23 @@ def test_get_readiness_status_reports_missing_prerequisites(monkeypatch, tmp_pat
     assert readiness["checks"]["training_data_dec_csv"]["ok"] is False
     assert readiness["checks"]["starter_model"]["ok"] is False
     assert readiness["checks"]["database"]["error"] == "offline"
+    assert readiness["checks"]["prediction_runtime"]["ok"] is True
+
+
+def test_get_readiness_status_reports_prediction_runtime_failures(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": True, "url": url})
+    monkeypatch.setattr(
+        "libs.web.services.prediction_runtime_dependency_report",
+        lambda: {"ok": False, "missing": [{"module": "loguru", "reason": "MITRA model loading"}]},
+    )
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is False
+    assert readiness["checks"]["prediction_runtime"]["missing"][0]["module"] == "loguru"
 
 
 def test_get_readiness_status_reports_malformed_csv_headers(monkeypatch, tmp_path):
@@ -1234,6 +1252,22 @@ def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
     assert captured["log_prefix"] == "prediction"
     assert result["stdout_tail"] == "manual odds ok"
     assert result["stderr_tail"] == "debug stderr"
+
+
+def test_validate_event_prediction_request_preflights_prediction_runtime(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}])
+
+    def fail_runtime_check():
+        raise RuntimeError("Prediction runtime is missing dependencies for the configured AutoGluon model families.")
+
+    monkeypatch.setattr("libs.web.services.assert_prediction_runtime_dependencies", fail_runtime_check)
+
+    with pytest.raises(ValueError, match="Prediction runtime is missing dependencies"):
+        validate_event_prediction_request(EventPredictionRequest(prediction_data_csv=str(prediction_csv)))
 
 
 def test_run_training_runs_dashboard_training_script_as_subprocess(monkeypatch, tmp_path):

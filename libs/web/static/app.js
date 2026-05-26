@@ -137,6 +137,13 @@ function setDisabled(selector, value) {
   if (element) element.disabled = Boolean(value);
 }
 
+function setLogText(selector, value) {
+  const element = qs(selector);
+  if (!element) return;
+  element.textContent = value;
+  element.scrollTop = element.scrollHeight;
+}
+
 function listValue(value) {
   return Array.isArray(value) ? value.join(", ") : "";
 }
@@ -193,7 +200,6 @@ function applyDashboardDefaults(defaults) {
 
   setValue("#predict-model-type", predict.model_type);
   selectedUpcomingNumber = Number(predict.upcoming_number || 1);
-  setChecked("#predict-odds", predict.odds);
   setChecked("#predict-calibrated", predict.use_calibrated);
   setChecked("#predict-shap", predict.shap);
 }
@@ -607,9 +613,9 @@ async function refreshJobs() {
 async function renderJobLog(target, jobId) {
   try {
     const payload = await api(`/api/jobs/${jobId}/log`);
-    qs(target).textContent = payload.log || "No log output yet.";
+    setLogText(target, payload.log || "No log output yet.");
   } catch (error) {
-    qs(target).textContent = error.message;
+    setLogText(target, error.message);
   }
 }
 
@@ -856,15 +862,15 @@ function wirePrediction() {
         training_data_csv: trainingDataCsv(),
         output_dir: predictionOutputDir(),
         upcoming_number: upcomingNumber,
-        odds: qs("#predict-odds").checked,
+        odds: true,
         manual_odds: parseManualOdds(qs("#event-manual-odds").value),
         use_calibrated: qs("#predict-calibrated").checked,
         shap: qs("#predict-shap").checked,
       };
       const job = await api("/api/predict/event", { method: "POST", body: JSON.stringify(payload) });
       activeEventJobId = job.job_id;
-      qs("#events-log").textContent = "Queued...";
-      renderJson("#events-output", job);
+      setLogText("#events-log", "Queued...");
+      qs("#events-output").innerHTML = `<div class="muted">Prediction results will appear here when the job finishes.</div>`;
       await refreshJobs();
     } catch (error) {
       renderJson("#events-output", error.message);
@@ -893,14 +899,14 @@ function wirePrediction() {
         fight_date: qs("#fight-date").value || null,
         odds_fighter1: qs("#fighter1-odds").value ? Number(qs("#fighter1-odds").value) : null,
         odds_fighter2: qs("#fighter2-odds").value ? Number(qs("#fighter2-odds").value) : null,
-        odds: qs("#matchup-odds").checked,
+        odds: true,
         use_calibrated: qs("#predict-calibrated").checked,
         shap: qs("#predict-shap").checked,
       };
       const job = await api("/api/predict/matchup", { method: "POST", body: JSON.stringify(payload) });
       activeMatchupJobId = job.job_id;
-      qs("#prediction-log").textContent = "Queued...";
-      renderJson("#prediction-output", job);
+      setLogText("#prediction-log", "Queued...");
+      qs("#prediction-output").innerHTML = `<div class="muted">Prediction results will appear here when the job finishes.</div>`;
       await refreshJobs();
     } catch (error) {
       renderJson("#prediction-output", error.message);
