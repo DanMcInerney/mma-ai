@@ -243,6 +243,15 @@ main {
   font-size: 13px;
 }
 
+.metric em {
+  display: block;
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+}
+
 .form-grid,
 .controls {
   display: grid;

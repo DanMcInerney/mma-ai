@@ -375,6 +375,7 @@ function updateEventPreview() {
 function renderDataRefreshResult(result) {
   const counts = result?.scrape_counts || {};
   const status = result?.status || {};
+  const rowDeltas = result?.row_deltas || {};
   const modelCsvs = status.model_csvs || {};
   const rawCsvs = status.raw_csvs || {};
   const rows = {
@@ -387,8 +388,10 @@ function renderDataRefreshResult(result) {
   renderJson("#data-output", {
     status: "Data pipeline completed.",
     scrape_counts: counts,
+    row_deltas: rowDeltas,
     rows,
   });
+  renderDataMetrics(status, rowDeltas);
 }
 
 function formatMetric(value) {
@@ -472,13 +475,28 @@ function renderEvaluation(summary) {
 async function refreshStatus() {
   const status = await api("/api/data/status");
   qs("#status-line").textContent = `Raw: ${status.raw_data_dir} | Data: ${status.data_dir}`;
+  renderDataMetrics(status);
+}
+
+function formatDelta(value) {
+  if (typeof value !== "number") return "";
+  if (value === 0) return "0";
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function renderDataMetrics(status, deltas = {}) {
   const metrics = [
-    ["Fights CSV", status.raw_csvs.competitions.rows ?? "Missing"],
-    ["Fighters CSV", status.raw_csvs.individuals.rows ?? "Missing"],
-    ["Training Rows", status.model_csvs.training_data.rows ?? "Missing"],
+    ["Fights CSV", status.raw_csvs.competitions.rows ?? "Missing", deltas.competitions],
+    ["Fighters CSV", status.raw_csvs.individuals.rows ?? "Missing", deltas.individuals],
+    ["Training Rows", status.model_csvs.training_data.rows ?? "Missing", deltas.training_data],
   ];
   qs("#data-metrics").innerHTML = metrics
-    .map(([label, value]) => `<div class="metric"><strong>${value}</strong><span>${label}</span></div>`)
+    .map(([label, value, delta]) => `
+      <div class="metric">
+        <strong>${value}</strong>
+        <span>${label}</span>
+        ${formatDelta(delta) ? `<em>${escapeHtml(formatDelta(delta))} this run</em>` : ""}
+      </div>`)
     .join("");
 }
 

@@ -207,6 +207,7 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
     counts: dict[str, int] = {}
     raw_dir = raw_ufcstats_dir()
     app_data_dir = data_dir()
+    before_status = get_data_status()
     print(
         "[data-refresh] "
         f"scrape={request.scrape} rebuild={request.rebuild} reset_db={request.reset_db} "
@@ -223,7 +224,29 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
         _run_rebuild_command(request, raw_dir, app_data_dir)
         print("[data-refresh] feature-store rebuild subprocess finished")
 
-    return {"scrape_counts": counts, "status": get_data_status()}
+    after_status = get_data_status()
+    row_deltas = _data_status_row_deltas(before_status, after_status)
+    print(f"[data-refresh] row deltas: {row_deltas}")
+    return {
+        "scrape_counts": counts,
+        "before_status": before_status,
+        "status": after_status,
+        "row_deltas": row_deltas,
+    }
+
+
+def _data_status_row_deltas(before_status: dict[str, Any], after_status: dict[str, Any]) -> dict[str, int | None]:
+    deltas: dict[str, int | None] = {}
+    groups = (
+        ("raw_csvs", ("competitions", "individuals")),
+        ("model_csvs", ("prediction_data", "training_data", "training_data_dec")),
+    )
+    for group, entries in groups:
+        for key in entries:
+            before = ((before_status.get(group) or {}).get(key) or {}).get("rows")
+            after = ((after_status.get(group) or {}).get(key) or {}).get("rows")
+            deltas[key] = after - before if isinstance(before, int) and isinstance(after, int) else None
+    return deltas
 
 
 def _run_logged_subprocess(

@@ -47,7 +47,8 @@ badge.
   `prediction_data.csv`, `training_data.csv`, and `training_data_dec.csv`, run
   read-only analytics. The default data run incrementally merges new UFCStats
   rows into the shipped seed CSVs and recreates generated schemas from those
-  CSVs.
+  CSVs. Completed data jobs return before/after row deltas so users can verify
+  how many raw and finalized rows changed during the refresh.
 - Train tab: run `libs/modeling/train.py` defaults through a compact UI, keep
   advanced knobs collapsed, and summarize saved model evaluation artifacts with
   metrics and charts. Completed dashboard training jobs write

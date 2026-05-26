@@ -182,7 +182,8 @@ run the Data and Train tabs to create them.
 
 - Data: update the shipped raw UFCStats CSVs incrementally, rebuild the
   PostgreSQL feature store, write finalized CSVs, and run read-only AI analytics
-  over Postgres or finalized CSV fallbacks.
+  over Postgres or finalized CSV fallbacks. Completed refreshes report before
+  and after row deltas so new fights/fighters are visible without opening CSVs.
 - Train: launch model training with the existing `libs/modeling/train.py`
   defaults, keep all training knobs collapsed under Advanced Training Knobs, and
   inspect saved evaluation artifacts with accuracy, log loss, Brier score, ROC

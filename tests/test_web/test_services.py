@@ -12,6 +12,7 @@ from libs.web.services import (
     TRAINING_RESULT_BEGIN,
     TRAINING_RESULT_END,
     _database_ready,
+    _data_status_row_deltas,
     _run_logged_subprocess,
     get_data_status,
     get_readiness_status,
@@ -58,6 +59,39 @@ def test_get_data_status_counts_configured_csvs(monkeypatch, tmp_path):
     assert status["raw_csvs"]["individuals"]["rows"] == 1
     assert status["model_csvs"]["training_data"]["rows"] == 3
     assert "secret" not in status["database_url"]
+
+
+def test_data_status_row_deltas_compare_before_and_after_counts():
+    before = {
+        "raw_csvs": {
+            "competitions": {"rows": 10},
+            "individuals": {"rows": 5},
+        },
+        "model_csvs": {
+            "prediction_data": {"rows": 20},
+            "training_data": {"rows": 30},
+            "training_data_dec": {"rows": None},
+        },
+    }
+    after = {
+        "raw_csvs": {
+            "competitions": {"rows": 12},
+            "individuals": {"rows": 5},
+        },
+        "model_csvs": {
+            "prediction_data": {"rows": 21},
+            "training_data": {"rows": 30},
+            "training_data_dec": {"rows": 7},
+        },
+    }
+
+    assert _data_status_row_deltas(before, after) == {
+        "competitions": 2,
+        "individuals": 0,
+        "prediction_data": 1,
+        "training_data": 0,
+        "training_data_dec": None,
+    }
 
 
 def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(monkeypatch, tmp_path):
@@ -295,6 +329,9 @@ def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds
     )
 
     assert result["scrape_counts"] == {}
+    assert "before_status" in result
+    assert "row_deltas" in result
+    assert result["row_deltas"]["training_data"] is None
     command = captured["command"]
     assert command[0] == sys.executable
     assert command[1].endswith("main.py")
