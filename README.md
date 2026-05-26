@@ -125,6 +125,12 @@ uv run mma-web
 Local Python commands automatically load the repo `.env` file without
 overriding values already exported in your shell, so the URLs written by setup
 work for `uv run mma-web`, `uv run mma-predict`, and the other CLI entrypoints.
+The local web command uses `MMA_AI_PORT` first, then the setup-selected
+`MMA_AI_WEB_PORT`, and also accepts explicit overrides:
+
+```bash
+uv run mma-web --host 127.0.0.1 --port 18000
+```
 
 Before publishing a release, run the tracked-file hygiene audit:
 
@@ -224,7 +230,8 @@ uv run mma-rebuild-db
 uv run mma-train
 uv run mma-evaluate --write-report --format text
 uv run python scripts/evaluate_model.py --write-report --format text
-uv run mma-predict
+uv run mma-predict --help
+uv run mma-web --help
 uv run pytest
 docker compose build web
 uv run mma-docker-smoke
