@@ -253,7 +253,10 @@ fork a separate feature or prediction implementation.
 ## Architecture Reference
 
 The remainder of this README preserves the technical feature-store guide from
-the original `mma-ai-db` project.
+the original `mma-ai-db` project. For installation and first-time use, prefer
+the Quick Start above; the setup section in this reference is an advanced manual
+path for developers who intentionally want to restore artifacts and run local
+PostgreSQL commands themselves.
 
 **Last Updated:** 2026-01-01
 **System Version:** Production (Post Tau & Decay Optimization)
@@ -272,7 +275,7 @@ the original `mma-ai-db` project.
 8. [Parameter Optimization](#parameter-optimization)
 9. [Training Data Creation](#training-data-creation)
 10. [Critical Design Decisions](#critical-design-decisions)
-11. [Installation & Setup](#installation--setup)
+11. [Manual Development Setup](#manual-development-setup)
 12. [Troubleshooting & FAQ](#troubleshooting--faq)
 
 ---
@@ -974,7 +977,13 @@ training_df = ctd.create_training_data()
 
 ---
 
-## Installation & Setup
+## Manual Development Setup
+
+Most users should use the repository bootstrap scripts from the Quick Start:
+`setup.ps1` on Windows or `./setup.sh` on macOS/Linux. This section is retained
+as a low-level development reference for contributors who explicitly want to
+restore Hugging Face artifacts by hand, point at their own PostgreSQL instance,
+or run the CLI entrypoints outside Docker.
 
 ### Prerequisites
 
@@ -983,7 +992,7 @@ training_df = ctd.create_training_data()
 - **uv package manager**
 - Optional GPU for faster model training
 
-### Standard Installation
+### Manual Installation Without Bootstrap Scripts
 
 1. **Clone and install:**
    ```bash

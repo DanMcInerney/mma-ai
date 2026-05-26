@@ -53,6 +53,12 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "/api/readiness" in readme
     assert "top bar shows a `Ready` badge" in readme
     assert "imported database tables" in readme
+    assert "[Manual Development Setup](#manual-development-setup)" in readme
+    assert "For installation and first-time use, prefer" in readme
+    assert "Most users should use the repository bootstrap scripts" in readme
+    assert "Manual Installation Without Bootstrap Scripts" in readme
+    assert "## Installation & Setup" not in readme
+    assert "### Standard Installation" not in readme
     assert "--skip-download" in readme
     assert "--force-download" in readme
     assert "-ForceImport" in readme
