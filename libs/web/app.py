@@ -18,7 +18,6 @@ from libs.web.models import (
     EventPredictionRequest,
     JobResponse,
     MatchupPredictionRequest,
-    TrainingChatRequest,
     TrainingRequest,
 )
 from libs.web.services import (
@@ -34,7 +33,6 @@ from libs.web.services import (
     validate_event_prediction_request,
     validate_matchup_request,
 )
-from libs.web.training_chat import answer_training_question
 
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -99,10 +97,6 @@ def create_app() -> FastAPI:
             return summarize_model_evaluation(model_path)
         except (FileNotFoundError, ValueError) as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    @app.post("/api/train/chat")
-    def train_chat(request: TrainingChatRequest) -> dict:
-        return answer_training_question(request.question, request.model_path)
 
     @app.post("/api/train", response_model=JobResponse)
     def train(request: TrainingRequest) -> JobResponse:

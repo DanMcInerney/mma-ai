@@ -282,7 +282,7 @@ configure_llm_analytics() {
   [[ "$SKIP_LLM_PROMPT" -eq 0 ]] || return
 
   local answer
-  read -r -p "Set up LLM analytics and training chat now? [y/N] " answer
+  read -r -p "Set up LLM analytics now? [y/N] " answer
   case "$answer" in
     y|Y|yes|YES) ;;
     *) return ;;

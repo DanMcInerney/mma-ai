@@ -273,7 +273,7 @@ function Configure-LlmAnalytics {
         return
     }
 
-    $answer = Read-Host "Set up LLM analytics and training chat now? [y/N]"
+    $answer = Read-Host "Set up LLM analytics now? [y/N]"
     if ($answer -notmatch "^(y|yes)$") {
         return
     }

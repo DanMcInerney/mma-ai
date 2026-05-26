@@ -54,8 +54,8 @@ alternate port printed by setup.
 - Bootstrap scripts: `setup.ps1` and `setup.sh` download the Hugging Face
   dataset artifacts, verify checksums, restore both Postgres dumps into Docker,
   copy processed CSVs, extract the starter model, optionally configure
-  `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for analytics
-  chat, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
+  `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and provider aliases for
+  analytics, auto-select `MMA_AI_POSTGRES_PORT` when host port 5432 is occupied,
   start the web service, and open the dashboard.
 - Docker stack: `postgres:17` plus the FastAPI web service. Compose initializes
   the auxiliary `odds` database with `docker/postgres-init/01-create-odds.sql`.

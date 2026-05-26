@@ -23,9 +23,10 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "ag-20260304_110750-win-extreme" in readme
     assert "auxiliary `odds` database" in readme
     assert "Python 3.10-3.12" in readme
-    assert "Data: refresh raw UFCStats CSVs" in readme
+    assert "Data: update the shipped raw UFCStats CSVs" in readme
     assert "Train: launch model training" in readme
     assert "Predict: choose a model" in readme
+    assert "uv run mma-evaluate" in readme
     assert "docker compose up --build web" in readme
     assert "MMA_AI_POSTGRES_PORT" in readme
     assert "--postgres-port 55432" in readme
@@ -60,7 +61,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Data tab" in release_notes
     assert "Train tab" in release_notes
     assert "Predict tab" in release_notes
-    assert "BFO odds/features" in release_notes
+    assert "mma-evaluate" in release_notes
+    assert "Odds are not model inputs" in release_notes
     assert "uv run pytest -q" in release_notes
 
     assert "postgres:17" in compose
@@ -108,3 +110,24 @@ def test_env_example_lists_public_configuration_without_real_secrets():
     assert "ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds" in env_example
     assert "host.docker.internal" in env_example
     assert "secret" not in env_example.lower()
+
+
+def test_removed_training_chat_surface_stays_removed():
+    searchable_paths = [
+        "README.md",
+        "AGENTS.md",
+        "CLAUDE.md",
+        "docs/RELEASE_READINESS.md",
+        "setup.ps1",
+        "setup.sh",
+        "libs/web/app.py",
+        "libs/web/models.py",
+        "libs/web/static/index.html",
+        "libs/web/static/app.js",
+    ]
+    combined = "\n".join(read_text(path) for path in searchable_paths)
+
+    assert "training chat" not in combined.lower()
+    assert "/api/train/chat" not in combined
+    assert "TrainingChatRequest" not in combined
+    assert not (ROOT / "libs/web/training_chat.py").exists()

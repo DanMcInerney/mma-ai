@@ -55,11 +55,6 @@ class TrainingRequest(BaseModel):
     included_model_types: list[str] | None = None
 
 
-class TrainingChatRequest(BaseModel):
-    question: str = Field(..., min_length=3)
-    model_path: str | None = None
-
-
 class EventPredictionRequest(BaseModel):
     model_type: Literal["win", "decision"] = "win"
     model_path: str | None = None
