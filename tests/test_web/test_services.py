@@ -9,6 +9,8 @@ import pytest
 
 from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupPredictionRequest, TrainingRequest
 from libs.web.services import (
+    TRAINING_RESULT_BEGIN,
+    TRAINING_RESULT_END,
     _database_ready,
     get_data_status,
     get_readiness_status,
@@ -19,6 +21,7 @@ from libs.web.services import (
     run_event_prediction,
     run_matchup_prediction,
     run_training,
+    run_training_impl,
     validate_matchup_request,
 )
 
@@ -745,6 +748,65 @@ def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
     assert result["stderr_tail"] == "debug stderr"
 
 
+def test_run_training_runs_dashboard_training_script_as_subprocess(monkeypatch, tmp_path, capsys):
+    captured = {}
+
+    def fake_run(command, **kwargs):
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        payload = json.loads(kwargs["input"])
+        result = {
+            "model_path": str(tmp_path / "AutogluonModels" / "dashboard-run"),
+            "used_script_defaults": True,
+            "evaluation": {"available": True, "model_path": str(tmp_path / "AutogluonModels" / "dashboard-run")},
+        }
+        assert payload["model_type"] == "decision"
+        assert payload["time_limit"] == 1200
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=f"training logs\n{TRAINING_RESULT_BEGIN}\n{json.dumps(result)}\n{TRAINING_RESULT_END}\n",
+            stderr="training warnings\n",
+        )
+
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+
+    result = run_training(TrainingRequest(model_type="decision", time_limit=1200))
+
+    command = captured["command"]
+    assert command[0] == sys.executable
+    assert command[1].endswith("scripts\\train_dashboard.py") or command[1].endswith("scripts/train_dashboard.py")
+    assert captured["kwargs"]["cwd"] == Path(__file__).resolve().parents[2]
+    assert captured["kwargs"]["input"].endswith("\n")
+    assert result["used_script_defaults"] is True
+    assert result["evaluation"]["available"] is True
+    output = capsys.readouterr().out
+    assert "[training] stdout begin" in output
+    assert "training logs" in output
+    assert "[training] stderr begin" in output
+    assert "training warnings" in output
+
+
+def test_run_training_surfaces_dashboard_script_failure(monkeypatch):
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 7, stdout="partial training output", stderr="autogluon exploded")
+
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="autogluon exploded"):
+        run_training(TrainingRequest())
+
+
+def test_run_training_requires_structured_dashboard_script_result(monkeypatch):
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 0, stdout="finished without markers", stderr="")
+
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="structured dashboard result"):
+        run_training(TrainingRequest())
+
+
 def test_run_training_uses_script_defaults_when_advanced_knobs_match(monkeypatch, tmp_path):
     captured = {}
 
@@ -760,7 +822,7 @@ def test_run_training_uses_script_defaults_when_advanced_knobs_match(monkeypatch
         lambda model_path: {"available": True, "model_path": model_path},
     )
 
-    result = run_training(
+    result = run_training_impl(
         TrainingRequest(
             model_type="decision",
             preset="best",
@@ -836,7 +898,7 @@ def test_run_training_passes_custom_knobs_to_training_config(monkeypatch, tmp_pa
         included_model_types=["GBM", "CAT"],
     )
 
-    result = run_training(request)
+    result = run_training_impl(request)
 
     config = captured["config"]
     assert result["used_script_defaults"] is False
@@ -897,7 +959,7 @@ def test_run_training_uses_custom_config_when_script_defaults_are_overridden(mon
         lambda model_path: {"available": True, "model_path": model_path},
     )
 
-    result = run_training(
+    result = run_training_impl(
         TrainingRequest(
             use_script_defaults=True,
             start_date="2016-01-01",
@@ -923,7 +985,7 @@ def test_run_training_logs_evaluation_summary_failures(monkeypatch, tmp_path, ca
 
     monkeypatch.setattr("libs.web.services.summarize_model_evaluation", fail_summary)
 
-    result = run_training(TrainingRequest())
+    result = run_training_impl(TrainingRequest())
 
     captured = capsys.readouterr()
     assert result["evaluation"] == {

@@ -27,6 +27,8 @@ from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, reso
 
 
 STARTER_MODEL_NAME = "ag-20260304_110750-win-extreme"
+TRAINING_RESULT_BEGIN = "<<<MMA_AI_TRAINING_RESULT_BEGIN>>>"
+TRAINING_RESULT_END = "<<<MMA_AI_TRAINING_RESULT_END>>>"
 
 
 @dataclass(frozen=True)
@@ -404,6 +406,10 @@ def _upcoming_event_sort_key(event: dict[str, Any]) -> tuple[datetime, int]:
 
 
 def run_training(request: TrainingRequest) -> dict[str, Any]:
+    return _run_training_command(request)
+
+
+def run_training_impl(request: TrainingRequest) -> dict[str, Any]:
     print(
         "[training] "
         f"model_type={request.model_type} preset={request.preset} time_limit={request.time_limit} "
@@ -471,6 +477,57 @@ def run_training(request: TrainingRequest) -> dict[str, Any]:
     model_path = str(getattr(predictor, "path", ""))
     print(f"[training] completed custom training: model_path={model_path}")
     return {"model_path": model_path, "used_script_defaults": False, "evaluation": _safe_evaluation(model_path)}
+
+
+def _run_training_command(request: TrainingRequest) -> dict[str, Any]:
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "train_dashboard.py"),
+    ]
+    payload = json.dumps(_pydantic_dump(request), sort_keys=True)
+    print(f"[training] command: {subprocess.list2cmdline(command)}")
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        input=payload + "\n",
+        text=True,
+        capture_output=True,
+        check=False,
+        env=os.environ.copy(),
+    )
+    print(f"[training] exit_code={completed.returncode}")
+    if completed.stdout:
+        print("[training] stdout begin")
+        print(completed.stdout.rstrip())
+        print("[training] stdout end")
+    if completed.stderr:
+        print("[training] stderr begin")
+        print(completed.stderr.rstrip())
+        print("[training] stderr end")
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr or completed.stdout or f"Training failed with exit code {completed.returncode}")
+    return _parse_training_result(completed.stdout)
+
+
+def _pydantic_dump(model: Any) -> dict[str, Any]:
+    if hasattr(model, "model_dump"):
+        return model.model_dump()
+    return model.dict()
+
+
+def _parse_training_result(stdout: str) -> dict[str, Any]:
+    start = stdout.rfind(TRAINING_RESULT_BEGIN)
+    end = stdout.rfind(TRAINING_RESULT_END)
+    if start < 0 or end < 0 or end <= start:
+        raise RuntimeError("Training script finished without a structured dashboard result.")
+    raw_json = stdout[start + len(TRAINING_RESULT_BEGIN) : end].strip()
+    try:
+        result = json.loads(raw_json)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Training script emitted invalid dashboard result JSON: {exc}") from exc
+    if not isinstance(result, dict):
+        raise RuntimeError("Training script emitted a non-object dashboard result.")
+    return result
 
 
 def _can_use_training_script_defaults(request: TrainingRequest) -> bool:

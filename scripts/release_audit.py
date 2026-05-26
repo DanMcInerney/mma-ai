@@ -44,6 +44,7 @@ REQUIRED_TRACKED_FILES = {
     "pyproject.toml",
     "setup.ps1",
     "setup.sh",
+    "scripts/train_dashboard.py",
     "uv.lock",
     *SEED_DATA_PATHS,
 }
