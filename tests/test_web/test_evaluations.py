@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from libs.web.evaluations import summarize_model_evaluation
+from libs.web.evaluations import cli, summarize_model_evaluation
 
 
 def write_model_artifacts(model_dir: Path):
@@ -94,3 +94,16 @@ def test_summarize_model_evaluation_uses_latest_model_from_env(monkeypatch, tmp_
 
     assert summary["model_name"] in {"ag-older", "ag-newer"}
     assert summary["available"] is True
+
+
+def test_evaluation_cli_writes_json_summary(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "models"))
+    model_dir = tmp_path / "models" / "ag-cli"
+    output_path = tmp_path / "eval-summary.json"
+    write_model_artifacts(model_dir)
+
+    exit_code = cli(["--model-path", str(model_dir), "--output-json", str(output_path)])
+
+    assert exit_code == 0
+    assert '"model_name": "ag-cli"' in output_path.read_text(encoding="utf-8")
+    assert '"Holdout coverage"' in capsys.readouterr().out

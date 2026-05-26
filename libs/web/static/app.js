@@ -32,6 +32,33 @@ function escapeHtml(value) {
   })[char]);
 }
 
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function formatPercent(value) {
+  const number = numberOrNull(value);
+  return number === null ? "N/A" : `${number.toFixed(1)}%`;
+}
+
+function probabilityWidth(value) {
+  const number = numberOrNull(value);
+  return number === null ? 0 : Math.max(0, Math.min(100, number));
+}
+
+function eventDate(event) {
+  const raw = event?.fights?.[0]?.date;
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatEventDate(event) {
+  const date = eventDate(event);
+  return date ? date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Date pending";
+}
+
 function commaList(value) {
   const items = String(value ?? "")
     .split(",")
@@ -79,11 +106,6 @@ function applyDashboardDefaults(defaults) {
   const train = defaults.train || {};
   const predict = defaults.predict || {};
 
-  setChecked("#data-scrape", data.scrape);
-  setChecked("#data-rebuild", data.rebuild);
-  setChecked("#data-reset", data.reset_db);
-  setChecked("#data-force", data.force_full);
-  setChecked("#data-odds", data.odds);
   setValue("#analytics-max-rows", data.analytics_max_rows);
 
   setValue("#train-model-type", train.model_type);
@@ -110,7 +132,6 @@ function applyDashboardDefaults(defaults) {
   setValue("#train-model-families", listValue(train.included_model_types));
 
   setValue("#predict-model-type", predict.model_type);
-  setValue("#predict-upcoming", predict.upcoming_number);
   selectedUpcomingNumber = Number(predict.upcoming_number || 1);
   setChecked("#predict-odds", predict.odds);
   setChecked("#predict-calibrated", predict.use_calibrated);
@@ -128,55 +149,92 @@ function renderPredictionGraphic(target, predictions) {
   }
   qs(target).innerHTML = predictions.map((row) => {
     const evPositive = String(row.EV) === "1";
-    const confidence = Number(row.Confidence || 0);
-    const f1Prob = Number(row.Fighter1_AI_Prob || 0);
-    const f2Prob = Number(row.Fighter2_AI_Prob || 0);
-    const f1Market = Number(row.Fighter1_Market_Prob || 0);
-    const f2Market = Number(row.Fighter2_Market_Prob || 0);
+    const confidence = numberOrNull(row.Confidence);
+    const f1Prob = probabilityWidth(row.Fighter1_AI_Prob);
+    const f2Prob = probabilityWidth(row.Fighter2_AI_Prob);
     const valueSide = evPositive ? row.AI_Pick : "None";
+    const f1Winner = row.AI_Pick === row.Fighter1;
+    const f2Winner = row.AI_Pick === row.Fighter2;
     return `
-      <article class="prediction-result">
+      <article class="prediction-result pretty-prediction">
         <div class="prediction-title">
-          <strong>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</strong>
+          <div>
+            <strong>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</strong>
+            <p>Model pick: ${escapeHtml(row.AI_Pick || "N/A")} at ${confidence === null ? "N/A" : `${confidence.toFixed(1)}%`} confidence</p>
+          </div>
           <span class="${evPositive ? "ev-positive" : "ev-neutral"}">${evPositive ? "Positive EV" : "No positive EV"}</span>
         </div>
-        <div class="fighter-row">
-          <span>${escapeHtml(row.Fighter1)}</span>
-          <meter min="0" max="100" value="${f1Prob}"></meter>
-          <strong>${f1Prob.toFixed(1)}%</strong>
-          <small>Market ${f1Market.toFixed(1)}% | ${escapeHtml(row.Fighter1_Odds || "N/A")}</small>
+        <div class="fighter-prob-grid">
+          <div class="fighter-prob-card${f1Winner ? " picked" : ""}">
+            <div class="fighter-prob-top">
+              <strong>${escapeHtml(row.Fighter1)}</strong>
+              <span>${formatPercent(row.Fighter1_AI_Prob)}</span>
+            </div>
+            <div class="probability-track"><span style="width: ${f1Prob}%"></span></div>
+            <div class="market-line">Market ${formatPercent(row.Fighter1_Market_Prob)} · Odds ${escapeHtml(row.Fighter1_Odds || "N/A")}</div>
+          </div>
+          <div class="fighter-prob-card${f2Winner ? " picked" : ""}">
+            <div class="fighter-prob-top">
+              <strong>${escapeHtml(row.Fighter2)}</strong>
+              <span>${formatPercent(row.Fighter2_AI_Prob)}</span>
+            </div>
+            <div class="probability-track"><span style="width: ${f2Prob}%"></span></div>
+            <div class="market-line">Market ${formatPercent(row.Fighter2_Market_Prob)} · Odds ${escapeHtml(row.Fighter2_Odds || "N/A")}</div>
+          </div>
         </div>
-        <div class="fighter-row">
-          <span>${escapeHtml(row.Fighter2)}</span>
-          <meter min="0" max="100" value="${f2Prob}"></meter>
-          <strong>${f2Prob.toFixed(1)}%</strong>
-          <small>Market ${f2Market.toFixed(1)}% | ${escapeHtml(row.Fighter2_Odds || "N/A")}</small>
-        </div>
-        <div class="value-strip">
-          <span>Value Side</span>
-          <strong>${escapeHtml(valueSide)}</strong>
+        <div class="prediction-callout">
+          <div>
+            <span>Value Side</span>
+            <strong>${escapeHtml(valueSide)}</strong>
+          </div>
+          <div>
+            <span>AI Fair Line</span>
+            <strong>${escapeHtml(row.AI_Odds || "N/A")}</strong>
+          </div>
         </div>
         <div class="prediction-foot">
           <span>Pick: <strong>${escapeHtml(row.AI_Pick)}</strong></span>
-          <span>Confidence: <strong>${confidence.toFixed(1)}%</strong></span>
-          <span>AI Odds: <strong>${escapeHtml(row.AI_Odds)}</strong></span>
+          <span>Confidence: <strong>${confidence === null ? "N/A" : `${confidence.toFixed(1)}%`}</strong></span>
+          <span>EV: <strong>${evPositive ? "Yes" : "No"}</strong></span>
         </div>
       </article>`;
   }).join("");
 }
 
 function renderUpcomingEvents(payload) {
-  const events = payload?.events || [];
+  const events = [...(payload?.events || [])].sort((left, right) => {
+    const leftDate = eventDate(left);
+    const rightDate = eventDate(right);
+    if (leftDate && rightDate) return leftDate - rightDate;
+    if (leftDate) return -1;
+    if (rightDate) return 1;
+    return Number(left.upcoming_number || 0) - Number(right.upcoming_number || 0);
+  });
+  const select = qs("#predict-event");
   if (!events.length) {
+    if (select) {
+      select.innerHTML = `<option value="">No upcoming events found</option>`;
+      select.disabled = true;
+    }
+    selectedUpcomingNumber = null;
     qs("#events-output").innerHTML = `<div class="muted">${escapeHtml(payload?.warning || "No upcoming UFC events found.")}</div>`;
     return;
+  }
+
+  selectedUpcomingNumber = events.some((event) => Number(event.upcoming_number) === selectedUpcomingNumber)
+    ? selectedUpcomingNumber
+    : Number(events[0].upcoming_number);
+  if (select) {
+    select.disabled = false;
+    select.innerHTML = events.map((event) => `
+      <option value="${event.upcoming_number}">${escapeHtml(event.name)}</option>`).join("");
+    select.value = String(selectedUpcomingNumber);
   }
 
   qs("#events-output").innerHTML = `
     <div class="event-list">
       ${events.map((event, index) => {
-        const firstFight = event.fights?.[0];
-        const date = firstFight?.date ? new Date(firstFight.date).toLocaleDateString() : "Date pending";
+        const date = formatEventDate(event);
         const selected = Number(event.upcoming_number) === selectedUpcomingNumber || (selectedUpcomingNumber === null && index === 0);
         const preview = (event.fights || []).slice(0, 4)
           .map((fight) => `<li>${escapeHtml(fight.fighter1)} vs ${escapeHtml(fight.fighter2)}</li>`)
@@ -197,17 +255,11 @@ function renderUpcomingEvents(payload) {
   qsa(".event-card").forEach((card) => {
     card.addEventListener("click", () => {
       selectedUpcomingNumber = Number(card.dataset.upcomingNumber);
-      qs("#predict-upcoming").value = String(selectedUpcomingNumber);
+      if (select) select.value = String(selectedUpcomingNumber);
       qsa(".event-card").forEach((item) => item.classList.remove("selected"));
       card.classList.add("selected");
     });
   });
-  if (!events.some((event) => Number(event.upcoming_number) === selectedUpcomingNumber)) {
-    selectedUpcomingNumber = Number(events[0].upcoming_number);
-    qs("#predict-upcoming").value = String(selectedUpcomingNumber);
-    const firstCard = qs(".event-card");
-    if (firstCard) firstCard.classList.add("selected");
-  }
 }
 
 function renderDataRefreshResult(result) {
@@ -328,9 +380,11 @@ async function refreshJobs() {
   if (activeTrainingJobId) await renderJobLog("#train-log", activeTrainingJobId);
   if (trainingJob?.state === "succeeded") {
     renderEvaluation(trainingJob.result?.evaluation || { available: false, message: "Training finished without evaluation artifacts." });
+    activateSubtab("train-evals");
     activeTrainingJobId = null;
   } else if (trainingJob?.state === "failed") {
     renderJson("#eval-output", trainingJob.error || "Training failed");
+    activateSubtab("train-evals");
     activeTrainingJobId = null;
   }
   const dataJob = jobs.find((job) => job.id === activeDataJobId);
@@ -372,6 +426,11 @@ async function renderJobLog(target, jobId) {
   }
 }
 
+function activateSubtab(subtabId) {
+  qsa(".subtab").forEach((item) => item.classList.toggle("active", item.dataset.subtab === subtabId));
+  qsa(".subpanel").forEach((item) => item.classList.toggle("active", item.id === subtabId));
+}
+
 function wireTabs() {
   qsa(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -383,10 +442,7 @@ function wireTabs() {
   });
   qsa(".subtab").forEach((tab) => {
     tab.addEventListener("click", () => {
-      qsa(".subtab").forEach((item) => item.classList.remove("active"));
-      qsa(".subpanel").forEach((item) => item.classList.remove("active"));
-      tab.classList.add("active");
-      qs(`#${tab.dataset.subtab}`).classList.add("active");
+      activateSubtab(tab.dataset.subtab);
     });
   });
 }
@@ -396,11 +452,11 @@ function wireData() {
   qs("#run-data").addEventListener("click", async () => {
     try {
       const payload = {
-        scrape: qs("#data-scrape").checked,
-        rebuild: qs("#data-rebuild").checked,
-        reset_db: qs("#data-reset").checked,
-        force_full: qs("#data-force").checked,
-        odds: qs("#data-odds").checked,
+        scrape: true,
+        rebuild: true,
+        reset_db: true,
+        force_full: false,
+        odds: false,
       };
       const job = await api("/api/data/refresh", { method: "POST", body: JSON.stringify(payload) });
       activeDataJobId = job.job_id;
@@ -475,20 +531,6 @@ function wireTraining() {
       renderJson("#eval-output", error.message);
     }
   });
-  qs("#run-train-chat").addEventListener("click", async () => {
-    try {
-      const result = await api("/api/train/chat", {
-        method: "POST",
-        body: JSON.stringify({
-          question: qs("#train-chat-question").value,
-          model_path: qs("#train-eval-model").value || null,
-        }),
-      });
-      renderJson("#train-chat-output", result.answer);
-    } catch (error) {
-      renderJson("#train-chat-output", error.message);
-    }
-  });
 }
 
 async function refreshModels() {
@@ -511,20 +553,29 @@ function predictionOutputDir() {
   return qs("#predict-output-dir").value.trim() || null;
 }
 
+async function loadUpcomingEvents() {
+  const select = qs("#predict-event");
+  if (select) {
+    select.disabled = true;
+    select.innerHTML = `<option value="">Loading upcoming events...</option>`;
+  }
+  qs("#events-output").innerHTML = `<div class="muted">Loading upcoming UFC events...</div>`;
+  const params = new URLSearchParams({ limit: "20" });
+  const predictionCsv = predictionDataCsv();
+  if (predictionCsv) params.set("prediction_data_csv", predictionCsv);
+  renderUpcomingEvents(await api(`/api/predict/upcoming?${params.toString()}`));
+}
+
 function wirePrediction() {
-  qs("#predict-upcoming").addEventListener("input", () => {
-    selectedUpcomingNumber = Number(qs("#predict-upcoming").value || 1);
+  qs("#predict-event").addEventListener("change", () => {
+    selectedUpcomingNumber = Number(qs("#predict-event").value || 0) || null;
     qsa(".event-card").forEach((card) => {
       card.classList.toggle("selected", Number(card.dataset.upcomingNumber) === selectedUpcomingNumber);
     });
   });
   qs("#load-events").addEventListener("click", async () => {
     try {
-      selectedUpcomingNumber = Number(qs("#predict-upcoming").value || 1);
-      const params = new URLSearchParams({ limit: "5" });
-      const predictionCsv = predictionDataCsv();
-      if (predictionCsv) params.set("prediction_data_csv", predictionCsv);
-      renderUpcomingEvents(await api(`/api/predict/upcoming?${params.toString()}`));
+      await loadUpcomingEvents();
     } catch (error) {
       renderJson("#events-output", error.message);
     }
@@ -544,13 +595,18 @@ function wirePrediction() {
   });
   qs("#run-event-predict").addEventListener("click", async () => {
     try {
+      const upcomingNumber = selectedUpcomingNumber || Number(qs("#predict-event").value || 0);
+      if (!upcomingNumber) {
+        renderJson("#events-output", "Choose an upcoming event before prediction.");
+        return;
+      }
       const payload = {
         model_type: qs("#predict-model-type").value,
         model_path: qs("#predict-model").value || null,
         prediction_data_csv: predictionDataCsv(),
         training_data_csv: trainingDataCsv(),
         output_dir: predictionOutputDir(),
-        upcoming_number: selectedUpcomingNumber || Number(qs("#predict-upcoming").value),
+        upcoming_number: upcomingNumber,
         odds: qs("#predict-odds").checked,
         manual_odds: parseManualOdds(qs("#event-manual-odds").value),
         use_calibrated: qs("#predict-calibrated").checked,
@@ -603,7 +659,7 @@ wireTabs();
 wireData();
 wireTraining();
 wirePrediction();
-loadDashboardDefaults().catch(() => {});
+loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}));
 refreshStatus().catch(() => {});
 refreshModels().catch(() => {});
 refreshJobs().catch(() => {});

@@ -13,6 +13,7 @@ uv sync
 uv run mma-scrape-ufcstats --help
 uv run mma-rebuild-db --help
 uv run mma-train --help
+uv run mma-evaluate --help
 uv run mma-predict --help
 uv run mma-web
 ```
@@ -34,15 +35,17 @@ alternate port printed by setup.
 
 - Data tab: refresh UFCStats CSVs, rebuild PostgreSQL feature tables, write
   `prediction_data.csv`, `training_data.csv`, and `training_data_dec.csv`, run
-  read-only analytics, and optionally refresh BFO odds/features. The default
-  data run incrementally merges new UFCStats rows into the shipped seed CSVs and
-  recreates generated schemas from those CSVs.
+  read-only analytics. The default data run incrementally merges new UFCStats
+  rows into the shipped seed CSVs and recreates generated schemas from those
+  CSVs.
 - Train tab: run `libs/modeling/train.py` defaults through a compact UI, keep
-  advanced knobs collapsed, answer training questions, and summarize saved model
-  evaluation artifacts with metrics and charts.
-- Predict tab: list models, load upcoming UFC events from Wikipedia, predict a
-  selected event, run manual fighter matchups, and show AI probability, market
-  probability, AI odds, and positive EV status. Event prediction can ingest
+  advanced knobs collapsed, and summarize saved model evaluation artifacts with
+  metrics and charts. `mma-evaluate` emits the same evaluation summary as JSON
+  for automation.
+- Predict tab: list models, automatically load upcoming UFC events from
+  Wikipedia into an event-name dropdown, predict a selected event, run manual
+  fighter matchups, and show AI probability, market probability, AI odds, and
+  positive EV status. Odds are not model inputs; event prediction can ingest
   manual American odds through the dashboard/API instead of waiting on terminal
   input.
 - Job logs: Data, Train, and Predict jobs persist stdout, stderr, command lines,
@@ -116,4 +119,5 @@ git ls-files | rg '(^pics/|^data/|^visualizations/|^blogs/|^queries/|\\.(csv|png
   data, retraining, or downloading prepared artifacts from the companion dataset.
 - Legacy scripts that are not part of the dashboard path may still assume local
   PostgreSQL defaults. Treat `mma-scrape-ufcstats`, `mma-rebuild-db`,
-  `mma-train`, `mma-predict`, and `mma-web` as the public entry points.
+  `mma-train`, `mma-evaluate`, `mma-predict`, and `mma-web` as the public entry
+  points.

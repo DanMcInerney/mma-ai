@@ -19,27 +19,28 @@ Train, and Predict dashboard.
 - Scrape raw UFCStats CSVs: `uv run mma-scrape-ufcstats`
 - Rebuild database and finalized CSVs: `uv run mma-rebuild-db --reset-db`
 - Train model: `uv run mma-train`
+- Summarize model evaluation artifacts: `uv run mma-evaluate`
 - Predict upcoming event: `uv run mma-predict`
 
 ## Dashboard Tabs
 
 - Data: scrape `competitions.csv` and `individuals.csv`, rebuild the Postgres
   feature store, create `prediction_data.csv`, `training_data.csv`, and
-  `training_data_dec.csv`, optionally refresh BFO odds/features, then support
-  read-only analytics.
+  `training_data_dec.csv`, then support read-only analytics.
 - Train: expose defaults from `libs/modeling/train.py`; keep advanced knobs in
   collapsed UI controls. The Evaluations subtab reads saved model artifacts and
-  charts holdout prediction metrics. The Training Chat box answers process,
-  feature, leakage, and evaluation questions using local context, or the
-  configured LLM provider/model when available.
-- Predict: select a model, load upcoming UFC events from Wikipedia, predict the
-  selected event, and run manual fighter matchups through the same inference
-  path.
+  charts holdout prediction metrics including accuracy, log loss, Brier score,
+  ROC AUC, calibration, confidence, feature importance, and best-practice
+  checks. `mma-evaluate` emits the same summary as JSON.
+- Predict: select a model, automatically load upcoming UFC events from
+  Wikipedia into an event-name dropdown, predict the selected event, and run
+  manual fighter matchups through the same inference path. Odds are only for EV
+  and market probability calculations, not model inputs.
 
-LLM-assisted analytics and training chat use `LLM_PROVIDER`, `LLM_MODEL`,
-`LLM_API_KEY`, and optional `LLM_BASE_URL` first. The setup scripts can configure
-OpenAI, Codex/OpenAI-compatible, Anthropic Claude, Google Gemini, xAI Grok, a
-local OpenAI-compatible server such as Ollama or LM Studio, or a custom
+LLM-assisted analytics use `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
+optional `LLM_BASE_URL` first. The setup scripts can configure OpenAI,
+Codex/OpenAI-compatible, Anthropic Claude, Google Gemini, xAI Grok, a local
+OpenAI-compatible server such as Ollama or LM Studio, or a custom
 OpenAI-compatible endpoint. Legacy `GEMINI_API_KEY` and `GOOGLE_API_KEY` still
 work as Google aliases.
 

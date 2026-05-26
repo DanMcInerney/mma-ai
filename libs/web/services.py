@@ -202,7 +202,7 @@ def list_fighters(prediction_data_csv: str | None = None) -> list[str]:
     return sorted(names, key=str.lower)
 
 
-def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 5) -> dict[str, Any]:
+def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 20) -> dict[str, Any]:
     path = resolve_data_csv(prediction_data_csv, "prediction_data.csv")
     if not path.exists():
         return {"events": [], "warning": f"Prediction data CSV not found: {path}"}
@@ -212,12 +212,18 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 5)
     df = pd.read_csv(path)
     events = []
     warnings = []
-    for upcoming_number in range(1, limit + 1):
+    scraper = UpcomingFights(df, 1)
+    try:
+        event_links = scraper.get_upcoming_event_links()
+    except Exception as exc:
+        return {"events": [], "warning": f"Could not load upcoming UFC events from Wikipedia: {exc}"}
+
+    for upcoming_number, event_link in enumerate(list(reversed(event_links))[: max(1, limit)], start=1):
         try:
-            event_map = UpcomingFights(df, upcoming_number).run()
+            event_map = scraper.get_upcoming_cards([event_link])
         except Exception as exc:
-            warnings.append(str(exc))
-            break
+            warnings.append(f"event {upcoming_number}: {exc}")
+            continue
         for event_name, fights in event_map.items():
             events.append(
                 {
@@ -233,7 +239,20 @@ def list_upcoming_events(prediction_data_csv: str | None = None, limit: int = 5)
                     ],
                 }
             )
+
+    events.sort(key=_upcoming_event_sort_key)
+    for index, event in enumerate(events, start=1):
+        event["upcoming_number"] = index
     return {"events": events, "warning": "; ".join(warnings) if warnings else None}
+
+
+def _upcoming_event_sort_key(event: dict[str, Any]) -> tuple[datetime, int]:
+    raw_date = (event.get("fights") or [{}])[0].get("date")
+    try:
+        event_date = datetime.fromisoformat(str(raw_date))
+    except (TypeError, ValueError):
+        event_date = datetime.max
+    return event_date, int(event.get("upcoming_number") or 0)
 
 
 def run_training(request: TrainingRequest) -> dict[str, Any]:

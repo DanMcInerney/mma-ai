@@ -72,11 +72,13 @@ def test_predict_tab_predicts_next_ufc_event(monkeypatch, tmp_path):
     assert dashboard.status_code == 200
     assert 'data-tab="predict"' in dashboard.text
     assert 'id="load-events"' in dashboard.text
+    assert 'id="predict-event"' in dashboard.text
     assert 'id="run-event-predict"' in dashboard.text
 
     app_js = client.get("/static/app.js").text
     assert "/api/predict/upcoming" in app_js
     assert "/api/predict/event" in app_js
+    assert "loadUpcomingEvents" in app_js
 
     upcoming = client.get("/api/predict/upcoming?limit=1")
     assert upcoming.status_code == 200

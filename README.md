@@ -69,7 +69,7 @@ setup scripts restore the Hugging Face dumps into those databases.
 
 During setup you can choose OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
 Google Gemini, xAI Grok, a local OpenAI-compatible server such as Ollama or LM
-Studio, or a custom endpoint for Data-tab analytics and Train-tab chat. The
+Studio, or a custom endpoint for Data-tab analytics. The
 choices are saved in `.env` as `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
 optional `LLM_BASE_URL`. Non-interactive installs can pass values directly:
 
@@ -150,17 +150,19 @@ run the Data and Train tabs to create them.
 
 ## Dashboard
 
-- Data: refresh raw UFCStats CSVs, rebuild the PostgreSQL feature store, write
-  finalized CSVs, and run read-only AI analytics over Postgres or finalized CSV
-  fallbacks. The collapsed pipeline options include an opt-in BFO odds refresh
-  that scrapes odds and recalculates odds features only when enabled.
+- Data: update the shipped raw UFCStats CSVs incrementally, rebuild the
+  PostgreSQL feature store, write finalized CSVs, and run read-only AI analytics
+  over Postgres or finalized CSV fallbacks.
 - Train: launch model training with the existing `libs/modeling/train.py`
-  defaults, keep advanced knobs collapsed, chat about training/features, and
-  inspect saved evaluation artifacts.
-- Predict: choose a model, load upcoming UFC events from Wikipedia, predict a
-  selected event, or run a manual fighter-vs-fighter matchup with positive-EV
-  output cards. Event prediction accepts manual fighter odds in the dashboard so
-  web jobs never need to block on terminal prompts.
+  defaults, keep all training knobs collapsed under Advanced Training Knobs, and
+  inspect saved evaluation artifacts with accuracy, log loss, Brier score, ROC
+  AUC, calibration, confidence, feature-importance, and best-practice summaries.
+- Predict: choose a model, automatically load upcoming UFC events from
+  Wikipedia into an event-name dropdown, predict a selected event, or run a
+  manual fighter-vs-fighter matchup with positive-EV output cards. Odds are used
+  only for market probability and EV calculations, not as model inputs. Event
+  prediction accepts manual fighter odds in the dashboard so web jobs never need
+  to block on terminal prompts.
 
 Each long-running Data, Train, or Predict job writes a debug log under
 `data/logs/jobs` and exposes it through the dashboard and `/api/jobs/{job_id}/log`.
@@ -171,6 +173,7 @@ Each long-running Data, Train, or Predict job writes a debug log under
 uv run mma-scrape-ufcstats
 uv run mma-rebuild-db
 uv run mma-train
+uv run mma-evaluate
 uv run mma-predict
 uv run pytest
 ```
@@ -185,7 +188,7 @@ fork a separate feature or prediction implementation.
 - `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
   and the FastAPI dashboard.
 - `libs/web`: FastAPI app, background jobs, web service adapters, analytics,
-  training chat, evaluation summaries, and static UI.
+  evaluation summaries, and static UI.
 - `data`: finalized CSV outputs such as `prediction_data.csv`,
   `training_data.csv`, and `training_data_dec.csv`.
 

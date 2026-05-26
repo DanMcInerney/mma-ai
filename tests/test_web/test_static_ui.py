@@ -46,6 +46,23 @@ def test_primary_workflow_buttons_render_api_errors_in_place():
     assert 'renderJson("#prediction-output", error.message)' in app_js
 
 
+def test_data_and_training_ui_are_simplified():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert "<h2>Data</h2>" in html
+    assert "<span>Update Data</span>" in html
+    assert "Raw to Finalized Data" not in html
+    assert "Pipeline Options" not in html
+    assert "Training Chat" not in html
+    assert "run-train-chat" not in html
+    assert "run-train-chat" not in app_js
+    assert "scrape: true" in app_js
+    assert "rebuild: true" in app_js
+    assert "reset_db: true" in app_js
+    assert html.index("Advanced Training Knobs") < html.index('id="train-model-type"')
+
+
 def test_manual_matchup_validates_required_fighter_names_before_api_call():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
@@ -109,9 +126,22 @@ def test_dashboard_controls_hydrate_from_defaults_endpoint():
     assert "setValue(\"#train-split\", train.split_strategy)" in app_js
     assert "setValue(\"#train-model-families\", listValue(train.included_model_types))" in app_js
     assert "setChecked(\"#train-refit\", train.refit_full)" in app_js
-    assert "setValue(\"#predict-upcoming\", predict.upcoming_number)" in app_js
     assert "selectedUpcomingNumber = Number(predict.upcoming_number || 1)" in app_js
-    assert "loadDashboardDefaults().catch(() => {})" in app_js
+    assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEvents().catch(() => {}))" in app_js
+
+
+def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert 'id="predict-event"' in html
+    assert "Loading upcoming events..." in html
+    assert "Odds are not included in the model" in html
+    assert "async function loadUpcomingEvents()" in app_js
+    assert 'new URLSearchParams({ limit: "20" })' in app_js
+    assert 'qs("#predict-event").addEventListener("change"' in app_js
+    assert 'upcoming_number: upcomingNumber' in app_js
+    assert "Choose an upcoming event before prediction." in app_js
 
 
 def test_analytics_options_expose_bounded_row_limit():

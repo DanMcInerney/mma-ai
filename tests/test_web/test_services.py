@@ -109,10 +109,14 @@ def test_list_upcoming_events_uses_wikipedia_scraper_adapter(monkeypatch, tmp_pa
         def __init__(self, df, upcoming_number):
             self.upcoming_number = upcoming_number
 
-        def run(self):
+        def get_upcoming_event_links(self):
+            return ["https://example.test/ufc-test-2", "https://example.test/ufc-test-1"]
+
+        def get_upcoming_cards(self, links):
+            event_number = links[0].rsplit("-", 1)[1]
             return {
-                f"UFC Test {self.upcoming_number}": [
-                    (pd.Timestamp("2026-06-01"), "fighter one", "fighter two"),
+                f"UFC Test {event_number}": [
+                    (pd.Timestamp(f"2026-06-0{event_number}"), "fighter one", "fighter two"),
                 ]
             }
 
@@ -122,6 +126,7 @@ def test_list_upcoming_events_uses_wikipedia_scraper_adapter(monkeypatch, tmp_pa
 
     assert result["warning"] is None
     assert [event["upcoming_number"] for event in result["events"]] == [1, 2]
+    assert [event["name"] for event in result["events"]] == ["UFC Test 1", "UFC Test 2"]
     assert result["events"][0]["fights"][0]["fighter1"] == "fighter one"
 
 

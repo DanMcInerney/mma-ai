@@ -89,5 +89,6 @@ include = ["config*", "libs*", "scripts*"]
 mma-scrape-ufcstats = "scripts.scrape_ufcstats:main"
 mma-rebuild-db = "main:cli"
 mma-train = "libs.modeling.train:cli"
+mma-evaluate = "libs.web.evaluations:cli"
 mma-predict = "predict:cli"
 mma-web = "libs.web.cli:main"

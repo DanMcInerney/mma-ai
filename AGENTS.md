@@ -26,17 +26,20 @@ model training, analytics, and fight prediction.
   dependencies.
 - Dashboard tabs:
   - Data tab: scrape raw UFCStats CSVs, rebuild PostgreSQL feature tables,
-    optionally refresh BFO odds/features, create finalized CSVs, and run
-    read-only analytics.
+    create finalized CSVs, and run read-only analytics.
   - Train tab: launch AutoGluon training with defaults from `libs/modeling/train.py`; advanced knobs stay collapsed.
     The Evaluations subtab summarizes saved artifacts such as `evals.txt`,
     `model_stats.txt`, `test_predictions.csv`, `all_predictions.csv`, and
-    `calibration_curve.png`. The Training Chat box can answer process and feature
-    questions with local defaults/artifact context and optionally an LLM when
-    `LLM_PROVIDER` and `LLM_MODEL` are configured. Supported setup choices are
-    OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini, xAI Grok, local
-    OpenAI-compatible servers, and custom OpenAI-compatible endpoints.
-  - Predict tab: choose a model, load upcoming events from Wikipedia, run event prediction, and validate manual fighter matchups.
+    `calibration_curve.png`; the `mma-evaluate` script produces the same summary
+    as JSON for automation.
+  - Predict tab: choose a model, automatically load upcoming events from
+    Wikipedia into an event-name dropdown, run event prediction, and validate
+    manual fighter matchups. Odds are not model inputs; they are only for market
+    probability and EV calculations.
+
+LLM setup choices are OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini,
+xAI Grok, local OpenAI-compatible servers, and custom OpenAI-compatible
+endpoints. LLMs are used by Data-tab analytics.
 
 Heavy workflows are intentionally lazy. Importing the web app must not import
 AutoGluon, start Scrapy, connect to Postgres, or call external APIs.

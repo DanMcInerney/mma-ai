@@ -423,3 +423,25 @@ def _build_best_practice_checks(metrics: dict[str, Any], artifacts: list[dict[st
 
 def _check(name: str, status: str, detail: str) -> dict[str, str]:
     return {"name": name, "status": status, "detail": detail}
+
+
+def cli(argv: list[str] | None = None) -> int:
+    """Write a portable model-evaluation summary for scripts and setup checks."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Summarize MMA AI model evaluation artifacts.")
+    parser.add_argument("--model-path", help="Model directory to evaluate. Defaults to the latest model.")
+    parser.add_argument("--output-json", help="Optional path to write the evaluation summary JSON.")
+    args = parser.parse_args(argv)
+
+    summary = summarize_model_evaluation(args.model_path)
+    output = json.dumps(summary, indent=2)
+    if args.output_json:
+        Path(args.output_json).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.output_json).write_text(output + "\n", encoding="utf-8")
+    print(output)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(cli())
