@@ -64,7 +64,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "uv run pytest -q" in release_notes
 
     assert "postgres:17" in compose
-    assert '"8000:8000"' in compose
+    assert '"127.0.0.1:${MMA_AI_WEB_PORT:-8000}:8000"' in compose
     assert "MMA_AI_DATA_DIR: /app/data" in compose
     assert "./docker/postgres-init:/docker-entrypoint-initdb.d:ro" in compose
     assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
@@ -90,6 +90,7 @@ def test_env_example_lists_public_configuration_without_real_secrets():
         "MMA_AI_MODELS_DIR",
         "MMA_AI_UFCSTATS_DIR",
         "MMA_AI_POSTGRES_PORT",
+        "MMA_AI_WEB_PORT",
         "LLM_PROVIDER",
         "LLM_MODEL",
         "LLM_API_KEY",

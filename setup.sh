@@ -20,6 +20,7 @@ LLM_MODEL_VALUE=""
 LLM_API_KEY_VALUE=""
 LLM_BASE_URL_VALUE=""
 POSTGRES_PORT=0
+WEB_PORT=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,6 +53,10 @@ while [[ $# -gt 0 ]]; do
     --postgres-port)
       shift
       POSTGRES_PORT="${1:-0}"
+      ;;
+    --web-port)
+      shift
+      WEB_PORT="${1:-0}"
       ;;
     *)
       echo "Unknown argument: $1" >&2
@@ -345,6 +350,10 @@ compose_db_port() {
   docker compose port db 5432 2>/dev/null | awk -F: 'NF { print $NF; exit }'
 }
 
+compose_web_port() {
+  docker compose port web 8000 2>/dev/null | awk -F: 'NF { print $NF; exit }'
+}
+
 port_available() {
   local port="$1"
   if docker_published_port_in_use "$port"; then
@@ -391,6 +400,35 @@ setup_postgres_port() {
   done
 
   echo "Could not find an available host port for PostgreSQL. Pass --postgres-port <port> to choose one." >&2
+  exit 1
+}
+
+setup_web_port() {
+  if [[ "$WEB_PORT" != "0" ]]; then
+    echo "$WEB_PORT"
+    return
+  fi
+
+  local existing
+  existing="$(compose_web_port || true)"
+  if [[ -n "$existing" ]]; then
+    echo "$existing"
+    return
+  fi
+
+  if port_available 8000; then
+    echo "8000"
+    return
+  fi
+
+  for candidate in $(seq 18000 18100); do
+    if port_available "$candidate"; then
+      echo "$candidate"
+      return
+    fi
+  done
+
+  echo "Could not find an available host port for the web dashboard. Pass --web-port <port> to choose one." >&2
   exit 1
 }
 
@@ -461,6 +499,11 @@ set_env_value "MMA_AI_POSTGRES_PORT" "$SELECTED_POSTGRES_PORT"
 if [[ "$SELECTED_POSTGRES_PORT" != "5432" ]]; then
   echo "Host port 5432 is unavailable; Docker Postgres will use localhost:$SELECTED_POSTGRES_PORT."
 fi
+SELECTED_WEB_PORT="$(setup_web_port)"
+set_env_value "MMA_AI_WEB_PORT" "$SELECTED_WEB_PORT"
+if [[ "$SELECTED_WEB_PORT" != "8000" ]]; then
+  echo "Host port 8000 is unavailable; the dashboard will use http://localhost:$SELECTED_WEB_PORT."
+fi
 
 if [[ "$SKIP_DOWNLOAD" -eq 0 ]]; then
   for artifact in "${ARTIFACTS[@]}"; do
@@ -501,12 +544,13 @@ configure_llm_analytics
 if [[ "$NO_START" -eq 0 ]]; then
   echo "Starting MMA AI web dashboard"
   docker compose up -d --build web
-  echo "MMA AI is ready: http://127.0.0.1:8000"
+  WEB_URL="http://localhost:$SELECTED_WEB_PORT"
+  echo "MMA AI is ready: $WEB_URL"
   if [[ "$NO_OPEN" -eq 0 ]]; then
     if command -v xdg-open >/dev/null 2>&1; then
-      xdg-open "http://127.0.0.1:8000" >/dev/null 2>&1 || true
+      xdg-open "$WEB_URL" >/dev/null 2>&1 || true
     elif command -v open >/dev/null 2>&1; then
-      open "http://127.0.0.1:8000" >/dev/null 2>&1 || true
+      open "$WEB_URL" >/dev/null 2>&1 || true
     fi
   fi
 else

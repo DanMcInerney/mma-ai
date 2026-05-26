@@ -38,7 +38,7 @@ services:
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       THE_ODDS_API_KEY: ${THE_ODDS_API_KEY:-}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:${MMA_AI_WEB_PORT:-8000}:8000"
     volumes:
       - ./data:/app/data
       - ./AutogluonModels:/app/AutogluonModels

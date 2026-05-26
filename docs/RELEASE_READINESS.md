@@ -26,8 +26,9 @@ docker compose config --quiet
 docker compose up --build
 ```
 
-After the web service starts, verify `http://127.0.0.1:8000/api/health` returns
-`{"status":"ok"}` and open the dashboard at `http://127.0.0.1:8000`.
+After the web service starts, verify `http://localhost:8000/api/health` returns
+`{"status":"ok"}` and open the dashboard at `http://localhost:8000`, or the
+alternate port printed by setup.
 
 ## Release Surface
 

@@ -10,7 +10,8 @@ param(
     [string]$LlmModel,
     [string]$LlmApiKey,
     [string]$LlmBaseUrl,
-    [int]$PostgresPort = 0
+    [int]$PostgresPort = 0,
+    [int]$WebPort = 0
 )
 
 Set-StrictMode -Version Latest
@@ -342,10 +343,19 @@ function Invoke-DockerComposeOptional {
 }
 
 function Get-ComposeDbPort {
+    return Get-ComposeServicePort "db" 5432
+}
+
+function Get-ComposeWebPort {
+    return Get-ComposeServicePort "web" 8000
+}
+
+function Get-ComposeServicePort {
+    param([string]$Service, [int]$ContainerPort)
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Continue"
-        $output = & docker compose port db 5432 2>$null
+        $output = & docker compose port $Service $ContainerPort 2>$null
         $exitCode = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
@@ -426,6 +436,28 @@ function Test-LocalTcpListenerInUse {
     return $false
 }
 
+function Test-LocalhostPortOwnedByNonDocker {
+    param([int]$Port)
+
+    if (-not (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+
+    $listeners = @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
+    foreach ($listener in $listeners) {
+        if ($listener.LocalAddress -notin @("127.0.0.1", "0.0.0.0")) {
+            continue
+        }
+
+        $processName = (Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue).ProcessName
+        if ($processName -and $processName -notin @("com.docker.backend", "docker-proxy", "wslrelay")) {
+            return $true
+        }
+    }
+
+    return $false
+}
+
 function Get-SetupPostgresPort {
     if ($PostgresPort -gt 0) {
         return $PostgresPort
@@ -447,6 +479,29 @@ function Get-SetupPostgresPort {
     }
 
     throw "Could not find an available host port for PostgreSQL. Pass -PostgresPort <port> to choose one."
+}
+
+function Get-SetupWebPort {
+    if ($WebPort -gt 0) {
+        return $WebPort
+    }
+
+    $existingPort = Get-ComposeWebPort
+    if ($existingPort -and -not (Test-LocalhostPortOwnedByNonDocker $existingPort)) {
+        return $existingPort
+    }
+
+    if (Test-TcpPortAvailable 8000) {
+        return 8000
+    }
+
+    for ($candidate = 18000; $candidate -le 18100; $candidate++) {
+        if (Test-TcpPortAvailable $candidate) {
+            return $candidate
+        }
+    }
+
+    throw "Could not find an available host port for the web dashboard. Pass -WebPort <port> to choose one."
 }
 
 function Test-PostgresReady {
@@ -539,6 +594,11 @@ Set-EnvValue "MMA_AI_POSTGRES_PORT" "$selectedPostgresPort"
 if ($selectedPostgresPort -ne 5432) {
     Write-Host "Host port 5432 is unavailable; Docker Postgres will use localhost:$selectedPostgresPort."
 }
+$selectedWebPort = Get-SetupWebPort
+Set-EnvValue "MMA_AI_WEB_PORT" "$selectedWebPort"
+if ($selectedWebPort -ne 8000) {
+    Write-Host "Host port 8000 is unavailable or ambiguous; the dashboard will use http://localhost:$selectedWebPort."
+}
 
 if (-not $SkipDownload) {
     foreach ($artifact in $Artifacts) {
@@ -588,9 +648,10 @@ Configure-LlmAnalytics
 if (-not $NoStart) {
     Write-Host "Starting MMA AI web dashboard"
     Invoke-DockerCompose @("up", "-d", "--build", "web")
-    Write-Host "MMA AI is ready: http://127.0.0.1:8000"
+    $webUrl = "http://localhost:$selectedWebPort"
+    Write-Host "MMA AI is ready: $webUrl"
     if (-not $NoOpen) {
-        Start-Process "http://127.0.0.1:8000"
+        Start-Process $webUrl
     }
 } else {
     Write-Host "Setup complete. Start the dashboard with: docker compose up -d --build web"

@@ -25,7 +25,8 @@ macOS/Linux:
 bash setup.sh
 ```
 
-Open the dashboard at http://127.0.0.1:8000.
+Open the dashboard at http://localhost:8000, or the alternate port printed by
+setup if port 8000 is already in use.
 
 The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 `.env.example` to `.env` yourself if you want to provide keys or non-default
@@ -42,6 +43,18 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -PostgresPort 55432
 
 ```bash
 bash setup.sh --postgres-port 55432
+```
+
+Setup also writes `MMA_AI_WEB_PORT` to `.env`. If another local web server is
+already using port 8000, setup chooses a free port from 18000 upward and prints
+the dashboard URL. To force a specific dashboard port:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup.ps1 -WebPort 18000
+```
+
+```bash
+bash setup.sh --web-port 18000
 ```
 
 If you already bootstrapped artifacts and only want to start the app:
