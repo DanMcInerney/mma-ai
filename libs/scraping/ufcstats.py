@@ -107,7 +107,7 @@ def _merge_csv(
             merged[field] = pd.NA
     merged = merged[fieldnames]
     merged = merged[merged[key_columns].notna().all(axis=1)]
-    merged = merged.drop_duplicates(subset=key_columns, keep="last")
+    merged = merged.drop_duplicates(subset=key_columns, keep="last" if replace else "first")
     merged.to_csv(existing_path, index=False)
     return len(merged)
 
