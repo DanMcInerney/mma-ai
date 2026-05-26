@@ -76,6 +76,14 @@ def _read_csv_frame(path: Path) -> pd.DataFrame | None:
         return None
 
 
+def _valid_key_mask(frame: pd.DataFrame, key_columns: list[str]) -> pd.Series:
+    mask = pd.Series(True, index=frame.index)
+    for column in key_columns:
+        mask &= frame[column].notna()
+        mask &= frame[column].astype("string").str.strip().fillna("").ne("")
+    return mask
+
+
 def _merge_csv(
     existing_path: Path,
     new_path: Path,
@@ -106,7 +114,7 @@ def _merge_csv(
         if field not in merged.columns:
             merged[field] = pd.NA
     merged = merged[fieldnames]
-    merged = merged[merged[key_columns].notna().all(axis=1)]
+    merged = merged[_valid_key_mask(merged, key_columns)]
     merged = merged.drop_duplicates(subset=key_columns, keep="last" if replace else "first")
     merged.to_csv(existing_path, index=False)
     return len(merged)
