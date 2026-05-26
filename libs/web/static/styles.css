@@ -112,6 +112,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 button svg {
   width: 17px;
   height: 17px;
@@ -699,6 +704,18 @@ summary {
 
 .field-note {
   margin: -4px 0 0;
+}
+
+.model-status {
+  min-height: 20px;
+}
+
+.model-status.ready {
+  color: #166534;
+}
+
+.model-status.blocked {
+  color: #991b1b;
 }
 
 .fighter-row span {

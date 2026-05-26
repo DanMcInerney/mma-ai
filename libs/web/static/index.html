@@ -168,6 +168,7 @@
               </select>
             </label>
             <label>Model <select id="predict-model"></select></label>
+            <p id="predict-model-status" class="field-note model-status span-two">Checking available models...</p>
           </div>
           <details>
             <summary>Advanced Prediction Knobs</summary>
@@ -206,7 +207,7 @@
               <summary>Manual Event Odds</summary>
               <textarea id="event-manual-odds" rows="5" placeholder="fighter name=-150"></textarea>
             </details>
-            <button id="run-event-predict" class="primary wide"><i data-lucide="badge-dollar-sign"></i><span>Predict Event</span></button>
+            <button id="run-event-predict" class="primary wide" disabled><i data-lucide="badge-dollar-sign"></i><span>Predict Event</span></button>
             <div id="events-output" class="result"></div>
             <details open>
               <summary>Debug Log</summary>
@@ -229,7 +230,7 @@
               <p class="field-note span-two">Odds are not included in the model. They are only used to calculate market-implied probability and expected value.</p>
             </div>
             <datalist id="fighters-list"></datalist>
-            <button id="run-matchup" class="primary wide"><i data-lucide="swords"></i><span>Predict Matchup</span></button>
+            <button id="run-matchup" class="primary wide" disabled><i data-lucide="swords"></i><span>Predict Matchup</span></button>
             <div id="prediction-output" class="prediction-card"></div>
             <details open>
               <summary>Debug Log</summary>

@@ -112,12 +112,24 @@ def test_prediction_advanced_csv_controls_are_wired():
 
 
 def test_predict_model_dropdown_filters_with_selected_target():
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
+    assert 'id="predict-model-status"' in html
+    assert 'id="run-event-predict" class="primary wide" disabled' in html
+    assert 'id="run-matchup" class="primary wide" disabled' in html
     assert 'api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`)' in app_js
     assert 'qs("#predict-model-type").addEventListener("change"' in app_js
     assert "function modelOptions(models)" in app_js
+    assert "function renderPredictModelState(modelType, models)" in app_js
+    assert "No models found" in app_js
+    assert "No model is available for this target" in app_js
+    assert 'setDisabled("#run-event-predict", !predictModelsAvailable)' in app_js
+    assert 'setDisabled("#run-matchup", !predictModelsAvailable)' in app_js
     assert 'api("/api/predict/models")' in app_js
+    assert ".model-status.blocked" in styles
+    assert "button:disabled" in styles
 
 
 def test_dynamic_select_options_escape_backend_values():

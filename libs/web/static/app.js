@@ -6,6 +6,7 @@ let activeTrainingJobId = null;
 let activeDataJobId = null;
 let selectedUpcomingNumber = 1;
 let upcomingEventsCache = [];
+let predictModelsAvailable = false;
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -86,6 +87,11 @@ function setValue(selector, value) {
 function setChecked(selector, value) {
   const element = qs(selector);
   if (element) element.checked = Boolean(value);
+}
+
+function setDisabled(selector, value) {
+  const element = qs(selector);
+  if (element) element.disabled = Boolean(value);
 }
 
 function listValue(value) {
@@ -603,13 +609,30 @@ async function refreshModels() {
     api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`),
     api("/api/predict/models"),
   ]);
-  qs("#predict-model").innerHTML = modelOptions(predictPayload.models || []);
+  const predictModels = predictPayload.models || [];
+  qs("#predict-model").innerHTML = modelOptions(predictModels);
   qs("#train-eval-model").innerHTML = modelOptions(allPayload.models || []);
+  renderPredictModelState(modelType, predictModels);
 }
 
 function modelOptions(models) {
-  return `<option value="">Latest ${models.length ? "" : "(none found)"}</option>` +
+  if (!models.length) return `<option value="">No models found</option>`;
+  return `<option value="">Latest model</option>` +
     models.map((model) => `<option value="${escapeHtml(model.path)}">${escapeHtml(model.name)}</option>`).join("");
+}
+
+function renderPredictModelState(modelType, models) {
+  predictModelsAvailable = models.length > 0;
+  setDisabled("#predict-model", !predictModelsAvailable);
+  setDisabled("#run-event-predict", !predictModelsAvailable);
+  setDisabled("#run-matchup", !predictModelsAvailable);
+  const status = qs("#predict-model-status");
+  if (!status) return;
+  status.classList.remove("ready", "blocked");
+  status.classList.add(predictModelsAvailable ? "ready" : "blocked");
+  status.textContent = predictModelsAvailable
+    ? `${models.length} ${modelType} model${models.length === 1 ? "" : "s"} available. Leave Model on Latest model to use the newest one.`
+    : `No ${modelType} models found. Run setup again or train a ${modelType} model before predicting.`;
 }
 
 function predictionDataCsv() {
@@ -669,6 +692,10 @@ function wirePrediction() {
   qs("#run-event-predict").addEventListener("click", async () => {
     try {
       const upcomingNumber = selectedUpcomingNumber || Number(qs("#predict-event").value || 0);
+      if (!predictModelsAvailable) {
+        renderJson("#events-output", "No model is available for this target. Run setup again or train a model before predicting.");
+        return;
+      }
       if (!upcomingNumber) {
         renderJson("#events-output", "Choose an upcoming event before prediction.");
         return;
@@ -698,6 +725,10 @@ function wirePrediction() {
     try {
       const fighter1 = qs("#fighter1").value.trim();
       const fighter2 = qs("#fighter2").value.trim();
+      if (!predictModelsAvailable) {
+        renderJson("#prediction-output", "No model is available for this target. Run setup again or train a model before predicting.");
+        return;
+      }
       if (!fighter1 || !fighter2) {
         renderJson("#prediction-output", "Enter both fighter names before prediction.");
         return;
