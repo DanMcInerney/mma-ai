@@ -9,6 +9,7 @@ import pytest
 
 from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupPredictionRequest, TrainingRequest
 from libs.web.services import (
+    _database_ready,
     get_data_status,
     get_readiness_status,
     list_fighters,
@@ -62,6 +63,8 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres@localhost:5432/mma-ai")
+    monkeypatch.setenv("ODDS_DATABASE_URL", "postgresql://postgres@localhost:5432/odds")
 
     write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
     write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
@@ -72,7 +75,13 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
-    monkeypatch.setattr("libs.web.services._database_ready", lambda url: {"ok": True, "url": url})
+    captured_database_checks = []
+
+    def fake_database_ready(url, required_tables=None):
+        captured_database_checks.append((url, required_tables))
+        return {"ok": True, "url": url, "required_tables": required_tables}
+
+    monkeypatch.setattr("libs.web.services._database_ready", fake_database_ready)
 
     readiness = get_readiness_status()
 
@@ -85,13 +94,17 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     assert readiness["checks"]["starter_model"]["models"] == ["ag-20260304_110750-win-extreme"]
     assert readiness["checks"]["database"]["ok"] is True
     assert readiness["checks"]["odds_database"]["ok"] is True
+    assert captured_database_checks == [
+        ("postgresql://postgres@localhost:5432/mma-ai", ["features.fight_mapping"]),
+        ("postgresql://postgres@localhost:5432/odds", ["bestfightodds.bfo"]),
+    ]
 
 
 def test_get_readiness_status_reports_missing_prerequisites(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
-    monkeypatch.setattr("libs.web.services._database_ready", lambda url: {"ok": False, "url": url, "error": "offline"})
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": False, "url": url, "error": "offline"})
 
     readiness = get_readiness_status()
 
@@ -121,7 +134,7 @@ def test_get_readiness_status_requires_configured_starter_model_name(monkeypatch
     other_model.mkdir(parents=True)
     (other_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     (other_model / "predictor.pkl").write_text("starter", encoding="utf-8")
-    monkeypatch.setattr("libs.web.services._database_ready", lambda url: {"ok": True, "url": url})
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": True, "url": url})
 
     readiness = get_readiness_status()
 
@@ -129,6 +142,79 @@ def test_get_readiness_status_requires_configured_starter_model_name(monkeypatch
     assert readiness["checks"]["starter_model"]["ok"] is False
     assert readiness["checks"]["starter_model"]["expected"] == "ag-20260304_110750-win-extreme"
     assert readiness["checks"]["starter_model"]["models"] == ["some-other-model"]
+
+
+def test_get_readiness_status_reports_missing_imported_database_tables(monkeypatch, tmp_path):
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    models_dir = tmp_path / "AutogluonModels"
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}])
+    write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}])
+    write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "target": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "decision_target": 0}])
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
+
+    def fake_database_ready(url, required_tables=None):
+        return {"ok": False, "url": url, "missing_tables": required_tables or []}
+
+    monkeypatch.setattr("libs.web.services._database_ready", fake_database_ready)
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is False
+    assert readiness["checks"]["database"]["missing_tables"] == ["features.fight_mapping"]
+    assert readiness["checks"]["odds_database"]["missing_tables"] == ["bestfightodds.bfo"]
+
+
+def test_database_ready_requires_postgres_tables(monkeypatch):
+    captured_queries = []
+
+    class FakeResult:
+        def __init__(self, value):
+            self.value = value
+
+        def scalar(self):
+            return self.value
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def execute(self, statement, params=None):
+            captured_queries.append((str(statement), params))
+            if params == {"table_name": "features.fight_mapping"}:
+                return FakeResult(False)
+            return FakeResult(True)
+
+    class FakeEngine:
+        def connect(self):
+            return FakeConnection()
+
+        def dispose(self):
+            pass
+
+    monkeypatch.setattr("sqlalchemy.create_engine", lambda *_args, **_kwargs: FakeEngine())
+
+    result = _database_ready(
+        "postgresql://postgres:secret@localhost:5432/mma-ai",
+        required_tables=["features.fight_mapping"],
+    )
+
+    assert result["ok"] is False
+    assert result["url"] == "postgresql://postgres:***@localhost:5432/mma-ai"
+    assert result["missing_tables"] == ["features.fight_mapping"]
+    assert any("to_regclass" in query for query, _params in captured_queries)
 
 
 @pytest.mark.parametrize("odds_enabled", [False, True])

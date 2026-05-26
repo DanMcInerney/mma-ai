@@ -47,6 +47,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Setup is safe to rerun after an interrupted install" in readme
     assert "/api/readiness" in readme
     assert "top bar shows a `Ready` badge" in readme
+    assert "imported database tables" in readme
     assert "--skip-download" in readme
     assert "--force-download" in readme
     assert "-ForceImport" in readme
@@ -88,6 +89,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "mma-evaluate" in release_notes
     assert "Odds are not model inputs" in release_notes
     assert "wait for `/api/readiness`" in release_notes
+    assert "databases to contain their imported tables" in release_notes
     assert "write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL`" in release_notes
     assert "Docker builds ignore `.env`" in release_notes
     assert "The dashboard top bar mirrors this state" in release_notes

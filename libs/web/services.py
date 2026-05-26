@@ -158,8 +158,8 @@ def get_readiness_status() -> dict[str, Any]:
         "models": [model["name"] for model in models[:5]],
         "path": starter_model["path"] if starter_model else None,
     }
-    checks["database"] = _database_ready(database_url())
-    checks["odds_database"] = _database_ready(odds_database_url())
+    checks["database"] = _database_ready(database_url(), required_tables=["features.fight_mapping"])
+    checks["odds_database"] = _database_ready(odds_database_url(), required_tables=["bestfightodds.bfo"])
 
     ready = all(check["ok"] for check in checks.values())
     return {
@@ -169,7 +169,7 @@ def get_readiness_status() -> dict[str, Any]:
     }
 
 
-def _database_ready(url: str) -> dict[str, Any]:
+def _database_ready(url: str, required_tables: list[str] | None = None) -> dict[str, Any]:
     try:
         from sqlalchemy import create_engine, text
 
@@ -180,6 +180,17 @@ def _database_ready(url: str) -> dict[str, Any]:
         try:
             with engine.connect() as connection:
                 connection.execute(text("select 1"))
+                missing_tables: list[str] = []
+                if required_tables and url.startswith("postgresql"):
+                    for table_name in required_tables:
+                        exists = connection.execute(
+                            text("select to_regclass(:table_name) is not null"),
+                            {"table_name": table_name},
+                        ).scalar()
+                        if not exists:
+                            missing_tables.append(table_name)
+                if missing_tables:
+                    return {"ok": False, "url": _redact_url(url), "missing_tables": missing_tables}
         finally:
             engine.dispose()
     except Exception as exc:

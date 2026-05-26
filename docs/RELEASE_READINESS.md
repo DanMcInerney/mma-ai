@@ -35,7 +35,8 @@ the API and the bundled PostgreSQL service come up together. Use
 After the web service starts, verify `http://localhost:8000/api/health` returns
 `{"status":"ok"}` for liveness and `http://localhost:8000/api/readiness`
 returns a ready payload before relying on predictions. Readiness requires both
-databases, all processed CSVs, and the Hugging Face starter model. Then open the
+databases to contain their imported tables, all processed CSVs, and the Hugging
+Face starter model. Then open the
 dashboard at `http://localhost:8000`, or the alternate port printed by setup.
 The dashboard top bar mirrors this state with a `Ready` or `Setup incomplete`
 badge.
