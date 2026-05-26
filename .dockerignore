@@ -1,11 +1,14 @@
 .git
 .env
 .env.local
+.webapp*.log
 .pytest_cache
 .venv
 .python-version
 __pycache__
 *.pyc
+*.log
+logs
 artifacts
 AutoGluonModels
 AutogluonModels

@@ -120,6 +120,9 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "artifacts" in dockerignore
     assert ".env" in dockerignore
     assert ".env.local" in dockerignore
+    assert ".webapp*.log" in dockerignore
+    assert "*.log" in dockerignore
+    assert "logs" in dockerignore
     assert "AutogluonModels" in dockerignore
     assert "AutoGluonModels" in dockerignore
     assert "AutogluonModels/" in gitignore
