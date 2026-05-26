@@ -1,3 +1,5 @@
+import csv
+import subprocess
 from pathlib import Path
 
 
@@ -6,6 +8,11 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def read_text(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
+
+
+def git_ls_files() -> list[str]:
+    result = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, capture_output=True, text=True)
+    return [line.strip().replace("\\", "/") for line in result.stdout.splitlines() if line.strip()]
 
 
 def test_public_release_docs_cover_runtime_and_dashboard_surface():
@@ -110,6 +117,45 @@ def test_env_example_lists_public_configuration_without_real_secrets():
     assert "ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds" in env_example
     assert "host.docker.internal" in env_example
     assert "secret" not in env_example.lower()
+
+
+def test_public_repo_tracks_seed_raw_csvs_and_no_heavy_generated_artifacts():
+    tracked = set(git_ls_files())
+    seed_paths = {
+        "data/raw/ufcstats/competitions.csv",
+        "data/raw/ufcstats/individuals.csv",
+    }
+
+    assert seed_paths.issubset(tracked)
+    for seed_path in seed_paths:
+        path = ROOT / seed_path
+        assert path.exists()
+        with path.open(newline="", encoding="utf-8", errors="replace") as handle:
+            reader = csv.reader(handle)
+            header = next(reader)
+            row_count = sum(1 for _row in reader)
+        assert row_count > 1000
+        assert len(header) > 5
+
+    forbidden_prefixes = ("AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
+    forbidden_suffixes = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
+    generated_data_files = {
+        "data/prediction_data.csv",
+        "data/training_data.csv",
+        "data/training_data_dec.csv",
+    }
+    forbidden = [
+        path
+        for path in tracked
+        if path not in seed_paths
+        and (
+            path in generated_data_files
+            or path.startswith(forbidden_prefixes)
+            or path.lower().endswith(forbidden_suffixes)
+        )
+    ]
+
+    assert forbidden == []
 
 
 def test_removed_training_chat_surface_stays_removed():
