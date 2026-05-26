@@ -28,9 +28,9 @@ free `MMA_AI_POSTGRES_PORT` value plus matching local `DATABASE_URL` and
 `--postgres-port 55432` to force a port. Local `uv run ...` commands load this
 `.env` file automatically without overriding values already exported in your
 shell.
-After setup, start the bundled local stack with
-`docker compose up --build db web` so both the dashboard and PostgreSQL are
-running.
+Setup starts the bundled local stack and waits for the dashboard readiness
+check. To restart the already bootstrapped stack later, run
+`docker compose up --build db web`.
 Rerunning setup reuses complete imported databases when `features.fight_mapping`
 and `bestfightodds.bfo` are present; pass `-ForceImport` or `--force-import` to
 restore the dumps again.

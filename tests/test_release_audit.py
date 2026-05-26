@@ -4,6 +4,7 @@ from scripts.release_audit import (
     audit_repository,
     find_dockerignore_issues,
     find_compose_postgres_image_issues,
+    find_compose_postgres_volume_issues,
     find_file_mode_issues,
     find_forbidden_artifacts,
     find_gitattributes_issues,
@@ -217,6 +218,34 @@ def test_release_audit_requires_compose_postgres_to_match_hf_dump(tmp_path):
     )
 
     assert find_compose_postgres_image_issues(tmp_path) == []
+
+
+def test_release_audit_requires_postgres_18_parent_volume_mount(tmp_path):
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        "services:\n"
+        "  db:\n"
+        "    volumes:\n"
+        "      - postgres-data:/var/lib/postgresql/data\n",
+        encoding="utf-8",
+    )
+
+    issues = find_compose_postgres_volume_issues(tmp_path)
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("compose_postgres_volume_mismatch", "docker-compose.yml")
+    ]
+    assert "/var/lib/postgresql/data" in issues[0].detail
+
+    compose.write_text(
+        "services:\n"
+        "  db:\n"
+        "    volumes:\n"
+        "      - postgres-data:/var/lib/postgresql\n",
+        encoding="utf-8",
+    )
+
+    assert find_compose_postgres_volume_issues(tmp_path) == []
 
 
 def test_release_audit_requires_setup_artifact_pins_to_match_across_platforms(tmp_path):

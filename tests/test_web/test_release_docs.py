@@ -145,6 +145,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "postgres:18.1" in compose
     assert '"127.0.0.1:${MMA_AI_WEB_PORT:-8000}:8000"' in compose
     assert "MMA_AI_DATA_DIR: /app/data" in compose
+    assert "postgres-data:/var/lib/postgresql" in compose
+    assert "postgres-data:/var/lib/postgresql/data" not in compose
     assert "./docker/postgres-init:/docker-entrypoint-initdb.d:ro" in compose
     assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
     assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
@@ -179,6 +181,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
 
     assert "matching local `DATABASE_URL` and" in huggingface_docs
     assert "./setup.sh" in huggingface_docs
+    assert "Setup starts the bundled local stack and waits for the dashboard readiness" in huggingface_docs
+    assert "To restart the already bootstrapped stack later" in huggingface_docs
     assert "Local `uv run ...` commands load this" in huggingface_docs
     assert "--force-import" in huggingface_docs
     assert "processed/training_data_dec.csv" in huggingface_docs

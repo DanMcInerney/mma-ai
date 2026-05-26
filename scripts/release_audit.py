@@ -83,6 +83,7 @@ REQUIRED_GITATTRIBUTES_LINES = {
     "Dockerfile text eol=lf",
 }
 REQUIRED_COMPOSE_POSTGRES_IMAGE = "postgres:18.1"
+REQUIRED_COMPOSE_POSTGRES_VOLUME = "postgres-data:/var/lib/postgresql"
 
 SENSITIVE_PATTERNS = {
     "local_windows_path": re.compile(r"\b[A-Z]:[\\/](?:Users|Documents and Settings)[\\/][^\s\"'`<>]+", re.IGNORECASE),
@@ -263,6 +264,31 @@ def find_compose_postgres_image_issues(root: Path = ROOT) -> list[AuditIssue]:
             detail=(
                 f"Expected {REQUIRED_COMPOSE_POSTGRES_IMAGE} to match the Hugging Face dump "
                 f"Postgres version; found {configured}."
+            ),
+        )
+    ]
+
+
+def find_compose_postgres_volume_issues(root: Path = ROOT) -> list[AuditIssue]:
+    """Postgres 18 images require mounting the parent data directory."""
+    path = root / "docker-compose.yml"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return [AuditIssue("unreadable_compose", "docker-compose.yml", str(exc))]
+
+    if re.search(rf"(?m)^\s*-\s*{re.escape(REQUIRED_COMPOSE_POSTGRES_VOLUME)}\s*(?:#.*)?$", text):
+        return []
+
+    found = re.findall(r"(?m)^\s*-\s*(postgres-data:/[^\s#]+)", text)
+    configured = ", ".join(found) if found else "no postgres-data volume mount"
+    return [
+        AuditIssue(
+            kind="compose_postgres_volume_mismatch",
+            path="docker-compose.yml",
+            detail=(
+                f"Expected {REQUIRED_COMPOSE_POSTGRES_VOLUME}; found {configured}. "
+                "Postgres 18 rejects the legacy /var/lib/postgresql/data mount."
             ),
         )
     ]
@@ -500,6 +526,7 @@ def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
         *find_gitattributes_issues(root),
         *find_package_data_issues(root),
         *find_compose_postgres_image_issues(root),
+        *find_compose_postgres_volume_issues(root),
         *find_setup_artifact_pin_issues(root),
         *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),
