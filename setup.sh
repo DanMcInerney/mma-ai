@@ -369,20 +369,35 @@ wait_for_postgres() {
   return 1
 }
 
+readiness_response() {
+  local web_url="$1"
+  local response status body
+  if ! response="$(curl -sS -w $'\n%{http_code}' "$web_url/api/readiness" 2>&1)"; then
+    printf '%s' "$response"
+    return 1
+  fi
+  status="${response##*$'\n'}"
+  body="${response%$'\n'$status}"
+  printf '%s' "$body"
+  [[ "$status" =~ ^2 ]]
+}
+
 web_ready() {
   local web_url="$1"
-  curl -fsS "$web_url/api/readiness" >/dev/null 2>&1
+  readiness_response "$web_url" >/dev/null
 }
 
 wait_for_web() {
   local web_url="$1"
+  local last_detail="No readiness detail returned."
   for _ in $(seq 1 90); do
-    if web_ready "$web_url"; then
+    if last_detail="$(readiness_response "$web_url")"; then
       return 0
     fi
+    [[ -n "$last_detail" ]] || last_detail="No readiness detail returned."
     sleep 2
   done
-  echo "Web dashboard did not become ready at $web_url in time." >&2
+  echo "Web dashboard did not become ready at $web_url in time. Last readiness response: $last_detail" >&2
   return 1
 }
 

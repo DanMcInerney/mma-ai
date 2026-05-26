@@ -544,31 +544,59 @@ function Wait-ForPostgres {
     throw "Postgres did not become ready in time."
 }
 
-function Test-WebReady {
+function Format-WebReadinessDetail {
+    param([string]$Detail)
+
+    if ([string]::IsNullOrWhiteSpace($Detail)) {
+        return "No readiness detail returned."
+    }
+    return (($Detail -replace "\s+", " ").Trim())
+}
+
+function Get-WebReadinessStatus {
     param([string]$WebUrl)
 
     $previousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = "Stop"
         $response = Invoke-WebRequest -Uri "$WebUrl/api/readiness" -UseBasicParsing -TimeoutSec 5
-        return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
+        return [pscustomobject]@{
+            Ready = ($response.StatusCode -ge 200 -and $response.StatusCode -lt 300)
+            Detail = (Format-WebReadinessDetail $response.Content)
+        }
     } catch {
-        return $false
+        $detail = $_.Exception.Message
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+            $detail = $_.ErrorDetails.Message
+        }
+        return [pscustomobject]@{
+            Ready = $false
+            Detail = (Format-WebReadinessDetail $detail)
+        }
     } finally {
         $ErrorActionPreference = $previousErrorActionPreference
     }
 }
 
+function Test-WebReady {
+    param([string]$WebUrl)
+
+    return (Get-WebReadinessStatus $WebUrl).Ready
+}
+
 function Wait-ForWeb {
     param([string]$WebUrl)
 
+    $lastDetail = "No readiness detail returned."
     for ($i = 0; $i -lt 90; $i++) {
-        if (Test-WebReady $WebUrl) {
+        $status = Get-WebReadinessStatus $WebUrl
+        if ($status.Ready) {
             return
         }
+        $lastDetail = $status.Detail
         Start-Sleep -Seconds 2
     }
-    throw "Web dashboard did not become ready at $WebUrl in time."
+    throw "Web dashboard did not become ready at $WebUrl in time. Last readiness response: $lastDetail"
 }
 
 function Test-StarterModelComplete {

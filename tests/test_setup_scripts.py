@@ -114,14 +114,20 @@ def test_setup_scripts_wait_for_web_health_before_opening():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")
 
+    assert "function Format-WebReadinessDetail" in powershell
+    assert "function Get-WebReadinessStatus" in powershell
     assert "function Test-WebReady" in powershell
     assert "function Wait-ForWeb" in powershell
     assert 'Invoke-WebRequest -Uri "$WebUrl/api/readiness"' in powershell
+    assert "Get-WebReadinessStatus $WebUrl" in powershell
+    assert "Last readiness response:" in powershell
     assert "Wait-ForWeb $webUrl" in powershell
     assert powershell.index("Wait-ForWeb $webUrl") < powershell.index("Start-Process $webUrl")
 
+    assert "readiness_response()" in bash
     assert "web_ready()" in bash
     assert "wait_for_web()" in bash
-    assert 'curl -fsS "$web_url/api/readiness"' in bash
+    assert 'curl -sS -w' in bash
+    assert "Last readiness response:" in bash
     assert 'wait_for_web "$WEB_URL"' in bash
     assert bash.index('wait_for_web "$WEB_URL"') < bash.index('xdg-open "$WEB_URL"')
