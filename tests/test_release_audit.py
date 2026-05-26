@@ -2,6 +2,7 @@ from pathlib import Path
 
 from scripts.release_audit import (
     audit_repository,
+    find_file_mode_issues,
     find_forbidden_artifacts,
     find_hardcoded_local_database_urls,
     find_legacy_runtime_identifiers,
@@ -41,6 +42,8 @@ def test_runtime_dependencies_do_not_include_test_tooling():
 def test_release_audit_allows_only_seed_raw_csvs_from_data():
     issues = find_forbidden_artifacts(
         [
+            ".env",
+            ".webapp.out.log",
             "data/raw/ufcstats/competitions.csv",
             "data/raw/ufcstats/individuals.csv",
             "data/prediction_data.csv",
@@ -52,12 +55,23 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
     )
 
     assert [issue.path for issue in issues] == [
+        ".env",
+        ".webapp.out.log",
         "data/prediction_data.csv",
         "AutoGluonModels/ag-test/predictor.pkl",
         "AutogluonModels/ag-test/predictor.pkl",
         ".cursor/rules/project-description.mdc",
         "pics/picks/example.png",
     ]
+
+
+def test_release_audit_requires_setup_sh_to_stay_executable():
+    issues = find_file_mode_issues({"setup.sh": "100644"})
+
+    assert [(issue.kind, issue.path) for issue in issues] == [
+        ("non_executable_setup_script", "setup.sh")
+    ]
+    assert find_file_mode_issues({"setup.sh": "100755"}) == []
 
 
 def test_release_audit_requires_public_entrypoints_and_seed_data():

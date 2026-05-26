@@ -10,7 +10,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Mapping
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,7 +49,8 @@ REQUIRED_TRACKED_FILES = {
     *SEED_DATA_PATHS,
 }
 FORBIDDEN_PREFIXES = (".cursor/", "AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
-FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb")
+FORBIDDEN_EXACT_FILES = {".env", ".env.local"}
+FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb", ".log")
 ASCII_RUNTIME_LOG_FILES = {"predict.py"}
 MIN_SEED_ROWS = 1000
 MIN_SEED_COLUMNS = 6
@@ -93,6 +94,17 @@ def git_ls_files(root: Path = ROOT) -> list[str]:
     return [item.decode("utf-8").replace("\\", "/") for item in result.stdout.split(b"\0") if item]
 
 
+def git_ls_file_modes(root: Path = ROOT) -> dict[str, str]:
+    result = subprocess.run(["git", "ls-files", "--stage", "-z"], cwd=root, check=True, capture_output=True)
+    modes: dict[str, str] = {}
+    for raw_item in result.stdout.split(b"\0"):
+        if not raw_item:
+            continue
+        metadata, path = raw_item.decode("utf-8").split("\t", 1)
+        modes[path.replace("\\", "/")] = metadata.split()[0]
+    return modes
+
+
 def find_forbidden_artifacts(paths: Iterable[str]) -> list[AuditIssue]:
     issues: list[AuditIssue] = []
     for path in paths:
@@ -100,7 +112,8 @@ def find_forbidden_artifacts(paths: Iterable[str]) -> list[AuditIssue]:
         if normalized in SEED_DATA_PATHS:
             continue
         if (
-            normalized in GENERATED_DATA_FILES
+            normalized in FORBIDDEN_EXACT_FILES
+            or normalized in GENERATED_DATA_FILES
             or normalized.startswith(FORBIDDEN_PREFIXES)
             or normalized.lower().endswith(FORBIDDEN_SUFFIXES)
         ):
@@ -112,6 +125,19 @@ def find_forbidden_artifacts(paths: Iterable[str]) -> list[AuditIssue]:
                 )
             )
     return issues
+
+
+def find_file_mode_issues(file_modes: Mapping[str, str]) -> list[AuditIssue]:
+    setup_mode = file_modes.get("setup.sh")
+    if setup_mode and setup_mode != "100755":
+        return [
+            AuditIssue(
+                kind="non_executable_setup_script",
+                path="setup.sh",
+                detail="setup.sh must be tracked executable so the public quick start can run ./setup.sh.",
+            )
+        ]
+    return []
 
 
 def find_misplaced_test_scripts(paths: Iterable[str]) -> list[AuditIssue]:
@@ -279,10 +305,12 @@ def _excerpt(text: str, start: int, end: int, radius: int = 32) -> str:
 
 def audit_repository(root: Path = ROOT) -> list[AuditIssue]:
     tracked = git_ls_files(root)
+    file_modes = git_ls_file_modes(root)
     return [
         *find_missing_required_files(tracked, root),
         *find_seed_data_issues(tracked, root),
         *find_forbidden_artifacts(tracked),
+        *find_file_mode_issues(file_modes),
         *find_misplaced_test_scripts(tracked),
         *find_sensitive_text(tracked, root),
         *find_legacy_runtime_identifiers(tracked, root),
