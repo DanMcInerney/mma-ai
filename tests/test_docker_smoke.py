@@ -195,6 +195,23 @@ def test_docker_smoke_cli_returns_nonzero_on_failure(monkeypatch, capsys):
     assert "docker unavailable" in capsys.readouterr().err
 
 
+def test_docker_smoke_decodes_container_output_portably(monkeypatch):
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured.update(kwargs)
+        return completed(args, stdout="ok")
+
+    monkeypatch.setattr(docker_smoke.subprocess, "run", fake_run)
+
+    result = docker_smoke._run(["docker", "exec", "smoke-test", "curl", "http://127.0.0.1:8000/vendor/plotly.min.js"])
+
+    assert result.stdout == "ok"
+    assert captured["text"] is True
+    assert captured["encoding"] == "utf-8"
+    assert captured["errors"] == "replace"
+
+
 def test_docker_smoke_is_exposed_as_project_script():
     pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
 

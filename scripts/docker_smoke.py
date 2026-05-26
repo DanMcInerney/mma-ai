@@ -28,7 +28,15 @@ class SmokeError(RuntimeError):
 
 def _run(args: list[str], *, timeout: int | None = None) -> CommandResult:
     try:
-        completed = subprocess.run(args, capture_output=True, check=False, text=True, timeout=timeout)
+        completed = subprocess.run(
+            args,
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
     except FileNotFoundError as exc:
         raise SmokeError(f"Command not found: {args[0]}") from exc
     except subprocess.TimeoutExpired as exc:
@@ -51,7 +59,15 @@ def _format_failure(result: CommandResult) -> str:
 
 def _run_allow_failure(args: list[str], *, timeout: int | None = None) -> CommandResult:
     try:
-        completed = subprocess.run(args, capture_output=True, check=False, text=True, timeout=timeout)
+        completed = subprocess.run(
+            args,
+            capture_output=True,
+            check=False,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
         return CommandResult(args=args, returncode=127, stdout="", stderr=str(exc))
     return CommandResult(args=args, returncode=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
