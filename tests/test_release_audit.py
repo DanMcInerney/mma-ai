@@ -28,7 +28,7 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
 def test_release_audit_detects_realistic_secret_and_local_path(tmp_path):
     tracked_file = tmp_path / "README.md"
     tracked_file.write_text(
-        "local path C:/Users/alice/project and token sk-" + "a" * 30,
+        "local path " + "C:" + "/Users/alice/project and token sk-" + "a" * 30,
         encoding="utf-8",
     )
 
