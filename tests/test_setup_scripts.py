@@ -238,6 +238,26 @@ def test_setup_scripts_validate_huggingface_manifest_before_large_downloads():
     assert "validate_manifest_artifact_pins\nassert_artifact_cache" in bash
 
 
+def test_bash_setup_declares_local_tool_prerequisites():
+    bash = read_text("setup.sh")
+    bash_manifest_helper = read_text("scripts/verify_hf_manifest.sh")
+
+    for command in ("docker", "curl", "tar", "awk", "grep", "mktemp"):
+        assert f"require_command {command}" in bash
+
+    assert "require_any_command()" in bash
+    assert 'require_any_command "sha256sum or shasum" sha256sum shasum' in bash
+    assert "Required command 'sha256sum or shasum' was not found" in bash
+    assert (
+        "else\n"
+        "    echo \"Required command 'sha256sum or shasum' was not found. Install one and rerun setup.\" >&2\n"
+        "    exit 1\n"
+        "  fi"
+    ) in bash
+    assert "command -v awk" in bash_manifest_helper
+    assert "Required command 'awk' was not found" in bash_manifest_helper
+
+
 def test_bash_huggingface_manifest_validation_pairs_paths_and_hashes():
     bash = shutil.which("bash")
     if not bash:

@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if ! command -v awk >/dev/null 2>&1; then
+  echo "Required command 'awk' was not found. Install it and rerun setup." >&2
+  exit 1
+fi
+
 if [[ $# -lt 2 ]]; then
   echo "Usage: verify_hf_manifest.sh <manifest.json> <relative-path=SHA256>..." >&2
   exit 2

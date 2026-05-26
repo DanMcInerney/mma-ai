@@ -154,13 +154,27 @@ require_command() {
   fi
 }
 
+require_any_command() {
+  local label="$1"
+  shift
+  local command_name
+  for command_name in "$@"; do
+    if command -v "$command_name" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  echo "Required command '$label' was not found. Install one and rerun setup." >&2
+  exit 1
+}
+
 hash_file() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{ print toupper($1) }'
   elif command -v shasum >/dev/null 2>&1; then
     shasum -a 256 "$1" | awk '{ print toupper($1) }'
   else
-    echo ""
+    echo "Required command 'sha256sum or shasum' was not found. Install one and rerun setup." >&2
+    exit 1
   fi
 }
 
@@ -728,6 +742,10 @@ ensure_starter_model() {
 require_command docker
 require_command curl
 require_command tar
+require_command awk
+require_command grep
+require_command mktemp
+require_any_command "sha256sum or shasum" sha256sum shasum
 docker compose version >/dev/null
 
 ensure_env_file
