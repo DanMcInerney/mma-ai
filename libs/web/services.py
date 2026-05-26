@@ -216,18 +216,9 @@ def run_data_refresh(request: DataRefreshRequest) -> dict[str, Any]:
         print(f"[data-refresh] scraper subprocess finished: {counts}")
 
     if request.rebuild:
-        from main import main as rebuild_main
-
-        print("[data-refresh] starting feature-store rebuild")
-        rebuild_main(
-            odds=request.odds,
-            db_url=database_url(),
-            raw_data_dir=raw_dir,
-            output_data_dir=app_data_dir,
-            scrape=False,
-            reset_db=request.reset_db,
-        )
-        print("[data-refresh] feature-store rebuild finished")
+        print("[data-refresh] starting feature-store rebuild subprocess")
+        _run_rebuild_command(request, raw_dir, app_data_dir)
+        print("[data-refresh] feature-store rebuild subprocess finished")
 
     return {"scrape_counts": counts, "status": get_data_status()}
 
@@ -265,6 +256,42 @@ def _run_scrape_command(request: DataRefreshRequest, raw_dir: Path) -> dict[str,
     if completed.returncode != 0:
         raise RuntimeError(completed.stderr or completed.stdout or f"UFCStats scrape failed with exit code {completed.returncode}")
     return _parse_scrape_counts(completed.stdout)
+
+
+def _run_rebuild_command(request: DataRefreshRequest, raw_dir: Path, app_data_dir: Path) -> None:
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "main.py"),
+        "--raw-data-dir",
+        str(raw_dir),
+        "--output-data-dir",
+        str(app_data_dir),
+    ]
+    if request.reset_db:
+        command.append("--reset-db")
+    if request.odds:
+        command.append("--odds")
+
+    print(f"[data-refresh] command: {subprocess.list2cmdline(command)}")
+    completed = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        env=os.environ.copy(),
+    )
+    print(f"[data-refresh] rebuild exit_code={completed.returncode}")
+    if completed.stdout:
+        print("[data-refresh] rebuild stdout begin")
+        print(completed.stdout.rstrip())
+        print("[data-refresh] rebuild stdout end")
+    if completed.stderr:
+        print("[data-refresh] rebuild stderr begin")
+        print(completed.stderr.rstrip())
+        print("[data-refresh] rebuild stderr end")
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr or completed.stdout or f"Feature-store rebuild failed with exit code {completed.returncode}")
 
 
 def _parse_scrape_counts(stdout: str) -> dict[str, int]:

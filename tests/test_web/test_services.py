@@ -244,7 +244,7 @@ def test_database_ready_requires_postgres_tables(monkeypatch):
 
 
 @pytest.mark.parametrize("odds_enabled", [False, True])
-def test_run_data_refresh_passes_odds_flag_to_rebuild(monkeypatch, tmp_path, odds_enabled):
+def test_run_data_refresh_runs_rebuild_as_subprocess(monkeypatch, tmp_path, odds_enabled):
     raw_dir = tmp_path / "raw"
     data_dir = tmp_path / "data"
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
@@ -252,12 +252,12 @@ def test_run_data_refresh_passes_odds_flag_to_rebuild(monkeypatch, tmp_path, odd
     monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/mma-ai")
     captured = {}
 
-    def fake_rebuild_main(**kwargs):
+    def fake_run(command, **kwargs):
+        captured["command"] = command
         captured["kwargs"] = kwargs
+        return subprocess.CompletedProcess(command, 0, stdout="Finished rebuild\n", stderr="")
 
-    fake_main_module = ModuleType("main")
-    fake_main_module.main = fake_rebuild_main
-    monkeypatch.setitem(sys.modules, "main", fake_main_module)
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
 
     result = run_data_refresh(
         DataRefreshRequest(
@@ -269,11 +269,15 @@ def test_run_data_refresh_passes_odds_flag_to_rebuild(monkeypatch, tmp_path, odd
     )
 
     assert result["scrape_counts"] == {}
-    assert captured["kwargs"]["odds"] is odds_enabled
-    assert captured["kwargs"]["raw_data_dir"] == raw_dir
-    assert captured["kwargs"]["output_data_dir"] == data_dir
-    assert captured["kwargs"]["scrape"] is False
-    assert captured["kwargs"]["reset_db"] is True
+    command = captured["command"]
+    assert command[0] == sys.executable
+    assert command[1].endswith("main.py")
+    assert command[command.index("--raw-data-dir") + 1] == str(raw_dir)
+    assert command[command.index("--output-data-dir") + 1] == str(data_dir)
+    assert "--reset-db" in command
+    assert ("--odds" in command) is odds_enabled
+    assert "--db-url" not in command
+    assert captured["kwargs"]["cwd"] == Path(__file__).resolve().parents[2]
 
 
 def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, capsys):
@@ -281,11 +285,13 @@ def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, caps
     data_dir = tmp_path / "data"
     monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
-    captured = {}
+    captured = {"commands": []}
 
     def fake_run(command, **kwargs):
-        captured["command"] = command
-        captured["kwargs"] = kwargs
+        captured["commands"].append((command, kwargs))
+        script = Path(command[1]).name
+        if script == "main.py":
+            return subprocess.CompletedProcess(command, 0, stdout="Finished rebuild\n", stderr="")
         return subprocess.CompletedProcess(
             command,
             0,
@@ -293,12 +299,6 @@ def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, caps
             stderr="crawler debug stderr\n",
         )
 
-    def fake_rebuild_main(**kwargs):
-        captured["rebuild_kwargs"] = kwargs
-
-    fake_main_module = ModuleType("main")
-    fake_main_module.main = fake_rebuild_main
-    monkeypatch.setitem(sys.modules, "main", fake_main_module)
     monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
 
     result = run_data_refresh(
@@ -311,16 +311,23 @@ def test_run_data_refresh_runs_scraper_as_subprocess(monkeypatch, tmp_path, caps
         )
     )
 
-    command = captured["command"]
-    assert command[0] == sys.executable
-    assert command[1].endswith("scripts\\scrape_ufcstats.py") or command[1].endswith("scripts/scrape_ufcstats.py")
-    assert command[command.index("--output-dir") + 1] == str(raw_dir)
-    assert command[command.index("--log-level") + 1] == "DEBUG"
-    assert "--force-full" in command
-    assert captured["kwargs"]["cwd"] == Path(__file__).resolve().parents[2]
+    scrape_command, scrape_kwargs = captured["commands"][0]
+    rebuild_command, rebuild_kwargs = captured["commands"][1]
+    assert scrape_command[0] == sys.executable
+    assert scrape_command[1].endswith("scripts\\scrape_ufcstats.py") or scrape_command[1].endswith("scripts/scrape_ufcstats.py")
+    assert scrape_command[scrape_command.index("--output-dir") + 1] == str(raw_dir)
+    assert scrape_command[scrape_command.index("--log-level") + 1] == "DEBUG"
+    assert "--force-full" in scrape_command
+    assert scrape_kwargs["cwd"] == Path(__file__).resolve().parents[2]
+    assert rebuild_command[1].endswith("main.py")
+    assert rebuild_command[rebuild_command.index("--raw-data-dir") + 1] == str(raw_dir)
+    assert rebuild_command[rebuild_command.index("--output-data-dir") + 1] == str(data_dir)
+    assert "--reset-db" in rebuild_command
+    assert rebuild_kwargs["cwd"] == Path(__file__).resolve().parents[2]
     assert result["scrape_counts"] == {"fighters": 42, "fights": 99}
-    assert captured["rebuild_kwargs"]["raw_data_dir"] == raw_dir
-    assert "scraper stdout begin" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "scraper stdout begin" in output
+    assert "rebuild stdout begin" in output
 
 
 def test_run_data_refresh_surfaces_scraper_failure(monkeypatch, tmp_path):
@@ -333,6 +340,19 @@ def test_run_data_refresh_surfaces_scraper_failure(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="reactor error"):
         run_data_refresh(DataRefreshRequest(scrape=True, rebuild=False))
+
+
+def test_run_data_refresh_surfaces_rebuild_failure(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(tmp_path / "raw"))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path / "data"))
+
+    def fake_run(command, **_kwargs):
+        return subprocess.CompletedProcess(command, 2, stdout="partial rebuild stdout", stderr="schema error")
+
+    monkeypatch.setattr("libs.web.services.subprocess.run", fake_run)
+
+    with pytest.raises(RuntimeError, match="schema error"):
+        run_data_refresh(DataRefreshRequest(scrape=False, rebuild=True))
 
 
 def test_list_fighters_supports_prediction_data_shapes(monkeypatch, tmp_path):
