@@ -32,6 +32,8 @@ Docker, downloads, or database imports.
 Open the dashboard at http://localhost:8000, or the alternate port printed by
 setup if port 8000 is already in use. The top bar shows a `Ready` badge when
 the imported database tables, processed CSVs, and starter model are available.
+Readiness also validates the required CSV headers, so a partial or malformed
+artifact reports the missing columns before prediction or training begins.
 
 The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 `.env.example` to `.env` yourself if you want to provide keys or non-default

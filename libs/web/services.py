@@ -33,6 +33,13 @@ from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, reso
 STARTER_MODEL_NAME = "ag-20260304_110750-win-extreme"
 TRAINING_RESULT_BEGIN = "<<<MMA_AI_TRAINING_RESULT_BEGIN>>>"
 TRAINING_RESULT_END = "<<<MMA_AI_TRAINING_RESULT_END>>>"
+READINESS_CSV_REQUIRED_COLUMNS = {
+    ("raw_csvs", "competitions"): {"event_url"},
+    ("raw_csvs", "individuals"): {"url"},
+    ("model_csvs", "prediction_data"): {"fighter_name"},
+    ("model_csvs", "training_data"): {"target"},
+    ("model_csvs", "training_data_dec"): {"decision_target"},
+}
 
 
 @dataclass(frozen=True)
@@ -52,6 +59,38 @@ def _count_csv_rows(path: Path) -> int | None:
         except StopIteration:
             return 0
         return sum(1 for _row in reader)
+
+
+def _read_csv_header(path: Path) -> tuple[set[str] | None, str | None]:
+    if not path.exists():
+        return None, None
+    try:
+        with path.open("r", newline="", encoding="utf-8", errors="replace") as handle:
+            reader = csv.reader(handle)
+            try:
+                header = next(reader)
+            except StopIteration:
+                return set(), None
+    except (OSError, csv.Error) as exc:
+        return set(), type(exc).__name__
+    return {column.strip() for column in header if column.strip()}, None
+
+
+def _csv_readiness_check(entry: dict[str, Any], required_columns: set[str]) -> dict[str, Any]:
+    rows = entry["rows"]
+    path = Path(entry["path"])
+    header_columns, error = _read_csv_header(path)
+    missing_columns = sorted(required_columns - (header_columns or set()))
+    check = {
+        "ok": rows is not None and rows > 0 and not missing_columns and not error,
+        "rows": rows,
+        "path": entry["path"],
+        "required_columns": sorted(required_columns),
+        "missing_columns": missing_columns,
+    }
+    if error:
+        check["error"] = error
+    return check
 
 
 def _redact_url(url: str) -> str:
@@ -149,12 +188,10 @@ def get_readiness_status() -> dict[str, Any]:
         ("model_csvs", "training_data_dec"),
     ):
         entry = status[group][key]
-        rows = entry["rows"]
-        checks[f"{key}_csv"] = {
-            "ok": rows is not None and rows > 0,
-            "rows": rows,
-            "path": entry["path"],
-        }
+        checks[f"{key}_csv"] = _csv_readiness_check(
+            entry,
+            READINESS_CSV_REQUIRED_COLUMNS[(group, key)],
+        )
 
     models = list_models()
     starter_model = next((model for model in models if model["name"] == STARTER_MODEL_NAME), None)

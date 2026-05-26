@@ -160,6 +160,8 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     assert readiness["ready"] is True
     assert readiness["status"] == "ok"
     assert readiness["checks"]["competitions_csv"]["rows"] == 1
+    assert readiness["checks"]["competitions_csv"]["missing_columns"] == []
+    assert readiness["checks"]["competitions_csv"]["required_columns"] == ["event_url"]
     assert readiness["checks"]["prediction_data_csv"]["ok"] is True
     assert readiness["checks"]["training_data_dec_csv"]["ok"] is True
     assert readiness["checks"]["starter_model"]["expected"] == "ag-20260304_110750-win-extreme"
@@ -187,6 +189,35 @@ def test_get_readiness_status_reports_missing_prerequisites(monkeypatch, tmp_pat
     assert readiness["checks"]["training_data_dec_csv"]["ok"] is False
     assert readiness["checks"]["starter_model"]["ok"] is False
     assert readiness["checks"]["database"]["error"] == "offline"
+
+
+def test_get_readiness_status_reports_malformed_csv_headers(monkeypatch, tmp_path):
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    models_dir = tmp_path / "AutogluonModels"
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    write_csv(raw_dir / "competitions.csv", [{"event": "event-1"}])
+    write_csv(raw_dir / "individuals.csv", [{"name": "fighter one"}])
+    write_csv(data_dir / "prediction_data.csv", [{"fighter": "fighter one"}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one"}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one"}])
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": True, "url": url})
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is False
+    assert readiness["checks"]["competitions_csv"]["missing_columns"] == ["event_url"]
+    assert readiness["checks"]["individuals_csv"]["missing_columns"] == ["url"]
+    assert readiness["checks"]["prediction_data_csv"]["missing_columns"] == ["fighter_name"]
+    assert readiness["checks"]["training_data_csv"]["missing_columns"] == ["target"]
+    assert readiness["checks"]["training_data_dec_csv"]["missing_columns"] == ["decision_target"]
 
 
 def test_get_readiness_status_requires_configured_starter_model_name(monkeypatch, tmp_path):
