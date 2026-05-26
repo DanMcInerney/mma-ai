@@ -12,7 +12,9 @@ param(
     [string]$LlmModel,
     [string]$LlmApiKey,
     [string]$LlmBaseUrl,
+    [ValidateRange(0, 65535)]
     [int]$PostgresPort = 0,
+    [ValidateRange(0, 65535)]
     [int]$WebPort = 0
 )
 

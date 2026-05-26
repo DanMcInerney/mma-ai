@@ -92,6 +92,39 @@ def test_setup_scripts_help_exits_before_install_work():
         pytest.skip("Neither PowerShell nor bash is available")
 
 
+def test_setup_scripts_reject_invalid_arguments_before_install_work():
+    shell = shutil.which("powershell") or shutil.which("pwsh")
+    if shell:
+        args = [shell, "-NoProfile"]
+        if Path(shell).name.lower().startswith("powershell"):
+            args.extend(["-ExecutionPolicy", "Bypass"])
+        args.extend(["-File", ".\\setup.ps1", "-PostgresPort", "70000", "-Help"])
+        result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True, check=False)
+
+        assert result.returncode != 0
+        assert "docker compose" not in result.stderr.lower()
+
+    bash = shutil.which("bash")
+    if bash:
+        cases = [
+            (["setup.sh", "--llm-provider", "--no-start"], "requires a value"),
+            (["setup.sh", "--web-port", "not-a-port"], "TCP port number"),
+            (["setup.sh", "--postgres-port", "70000"], "TCP port number"),
+        ]
+        for args, expected in cases:
+            result = subprocess.run([bash, *args], cwd=ROOT, text=True, capture_output=True, check=False)
+            combined = result.stdout + result.stderr
+            if result.returncode != 0 and "Windows Subsystem for Linux has no installed distributions" in combined:
+                pytest.skip("bash is present but WSL is not configured")
+
+            assert result.returncode == 2, combined
+            assert expected in combined
+            assert "docker compose" not in combined.lower()
+
+    if not shell and not bash:
+        pytest.skip("Neither PowerShell nor bash is available")
+
+
 def test_setup_scripts_download_restore_configure_and_start_dashboard():
     powershell = read_text("setup.ps1")
     bash = read_text("setup.sh")

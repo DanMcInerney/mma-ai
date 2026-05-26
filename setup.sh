@@ -24,6 +24,24 @@ LLM_BASE_URL_VALUE=""
 POSTGRES_PORT=0
 WEB_PORT=0
 
+require_option_value() {
+  local option="$1"
+  local value="${2:-}"
+  if [[ -z "$value" || "$value" == -* ]]; then
+    echo "Option $option requires a value." >&2
+    exit 2
+  fi
+}
+
+validate_port_value() {
+  local option="$1"
+  local value="$2"
+  if [[ ! "$value" =~ ^[0-9]+$ ]] || (( value < 1 || value > 65535 )); then
+    echo "Option $option must be a TCP port number from 1 to 65535." >&2
+    exit 2
+  fi
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -h|--help) HELP=1 ;;
@@ -35,30 +53,39 @@ while [[ $# -gt 0 ]]; do
     --force-download) FORCE_DOWNLOAD=1 ;;
     --skip-llm-prompt) SKIP_LLM_PROMPT=1 ;;
     --gemini-api-key)
+      require_option_value "$1" "${2:-}"
       shift
       GEMINI_API_KEY_VALUE="${1:-}"
       ;;
     --llm-provider)
+      require_option_value "$1" "${2:-}"
       shift
       LLM_PROVIDER_VALUE="${1:-}"
       ;;
     --llm-model)
+      require_option_value "$1" "${2:-}"
       shift
       LLM_MODEL_VALUE="${1:-}"
       ;;
     --llm-api-key)
+      require_option_value "$1" "${2:-}"
       shift
       LLM_API_KEY_VALUE="${1:-}"
       ;;
     --llm-base-url)
+      require_option_value "$1" "${2:-}"
       shift
       LLM_BASE_URL_VALUE="${1:-}"
       ;;
     --postgres-port)
+      require_option_value "$1" "${2:-}"
+      validate_port_value "$1" "$2"
       shift
       POSTGRES_PORT="${1:-0}"
       ;;
     --web-port)
+      require_option_value "$1" "${2:-}"
+      validate_port_value "$1" "$2"
       shift
       WEB_PORT="${1:-0}"
       ;;
