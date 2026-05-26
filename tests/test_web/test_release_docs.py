@@ -52,6 +52,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "--force-download" in readme
     assert "-ForceImport" in readme
     assert "--force-import" in readme
+    assert "docker compose logs --tail 120 web db" in readme
     assert "AGENTS.md" in readme
     assert "CLAUDE.md" in readme
     dockerfile = read_text("Dockerfile")

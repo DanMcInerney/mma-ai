@@ -594,6 +594,10 @@ function Format-WebReadinessDetail {
     return (($Detail -replace "\s+", " ").Trim())
 }
 
+function Get-ReadinessRecoveryHint {
+    return "Review Docker logs with: docker compose logs --tail 120 web db. If readiness reports missing database tables, rerun setup with -ForceImport. If it reports missing CSVs or model files, rerun setup without -SkipDownload or with -ForceDownload."
+}
+
 function Get-WebReadinessStatus {
     param([string]$WebUrl)
 
@@ -637,7 +641,7 @@ function Wait-ForWeb {
         $lastDetail = $status.Detail
         Start-Sleep -Seconds 2
     }
-    throw "Web dashboard did not become ready at $WebUrl in time. Last readiness response: $lastDetail"
+    throw "Web dashboard did not become ready at $WebUrl in time. Last readiness response: $lastDetail. $(Get-ReadinessRecoveryHint)"
 }
 
 function Test-StarterModelComplete {

@@ -371,6 +371,10 @@ wait_for_postgres() {
   return 1
 }
 
+readiness_recovery_hint() {
+  printf '%s' "Review Docker logs with: docker compose logs --tail 120 web db. If readiness reports missing database tables, rerun setup with --force-import. If it reports missing CSVs or model files, rerun setup without --skip-download or with --force-download."
+}
+
 database_import_marker() {
   printf '%s/.db-import-complete' "$ARTIFACTS_ROOT"
 }
@@ -425,7 +429,7 @@ wait_for_web() {
     [[ -n "$last_detail" ]] || last_detail="No readiness detail returned."
     sleep 2
   done
-  echo "Web dashboard did not become ready at $web_url in time. Last readiness response: $last_detail" >&2
+  echo "Web dashboard did not become ready at $web_url in time. Last readiness response: $last_detail. $(readiness_recovery_hint)" >&2
   return 1
 }
 

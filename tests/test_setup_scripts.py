@@ -192,19 +192,27 @@ def test_setup_scripts_wait_for_web_health_before_opening():
     bash = read_text("setup.sh")
 
     assert "function Format-WebReadinessDetail" in powershell
+    assert "function Get-ReadinessRecoveryHint" in powershell
     assert "function Get-WebReadinessStatus" in powershell
     assert "function Test-WebReady" in powershell
     assert "function Wait-ForWeb" in powershell
     assert 'Invoke-WebRequest -Uri "$WebUrl/api/readiness"' in powershell
     assert "Get-WebReadinessStatus $WebUrl" in powershell
     assert "Last readiness response:" in powershell
+    assert "docker compose logs --tail 120 web db" in powershell
+    assert "-ForceImport" in powershell
+    assert "-ForceDownload" in powershell
     assert "Wait-ForWeb $webUrl" in powershell
     assert powershell.index("Wait-ForWeb $webUrl") < powershell.index("Start-Process $webUrl")
 
     assert "readiness_response()" in bash
+    assert "readiness_recovery_hint()" in bash
     assert "web_ready()" in bash
     assert "wait_for_web()" in bash
     assert 'curl -sS -w' in bash
     assert "Last readiness response:" in bash
+    assert "docker compose logs --tail 120 web db" in bash
+    assert "--force-import" in bash
+    assert "--force-download" in bash
     assert 'wait_for_web "$WEB_URL"' in bash
     assert bash.index('wait_for_web "$WEB_URL"') < bash.index('xdg-open "$WEB_URL"')

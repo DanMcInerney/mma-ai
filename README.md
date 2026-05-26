@@ -42,6 +42,10 @@ again. Use `-SkipDownload` or `--skip-download` only when the artifact cache
 already exists; the scripts validate the cache before copying CSVs, extracting
 the model, or importing dumps. Use `-ForceDownload` or `--force-download` to
 repair a corrupt cache.
+If readiness still times out, inspect `docker compose logs --tail 120 web db`.
+Missing database-table readiness errors usually mean rerun setup with
+`-ForceImport` or `--force-import`; missing CSV/model errors usually mean rerun
+without skip-download or with force-download.
 
 If your machine already has Postgres on `localhost:5432`, setup automatically
 chooses another free host port for Docker Postgres and writes it to
