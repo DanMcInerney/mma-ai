@@ -78,6 +78,25 @@ hash_matches() {
   [[ -n "$actual" && "$actual" == "$expected" ]]
 }
 
+safe_remove_setup_dir() {
+  local target="$1"
+  local parent="$2"
+  [[ -e "$target" ]] || return 0
+
+  local parent_abs
+  local target_abs
+  parent_abs="$(cd "$parent" && pwd -P)"
+  target_abs="$(cd "$(dirname "$target")" && pwd -P)/$(basename "$target")"
+
+  case "$target_abs" in
+    "$parent_abs"/*) rm -rf "$target_abs" ;;
+    *)
+      echo "Refusing to remove setup directory outside $parent_abs: $target_abs" >&2
+      exit 1
+      ;;
+  esac
+}
+
 download_file() {
   local relative="$1"
   local expected="$2"
@@ -201,6 +220,48 @@ start_postgres_for_import() {
   wait_for_postgres
 }
 
+ensure_starter_model() {
+  local models_root="$ROOT/AutogluonModels"
+  local model_dir="$models_root/$MODEL_NAME"
+  local marker_path="$models_root/.$MODEL_NAME.setup-complete"
+  local extract_dir="$models_root/.$MODEL_NAME.extracting"
+
+  mkdir -p "$models_root"
+
+  if [[ -d "$model_dir" && -f "$marker_path" ]]; then
+    echo "Using existing starter model $MODEL_NAME"
+    return
+  fi
+
+  if [[ -d "$model_dir" ]]; then
+    echo "Starter model extraction was incomplete; re-extracting $MODEL_NAME"
+    safe_remove_setup_dir "$model_dir" "$models_root"
+  else
+    echo "Extracting starter model $MODEL_NAME"
+  fi
+
+  safe_remove_setup_dir "$extract_dir" "$models_root"
+  mkdir -p "$extract_dir"
+
+  if ! tar -xzf "$ARTIFACTS_ROOT/models/$MODEL_NAME.tar.gz" -C "$extract_dir"; then
+    safe_remove_setup_dir "$extract_dir" "$models_root"
+    echo "Model extraction failed." >&2
+    exit 1
+  fi
+
+  if [[ -d "$extract_dir/$MODEL_NAME" ]]; then
+    mv "$extract_dir/$MODEL_NAME" "$model_dir"
+  else
+    mkdir -p "$model_dir"
+    shopt -s dotglob nullglob
+    mv "$extract_dir"/* "$model_dir"
+    shopt -u dotglob nullglob
+  fi
+
+  touch "$marker_path"
+  safe_remove_setup_dir "$extract_dir" "$models_root"
+}
+
 require_command docker
 require_command curl
 require_command tar
@@ -228,12 +289,7 @@ cp -f "$ARTIFACTS_ROOT/processed/prediction_data.csv" "$ROOT/data/prediction_dat
 cp -f "$ARTIFACTS_ROOT/processed/training_data.csv" "$ROOT/data/training_data.csv"
 cp -f "$ARTIFACTS_ROOT/processed/training_data_dec.csv" "$ROOT/data/training_data_dec.csv"
 
-if [[ ! -d "$ROOT/AutogluonModels/$MODEL_NAME" ]]; then
-  echo "Extracting starter model $MODEL_NAME"
-  tar -xzf "$ARTIFACTS_ROOT/models/$MODEL_NAME.tar.gz" -C "$ROOT/AutogluonModels"
-else
-  echo "Using existing starter model $MODEL_NAME"
-fi
+ensure_starter_model
 
 if [[ "$SKIP_IMPORT" -eq 0 ]]; then
   start_postgres_for_import

@@ -57,6 +57,23 @@ function Test-ExpectedHash {
     return $actual -eq $ExpectedHash.ToUpperInvariant()
 }
 
+function Remove-SetupDirectory {
+    param([string]$Path, [string]$Parent)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        return
+    }
+
+    $parentFullPath = [System.IO.Path]::GetFullPath($Parent).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $targetFullPath = [System.IO.Path]::GetFullPath($Path)
+    $expectedPrefix = "$parentFullPath$([System.IO.Path]::DirectorySeparatorChar)"
+    if (-not $targetFullPath.StartsWith($expectedPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "Refusing to remove setup directory outside $parentFullPath`: $targetFullPath"
+    }
+
+    Remove-Item -LiteralPath $Path -Recurse -Force
+}
+
 function Download-File {
     param([string]$Url, [string]$Target)
     $parent = Split-Path -Parent $Target
@@ -273,6 +290,47 @@ function Start-PostgresForImport {
     }
 }
 
+function Ensure-StarterModel {
+    $modelsRoot = Join-Path $Root "AutogluonModels"
+    $modelDir = Join-Path $modelsRoot $ModelName
+    $markerPath = Join-Path $modelsRoot ".$ModelName.setup-complete"
+    $extractDir = Join-Path $modelsRoot ".$ModelName.extracting"
+
+    New-Item -ItemType Directory -Force $modelsRoot | Out-Null
+
+    if ((Test-Path -LiteralPath $modelDir) -and (Test-Path -LiteralPath $markerPath)) {
+        Write-Host "Using existing starter model $ModelName"
+        return
+    }
+
+    if (Test-Path -LiteralPath $modelDir) {
+        Write-Host "Starter model extraction was incomplete; re-extracting $ModelName"
+        Remove-SetupDirectory $modelDir $modelsRoot
+    } else {
+        Write-Host "Extracting starter model $ModelName"
+    }
+
+    Remove-SetupDirectory $extractDir $modelsRoot
+    New-Item -ItemType Directory -Force $extractDir | Out-Null
+
+    & tar -xzf (Join-ArtifactPath "models/$ModelName.tar.gz") -C $extractDir
+    if ($LASTEXITCODE -ne 0) {
+        Remove-SetupDirectory $extractDir $modelsRoot
+        throw "Model extraction failed."
+    }
+
+    $nestedModelDir = Join-Path $extractDir $ModelName
+    if (Test-Path -LiteralPath $nestedModelDir) {
+        Move-Item -LiteralPath $nestedModelDir -Destination $modelDir
+    } else {
+        New-Item -ItemType Directory -Force $modelDir | Out-Null
+        Get-ChildItem -LiteralPath $extractDir -Force | Move-Item -Destination $modelDir
+    }
+
+    New-Item -ItemType File -Force $markerPath | Out-Null
+    Remove-SetupDirectory $extractDir $modelsRoot
+}
+
 Require-Command "docker"
 Require-Command "tar"
 & docker compose version *> $null
@@ -311,16 +369,7 @@ Copy-Item -LiteralPath (Join-ArtifactPath "processed/prediction_data.csv") -Dest
 Copy-Item -LiteralPath (Join-ArtifactPath "processed/training_data.csv") -Destination (Join-Path $Root "data\training_data.csv") -Force
 Copy-Item -LiteralPath (Join-ArtifactPath "processed/training_data_dec.csv") -Destination (Join-Path $Root "data\training_data_dec.csv") -Force
 
-$modelDir = Join-Path $Root "AutogluonModels\$ModelName"
-if (-not (Test-Path -LiteralPath $modelDir)) {
-    Write-Host "Extracting starter model $ModelName"
-    & tar -xzf (Join-ArtifactPath "models/$ModelName.tar.gz") -C (Join-Path $Root "AutogluonModels")
-    if ($LASTEXITCODE -ne 0) {
-        throw "Model extraction failed."
-    }
-} else {
-    Write-Host "Using existing starter model $ModelName"
-}
+Ensure-StarterModel
 
 if (-not $SkipImport) {
     Start-PostgresForImport

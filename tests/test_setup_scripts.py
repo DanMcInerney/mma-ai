@@ -29,6 +29,8 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "MMA_AI_POSTGRES_PORT" in script
         assert "docker compose up" in script
         assert "recreating the setup database volume" in script
+        assert "setup-complete" in script
+        assert "extracting" in script
         assert "http://127.0.0.1:8000" in script
 
 
@@ -40,8 +42,10 @@ def test_setup_scripts_detect_existing_postgres_host_port():
     assert "Invoke-DockerComposeOptional" in powershell
     assert "Get-NetTCPConnection" in powershell
     assert "docker ps --format" in powershell
+    assert "Remove-SetupDirectory" in powershell
     assert "docker_published_port_in_use" in bash
     assert "docker ps --format" in bash
+    assert "safe_remove_setup_dir" in bash
 
 
 def test_setup_scripts_pin_compose_database_and_starter_model():
