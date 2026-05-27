@@ -13,12 +13,16 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert 'src="/static/icons.js"' in html
     assert "cdn.plot.ly" not in html
     assert "unpkg.com" not in html
-    assert "Model Pick" in app_js
+    assert "Pick" in app_js
     assert "Pick Edge" in app_js
+    assert "AI Margin" in app_js
     assert "AI Odds" in app_js
     assert "+EV" in app_js
     assert "function probabilityToAmericanOdds(value)" in app_js
-    assert "function renderPredictionSide(" in app_js
+    assert "function expectedValuePercent(aiProb, bookOdds)" in app_js
+    assert "function modelMargin(row)" in app_js
+    assert "function renderFighterPickLine(" in app_js
+    assert "function sideState(" in app_js
     assert "function formatOdds(value)" in app_js
     assert "Fighter1_Market_Prob" in app_js
     assert "Fighter2_Market_Prob" in app_js
@@ -27,9 +31,10 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert 'id="events-output" class="prediction-output"' in html
     assert 'id="prediction-output" class="prediction-output"' in html
     assert ".prediction-output" in styles
-    assert ".compact-prediction" in styles
-    assert ".pick-side-grid" in styles
-    assert ".pick-line-grid" in styles
+    assert ".pick-card" in styles
+    assert ".pick-card-banner" in styles
+    assert ".fighter-pick-line" in styles
+    assert ".signal-pill" in styles
     assert ".ev-yes" in styles
 
 

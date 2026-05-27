@@ -63,10 +63,23 @@ function formatEdge(value) {
   return `${sign}${number.toFixed(1)} pp`;
 }
 
+function formatEv(value) {
+  const number = numberOrNull(value);
+  if (number === null) return "N/A";
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${number.toFixed(1)}%`;
+}
+
 function modelEdge(aiProb, marketProb) {
   const ai = percentValue(aiProb);
   const market = percentValue(marketProb);
   return ai === null || market === null ? null : ai - market;
+}
+
+function modelMargin(row) {
+  const fighter1 = percentValue(row.Fighter1_AI_Prob);
+  const fighter2 = percentValue(row.Fighter2_AI_Prob);
+  return fighter1 === null || fighter2 === null ? null : Math.abs(fighter1 - fighter2);
 }
 
 function formatOdds(value) {
@@ -75,6 +88,21 @@ function formatOdds(value) {
   const number = Number(raw);
   if (!Number.isFinite(number)) return raw;
   return number > 0 ? `+${number}` : String(number);
+}
+
+function americanOddsProfitPerDollar(value) {
+  const raw = String(value ?? "").trim().replace(/^\+/, "");
+  const odds = Number(raw);
+  if (!Number.isFinite(odds) || Math.abs(odds) < 100) return null;
+  return odds > 0 ? odds / 100 : 100 / Math.abs(odds);
+}
+
+function expectedValuePercent(aiProb, bookOdds) {
+  const probability = percentValue(aiProb);
+  const profit = americanOddsProfitPerDollar(bookOdds);
+  if (probability === null || profit === null) return null;
+  const p = probability / 100;
+  return (p * profit - (1 - p)) * 100;
 }
 
 function probabilityToAmericanOdds(value) {
@@ -86,12 +114,6 @@ function probabilityToAmericanOdds(value) {
     ? Math.round((decimalOdds - 1) * 100)
     : Math.round(-100 / (decimalOdds - 1));
   return formatOdds(americanOdds);
-}
-
-function pickedEdge(row) {
-  if (row.AI_Pick === row.Fighter1) return modelEdge(row.Fighter1_AI_Prob, row.Fighter1_Market_Prob);
-  if (row.AI_Pick === row.Fighter2) return modelEdge(row.Fighter2_AI_Prob, row.Fighter2_Market_Prob);
-  return null;
 }
 
 function eventDate(event) {
@@ -249,34 +271,47 @@ function hasPositiveSideEv(edge, odds, marketProb) {
   return edge !== null && edge > 0 && market !== null && market > 0 && formatOdds(odds) !== "N/A";
 }
 
-function renderPredictionSide(name, bookOdds, aiProb, marketProb, isPick) {
+function sideState(name, bookOdds, aiProb, marketProb, isPick) {
   const edge = modelEdge(aiProb, marketProb);
-  const positiveEv = hasPositiveSideEv(edge, bookOdds, marketProb);
-  const badges = [isPick ? "AI Pick" : "", positiveEv ? "+EV" : ""].filter(Boolean).join(" | ");
+  const ev = expectedValuePercent(aiProb, bookOdds);
+  const positiveEv = ev === null ? hasPositiveSideEv(edge, bookOdds, marketProb) : ev > 0;
+  return {
+    name,
+    bookOdds: formatOdds(bookOdds),
+    aiOdds: probabilityToAmericanOdds(aiProb),
+    edge,
+    edgeText: formatEdge(edge),
+    ev,
+    evText: formatEv(ev),
+    positiveEv,
+    isPick,
+  };
+}
+
+function renderFighterPickLine(side) {
+  const badges = [side.isPick ? "Pick" : "", side.positiveEv ? "+EV" : ""].filter(Boolean).join(" ");
   return `
-    <div class="pick-side${isPick ? " picked" : ""}${positiveEv ? " positive-ev" : ""}">
-      <div class="pick-side-head">
-        <strong>${escapeHtml(name || "N/A")}</strong>
-        ${badges ? `<span>${badges}</span>` : ""}
+    <div class="fighter-pick-line${side.isPick ? " picked" : ""}${side.positiveEv ? " positive-ev" : ""}">
+      <div class="fighter-pick-name">
+        <strong>${escapeHtml(side.name || "N/A")}</strong>
+        ${badges ? `<span>${escapeHtml(badges)}</span>` : ""}
       </div>
-      <dl class="pick-line-grid">
-        <div>
-          <dt>Odds</dt>
-          <dd>${escapeHtml(formatOdds(bookOdds))}</dd>
-        </div>
-        <div>
-          <dt>AI Odds</dt>
-          <dd>${escapeHtml(probabilityToAmericanOdds(aiProb))}</dd>
-        </div>
-        <div>
-          <dt>+EV</dt>
-          <dd class="${positiveEv ? "ev-yes" : "ev-no"}">${positiveEv ? "Yes" : "No"}</dd>
-        </div>
-        <div>
-          <dt>Pick Edge</dt>
-          <dd>${escapeHtml(formatEdge(edge))}</dd>
-        </div>
-      </dl>
+      <div class="pick-stat">
+        <span>Odds</span>
+        <strong>${escapeHtml(side.bookOdds)}</strong>
+      </div>
+      <div class="pick-stat">
+        <span>AI Odds</span>
+        <strong>${escapeHtml(side.aiOdds)}</strong>
+      </div>
+      <div class="pick-stat">
+        <span>EV</span>
+        <strong class="${side.positiveEv ? "ev-yes" : "ev-no"}">${escapeHtml(side.evText)}</strong>
+      </div>
+      <div class="pick-stat edge">
+        <span>Pick Edge</span>
+        <strong>${escapeHtml(side.edgeText)}</strong>
+      </div>
     </div>`;
 }
 
@@ -290,22 +325,45 @@ function renderPredictionGraphic(target, predictions) {
     const evPositive = String(row.EV) === "1";
     const f1Winner = row.AI_Pick === row.Fighter1;
     const f2Winner = row.AI_Pick === row.Fighter2;
-    const pickEdge = pickedEdge(row);
+    const fighter1 = sideState(row.Fighter1, row.Fighter1_Odds, row.Fighter1_AI_Prob, row.Fighter1_Market_Prob, f1Winner);
+    const fighter2 = sideState(row.Fighter2, row.Fighter2_Odds, row.Fighter2_AI_Prob, row.Fighter2_Market_Prob, f2Winner);
+    const pickedSide = f1Winner ? fighter1 : fighter2;
+    const pickHasValue = pickedSide.positiveEv || (pickedSide.ev === null && evPositive);
+    const margin = modelMargin(row);
     return `
-      <article class="prediction-result compact-prediction${evPositive ? " has-value" : ""}">
-        <div class="pick-header">
-          <div>
-            <span class="prediction-kicker">Model Pick</span>
+      <article class="prediction-result pick-card${pickHasValue ? " has-value" : ""}">
+        <div class="pick-card-banner">
+          <div class="pick-card-main">
+            <span class="prediction-kicker">Pick</span>
             <strong>${escapeHtml(row.AI_Pick || "N/A")}</strong>
             <p>${escapeHtml(row.Fighter1)} vs ${escapeHtml(row.Fighter2)}</p>
           </div>
-          <span class="${evPositive ? "ev-positive" : "ev-neutral"}">${evPositive ? "+EV pick" : "No +EV pick"}</span>
+          <div class="pick-card-signals">
+            <div class="signal-pill primary">
+              <span>AI Margin</span>
+              <strong>${escapeHtml(formatEdge(margin))}</strong>
+            </div>
+            <div class="signal-pill primary">
+              <span>Pick Edge</span>
+              <strong>${escapeHtml(pickedSide.edgeText)}</strong>
+            </div>
+            <div class="signal-pill ${pickHasValue ? "value" : "neutral"}">
+              <span>EV</span>
+              <strong>${escapeHtml(pickedSide.evText)}</strong>
+            </div>
+          </div>
         </div>
-        <div class="pick-side-grid">
-          ${renderPredictionSide(row.Fighter1, row.Fighter1_Odds, row.Fighter1_AI_Prob, row.Fighter1_Market_Prob, f1Winner)}
-          ${renderPredictionSide(row.Fighter2, row.Fighter2_Odds, row.Fighter2_AI_Prob, row.Fighter2_Market_Prob, f2Winner)}
+        <div class="fighter-pick-table" aria-label="Prediction odds and expected value">
+          <div class="fighter-pick-head">
+            <span>Fighter</span>
+            <span>Odds</span>
+            <span>AI Odds</span>
+            <span>EV</span>
+            <span>Pick Edge</span>
+          </div>
+          ${renderFighterPickLine(fighter1)}
+          ${renderFighterPickLine(fighter2)}
         </div>
-        <p class="pick-edge-note">Model pick edge: <strong>${escapeHtml(formatEdge(pickEdge))}</strong></p>
       </article>`;
   }).join("")}</div>`;
 }

@@ -557,114 +557,195 @@ summary {
   padding: 14px;
 }
 
-.compact-prediction {
-  gap: 10px;
-  background: #ffffff;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
-}
-
-.compact-prediction.has-value {
-  border-color: rgba(15, 118, 110, 0.38);
-}
-
 .prediction-result + .prediction-result {
   margin-top: 12px;
 }
 
 .prediction-set {
   display: grid;
-  gap: 14px;
-}
-
-.pick-header,
-.pick-side-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
   gap: 12px;
 }
 
-.pick-header strong {
+.pick-card {
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+.pick-card.has-value {
+  border-color: rgba(15, 118, 110, 0.48);
+}
+
+.pick-card-banner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-left: 4px solid #94a3b8;
+  background: #f8fafc;
+  padding: 12px 14px;
+}
+
+.pick-card.has-value .pick-card-banner {
+  border-left-color: var(--accent);
+  background: #f0fdfa;
+}
+
+.pick-card-main {
+  min-width: 0;
+}
+
+.pick-card-main strong {
   display: block;
   margin-top: 2px;
   color: var(--ink);
-  font-size: 20px;
-}
-
-.pick-header p {
-  font-size: 13px;
-}
-
-.pick-header > span,
-.pick-side-head span {
-  flex: 0 0 auto;
-  border-radius: 999px;
-  padding: 4px 8px;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.pick-side-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.pick-side {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fafc;
-  padding: 11px;
-}
-
-.pick-side.picked {
-  border-color: rgba(15, 118, 110, 0.5);
-}
-
-.pick-side.positive-ev {
-  background: #f0fdf4;
-}
-
-.pick-side-head strong {
-  min-width: 0;
+  font-size: 21px;
+  line-height: 1.15;
   overflow-wrap: anywhere;
 }
 
-.pick-side-head span {
-  background: #e0f2fe;
-  color: #075985;
+.pick-card-main p {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 13px;
 }
 
-.pick-side.positive-ev .pick-side-head span {
+.pick-card-signals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(76px, max-content));
+  gap: 8px;
+}
+
+.signal-pill {
+  min-width: 86px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
+  text-align: right;
+}
+
+.signal-pill span,
+.pick-stat span,
+.fighter-pick-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.signal-pill strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 1.1;
+}
+
+.signal-pill.value {
+  border-color: #86efac;
+  background: #dcfce7;
+}
+
+.signal-pill.value strong {
+  color: #166534;
+}
+
+.signal-pill.neutral {
+  background: #f1f5f9;
+}
+
+.fighter-pick-table {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+}
+
+.fighter-pick-head,
+.fighter-pick-line {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.35fr) repeat(4, minmax(58px, 0.65fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.fighter-pick-head {
+  padding: 0 10px 2px;
+}
+
+.fighter-pick-head span:not(:first-child) {
+  text-align: right;
+}
+
+.fighter-pick-line {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 8px 10px;
+}
+
+.fighter-pick-line.picked {
+  border-color: rgba(15, 118, 110, 0.46);
+  background: #f0fdfa;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.fighter-pick-line.positive-ev:not(.picked) {
+  background: #f0fdf4;
+}
+
+.fighter-pick-name {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.fighter-pick-name strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.fighter-pick-name span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #e0f2fe;
+  color: #075985;
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.fighter-pick-line.positive-ev .fighter-pick-name span {
   background: #dcfce7;
   color: #166534;
 }
 
-.pick-line-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-}
-
-.pick-line-grid div {
+.pick-stat {
   min-width: 0;
+  text-align: right;
 }
 
-.pick-line-grid dt {
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.pick-line-grid dd {
-  margin: 2px 0 0;
+.pick-stat strong {
+  display: block;
+  margin-top: 2px;
   color: var(--ink);
   font-size: 14px;
-  font-weight: 800;
+  line-height: 1.15;
   overflow-wrap: anywhere;
+}
+
+.pick-stat.edge strong {
+  font-size: 13px;
 }
 
 .ev-yes {
@@ -675,16 +756,6 @@ summary {
   color: #64748b !important;
 }
 
-.pick-edge-note {
-  border-top: 1px solid var(--line);
-  padding-top: 8px;
-  font-size: 13px;
-}
-
-.pick-edge-note strong {
-  color: var(--ink);
-}
-
 .prediction-kicker {
   display: block;
   color: #64748b;
@@ -692,16 +763,6 @@ summary {
   font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
-}
-
-.ev-positive {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.ev-neutral {
-  background: #f1f5f9;
-  color: #475569;
 }
 
 .field-note {
@@ -774,8 +835,10 @@ footer {
     grid-template-columns: 1fr;
   }
 
-  .pick-side-grid,
-  .pick-line-grid {
+  .pick-card-banner,
+  .pick-card-signals,
+  .fighter-pick-head,
+  .fighter-pick-line {
     grid-template-columns: 1fr;
   }
 
@@ -783,9 +846,10 @@ footer {
     flex-direction: column;
   }
 
-  .pick-header,
-  .pick-side-head {
-    align-items: flex-start;
+  .signal-pill,
+  .fighter-pick-head span:not(:first-child),
+  .pick-stat {
+    text-align: left;
   }
 
   .span-two {

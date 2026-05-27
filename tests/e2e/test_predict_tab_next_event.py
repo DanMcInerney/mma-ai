@@ -270,15 +270,17 @@ def test_predict_tab_browser_predicts_next_ufc_event(monkeypatch, tmp_path):
 
         driver.find_element(By.ID, "run-event-predict").click()
 
-        result = wait.until(ec.presence_of_element_located((By.CSS_SELECTOR, "#events-output .compact-prediction")))
+        result = wait.until(ec.presence_of_element_located((By.CSS_SELECTOR, "#events-output .pick-card")))
         wait.until(ec.text_to_be_present_in_element((By.ID, "events-output"), "AI Odds"))
         wait.until(ec.text_to_be_present_in_element((By.ID, "events-log"), "predict-tab browser e2e fake prediction started"))
 
         assert "fighter one" in result.text
         assert "Odds" in result.text
         assert "AI Odds" in result.text
+        assert "AI Margin" in result.text
         assert "+EV" in result.text
         assert "Pick Edge" in result.text
+        assert "EV" in result.text
         assert captured["upcoming"]["limit"] is None
         assert captured["prediction_request"]["upcoming_number"] == 1
         assert captured["prediction_request"]["manual_odds"] == {"fighter one": -120, "fighter two": 100}
