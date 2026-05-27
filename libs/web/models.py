@@ -65,6 +65,7 @@ class EventPredictionRequest(BaseModel):
     upcoming_number: int = Field(default=1, ge=1)
     odds: bool = True
     manual_odds: dict[str, int] | None = None
+    flaresolverr: bool = False
     use_calibrated: bool = False
     shap: bool = False
 
@@ -82,6 +83,7 @@ class MatchupPredictionRequest(BaseModel):
     odds_fighter2: int | None = None
     odds: bool = False
     manual_odds: dict[str, int] | None = None
+    flaresolverr: bool = False
     use_calibrated: bool = False
     shap: bool = False
 

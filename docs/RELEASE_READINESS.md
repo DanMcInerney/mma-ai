@@ -61,11 +61,13 @@ badge.
   line so users know whether Ask is in LLM-backed or SQL-only mode.
 - Predict tab: list models, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, run manual
-  fighter matchups, and show AI probability, market probability, AI odds, and
-  positive EV status. Odds are not model inputs; event prediction can ingest
-  manual American odds through the dashboard/API instead of waiting on terminal
-  input. Manual matchup prediction defaults the fight date to today and does not
-  expose odds controls.
+  fighter matchups, and show book odds, AI odds, positive EV status, and pick
+  edge in compact result cards. Odds are enabled by default but are not model
+  inputs; event prediction can ingest manual American odds through the
+  dashboard/API instead of waiting on terminal input. Manual matchup prediction
+  defaults the fight date to today and does not expose per-fighter odds controls.
+  The advanced Flaresolverr proxy toggle is only for BestFightOdds blocking
+  normal odds scraping.
 - Job logs: Data and Predict jobs stream and persist stdout, stderr,
   command lines, exit codes, and tracebacks under `data/logs/jobs` and expose them at
   `/api/jobs/{job_id}/log`. Dashboard jobs are serialized so long-running data,

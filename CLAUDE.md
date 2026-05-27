@@ -32,9 +32,11 @@ and Predict dashboard. Training remains a CLI workflow, not a dashboard tab.
   update.
 - Predict: select a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict the selected event, and run
-  manual fighter matchups through the same inference path. Event odds are only
-  for EV and market probability calculations, not model inputs. Manual matchup
-  odds controls are not exposed in the dashboard.
+  manual fighter matchups through the same inference path. Odds are enabled by
+  default but only calculate EV, market probability, and pick edge; they are not
+  model inputs. Manual matchup per-fighter odds controls are not exposed in the
+  dashboard. The advanced Flaresolverr proxy toggle is only for BestFightOdds
+  blocking normal odds scraping.
 
 LLM-assisted analytics use `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
 optional `LLM_BASE_URL` first. The setup scripts can configure OpenAI,

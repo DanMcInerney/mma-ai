@@ -1195,6 +1195,7 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
         output_dir="predictions/event-custom",
         upcoming_number=3,
         odds=True,
+        flaresolverr=True,
         use_calibrated=True,
         shap=True,
     )
@@ -1207,6 +1208,7 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
     assert "--prediction-data-csv" in captured["command"]
     assert "--odds" in captured["command"]
     assert "--no-manual-odds" in captured["command"]
+    assert "--flaresolverr" in captured["command"]
     assert "--use-calibrated" in captured["command"]
     assert "--no-shap" not in captured["command"]
     assert captured["log_prefix"] == "prediction"

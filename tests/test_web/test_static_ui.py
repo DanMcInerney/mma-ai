@@ -13,15 +13,13 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert 'src="/static/icons.js"' in html
     assert "cdn.plot.ly" not in html
     assert "unpkg.com" not in html
-    assert "Value Side" in app_js
     assert "Model Pick" in app_js
-    assert "Model Edge" in app_js
     assert "Pick Edge" in app_js
-    assert "Positive EV Sides" in app_js
-    assert "Best Pick Edge" in app_js
-    assert "function bestPickEdge(rows)" in app_js
+    assert "AI Odds" in app_js
+    assert "+EV" in app_js
+    assert "function probabilityToAmericanOdds(value)" in app_js
+    assert "function renderPredictionSide(" in app_js
     assert "function formatOdds(value)" in app_js
-    assert "confidence-pill" in app_js
     assert "Fighter1_Market_Prob" in app_js
     assert "Fighter2_Market_Prob" in app_js
     assert "Fighter1_Odds" in app_js
@@ -29,9 +27,10 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     assert 'id="events-output" class="prediction-output"' in html
     assert 'id="prediction-output" class="prediction-output"' in html
     assert ".prediction-output" in styles
-    assert ".prediction-summary-strip" in styles
-    assert ".edge-positive" in styles
-    assert ".value-strip" in styles
+    assert ".compact-prediction" in styles
+    assert ".pick-side-grid" in styles
+    assert ".pick-line-grid" in styles
+    assert ".ev-yes" in styles
 
 
 def test_local_icon_bundle_covers_dashboard_icons():
@@ -141,16 +140,20 @@ def test_predict_model_dropdown_filters_with_selected_target():
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert 'id="predict-model-status"' in html
-    assert '<label>Model <select id="predict-model"></select></label>' in html
+    assert '<label class="span-two">Model <select id="predict-model"></select></label>' in html
+    assert '<input id="predict-odds" type="checkbox" /> Odds' in html
     assert '<label><input id="predict-shap" type="checkbox" /> Include SHAP</label>' in html
+    assert "Odds are not a feature in the model; they solely exist to calculate the Expected Value of each prediction." in html
+    assert "Creates per-feature reasoning for why a fighter was picked" in html
     assert html.index("Advanced Prediction Knobs") < html.index('id="predict-model-type"')
-    assert 'id="predict-odds"' not in html
+    assert 'id="predict-flaresolverr"' in html
+    assert "Use this only when BestFightOdds is blocking odds scraping." in html
     assert 'id="matchup-odds"' not in html
     assert "Matchup Odds" not in html
     assert 'id="fighter1-odds"' not in html
     assert 'id="fighter2-odds"' not in html
-    assert 'odds: true' in app_js
-    assert 'odds: false' in app_js
+    assert 'odds: qs("#predict-odds").checked' in app_js
+    assert 'flaresolverr: qs("#predict-flaresolverr").checked' in app_js
     assert "odds_fighter1" not in app_js
     assert "odds_fighter2" not in app_js
     assert 'id="run-event-predict" class="primary wide" disabled' in html
@@ -183,6 +186,8 @@ def test_dashboard_controls_hydrate_from_defaults_endpoint():
     assert "setValue(\"#analytics-max-rows\", data.analytics_max_rows)" in app_js
     assert "const train = defaults.train" not in app_js
     assert "selectedUpcomingNumber = Number(predict.upcoming_number || 1)" in app_js
+    assert 'setChecked("#predict-odds", predict.odds)' in app_js
+    assert 'setChecked("#predict-flaresolverr", predict.flaresolverr)' in app_js
     assert "const existingSelection = select?.value ? Number(select.value) : null" in app_js
     assert ": Number(events[0].upcoming_number)" in app_js
     assert "loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEventsWithStatus())" in app_js
@@ -259,7 +264,7 @@ def test_debug_logs_and_manual_event_odds_are_wired():
         assert f'id="{element_id}"' in html
 
     assert "function parseManualOdds(value)" in app_js
-    assert 'manual_odds: parseManualOdds(qs("#event-manual-odds").value)' in app_js
+    assert 'manual_odds: qs("#predict-odds").checked ? parseManualOdds(qs("#event-manual-odds").value) : null' in app_js
     assert "function setLogText(selector, value)" in app_js
     assert "async function renderJobLog(target, jobId)" in app_js
     assert "/api/jobs/${jobId}/log" in app_js

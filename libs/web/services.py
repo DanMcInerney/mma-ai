@@ -146,6 +146,7 @@ def get_dashboard_defaults() -> dict[str, Any]:
             "model_type": "win",
             "upcoming_number": 1,
             "odds": True,
+            "flaresolverr": False,
             "use_calibrated": False,
             "shap": False,
         },
@@ -901,6 +902,8 @@ def _append_common_prediction_args(command: list[str], request: EventPredictionR
     if request.odds:
         command.append("--odds")
         command.append("--no-manual-odds")
+        if request.flaresolverr:
+            command.append("--flaresolverr")
     if request.use_calibrated:
         command.append("--use-calibrated")
     if not request.shap:

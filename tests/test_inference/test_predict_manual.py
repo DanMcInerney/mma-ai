@@ -102,7 +102,11 @@ def test_resolve_prediction_odds_uses_bfo_when_manual_event_odds_are_partial():
             allow_manual_input=False,
         )
 
-    mock_get_bfo.assert_called_once_with(fight_list, allow_manual_input=False)
+    mock_get_bfo.assert_called_once_with(
+        fight_list,
+        allow_manual_input=False,
+        use_flaresolverr=False,
+    )
     assert odds["fighter one"] == {"original": -120, "vigless": -110}
     assert odds["fighter two"] == {"original": 100, "vigless": 110}
 

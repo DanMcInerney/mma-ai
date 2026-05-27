@@ -32,9 +32,11 @@ scripts for advanced users, but it is not part of the dashboard.
     refresh is opt-in, not part of the default dashboard update.
   - Predict tab: choose a model, automatically load upcoming events from
     Wikipedia into an event-name dropdown, run event prediction, and validate
-    manual fighter matchups. Event odds are not model inputs; they are only for
-    market probability and EV calculations. Manual matchup prediction does not
-    expose odds controls in the dashboard.
+    manual fighter matchups. Odds are enabled by default but are not model
+    inputs; they only calculate market probability, expected value, and pick
+    edge. Manual matchup prediction does not expose per-fighter odds controls
+    in the dashboard. The advanced Flaresolverr proxy toggle is only for cases
+    where BestFightOdds blocks normal odds scraping.
 
 LLM setup choices are OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini,
 xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI, Perplexity Sonar, local

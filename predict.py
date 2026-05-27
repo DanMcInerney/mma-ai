@@ -42,9 +42,10 @@ class BFOLatestOddsOnly:
     REVERSE_MAPPINGS = BFOScraper.REVERSE_MAPPINGS
     DUPE_NAMES = BFOScraper.DUPE_NAMES
     
-    def __init__(self):
+    def __init__(self, use_flaresolverr=False):
         self.base_url = "https://www.bestfightodds.com"
-        self.flaresolverr_url = "http://localhost:8192/v1"
+        self.use_flaresolverr = bool(use_flaresolverr)
+        self.flaresolverr_url = os.getenv("FLARESOLVERR_URL", "http://localhost:8192/v1")
         self.default_headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Connection": "keep-alive",
@@ -133,6 +134,9 @@ class BFOLatestOddsOnly:
     
     def make_request_with_flaresolverr(self, url, params=None):
         """Make a request using FlareSolverr cookies and user-agent."""
+        if not self.use_flaresolverr:
+            return requests.get(url, params=params, headers=self.default_headers, timeout=10, verify=False)
+
         # Get session if we don't have one
         if not self._flaresolverr_session:
             if not self.get_flaresolverr_session():
@@ -644,7 +648,7 @@ def _empty_odds_for_fights(fight_list):
     return odds
 
 
-def get_bfo_odds(fight_list, allow_manual_input=True):
+def get_bfo_odds(fight_list, allow_manual_input=True, use_flaresolverr=False):
     """
     Get the latest odds for fights using lightweight BFO scraper (no database operations).
     If odds are missing, optionally prompt for manual input.
@@ -659,7 +663,9 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
         # Convert fight_list format (only needs fighter names)
         bfo_fight_list = [(fight[1], fight[2]) for fight in fight_list]
         
-        scraper = BFOLatestOddsOnly()
+        if use_flaresolverr:
+            print("[prediction] Using FlareSolverr for BestFightOdds requests.")
+        scraper = BFOLatestOddsOnly(use_flaresolverr=use_flaresolverr)
         latest_odds = scraper.get_latest_fight_odds_no_db(bfo_fight_list)
         
         print(f"[ok] Retrieved odds for {len(latest_odds)} fighters from BFO")
@@ -751,7 +757,7 @@ def get_bfo_odds(fight_list, allow_manual_input=True):
 
         # If BFO scraping fails entirely, ask for manual input for all fighters
         manual_odds = {}
-        scraper = BFOLatestOddsOnly()  # Need scraper instance for devigging
+        scraper = BFOLatestOddsOnly(use_flaresolverr=use_flaresolverr)  # Need scraper instance for devigging
         
         # Process by fight pairs to enable devigging
         for fight in fight_list:
@@ -906,6 +912,7 @@ def resolve_prediction_odds(
     fighter1_odds=None,
     fighter2_odds=None,
     allow_manual_input=True,
+    use_flaresolverr=False,
 ):
     """Resolve event or matchup odds without doing avoidable interactive/network work."""
     manual_odds = manual_odds or {}
@@ -916,7 +923,11 @@ def resolve_prediction_odds(
         print("\nManual odds supplied for every fighter; skipping BFO odds lookup.")
         bfo_odds = _empty_odds_for_fights(fight_list)
     elif odds_enabled:
-        bfo_odds = get_bfo_odds(fight_list, allow_manual_input=allow_manual_input)
+        bfo_odds = get_bfo_odds(
+            fight_list,
+            allow_manual_input=allow_manual_input,
+            use_flaresolverr=use_flaresolverr,
+        )
     else:
         bfo_odds = _empty_odds_for_fights(fight_list)
 
@@ -1298,6 +1309,7 @@ def parse_args():
     parser.add_argument("--fighter2-odds", type=int, default=None, help="Manual American odds for fighter 2.")
     parser.add_argument("--manual-odds-json", default=None, help="JSON object mapping fighter names to manual American odds.")
     parser.add_argument("--odds", action="store_true", help="Include latest BFO odds in the output.")
+    parser.add_argument("--flaresolverr", action="store_true", help="Use FlareSolverr for BestFightOdds requests when BFO is blocking normal scraping.")
     parser.add_argument("--no-manual-odds", action="store_true", help="Do not prompt for missing odds; use N/A instead.")
     parser.add_argument("--no-shap", action="store_true", help="Skip SHAP visualizations.")
     parser.add_argument("--use-calibrated", action="store_true", help="Use calibrated predictions when calibrator.pkl exists.")
@@ -1443,6 +1455,7 @@ def cli():
         fighter1_odds=args.fighter1_odds,
         fighter2_odds=args.fighter2_odds,
         allow_manual_input=not args.no_manual_odds,
+        use_flaresolverr=args.flaresolverr,
     )
     
     # Get inference data using the prediction_data.csv file

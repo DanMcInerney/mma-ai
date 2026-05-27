@@ -71,8 +71,15 @@
             <h2>Prediction Settings</h2>
           </div>
           <div class="form-grid">
-            <label>Model <select id="predict-model"></select></label>
-            <label><input id="predict-shap" type="checkbox" /> Include SHAP</label>
+            <label class="span-two">Model <select id="predict-model"></select></label>
+            <div class="checkbox-field">
+              <label><input id="predict-odds" type="checkbox" /> Odds</label>
+              <p class="field-note">Odds are not a feature in the model; they solely exist to calculate the Expected Value of each prediction.</p>
+            </div>
+            <div class="checkbox-field">
+              <label><input id="predict-shap" type="checkbox" /> Include SHAP</label>
+              <p class="field-note">Creates per-feature reasoning for why a fighter was picked, but takes a long time to run.</p>
+            </div>
             <p id="predict-model-status" class="field-note model-status span-two">Checking available models...</p>
           </div>
           <details>
@@ -94,6 +101,10 @@
                 <input id="predict-output-dir" placeholder="Default predictions/latest or predictions/manual" />
               </label>
               <label><input id="predict-calibrated" type="checkbox" /> Calibrated probabilities</label>
+              <div class="checkbox-field span-two">
+                <label><input id="predict-flaresolverr" type="checkbox" /> Use Flaresolverr proxy</label>
+                <p class="field-note">Use this only when BestFightOdds is blocking odds scraping.</p>
+              </div>
             </div>
           </details>
         </section>

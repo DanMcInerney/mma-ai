@@ -73,6 +73,8 @@ def test_defaults_endpoint_includes_tabs():
     assert body["train"]["refit_all"] is False
     assert body["train"]["feature_list"] is None
     assert body["train"]["included_strings"] is None
+    assert body["predict"]["odds"] is True
+    assert body["predict"]["flaresolverr"] is False
 
 
 def test_train_defaults_are_valid_training_request_payload():

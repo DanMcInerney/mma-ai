@@ -206,11 +206,13 @@ CLI workflow for advanced users.
   the dashboard is currently in SQL-only analytics mode.
 - Predict: choose a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, or run a
-  manual fighter-vs-fighter matchup. Event odds are used only for market
-  probability and EV calculations, not as model inputs. Event prediction accepts
-  manual fighter odds in the dashboard so web jobs never need to block on
-  terminal prompts. Manual matchup prediction defaults the fight date to today
-  and does not expose odds controls.
+  manual fighter-vs-fighter matchup. Odds are enabled by default but are used
+  only for market probability, expected value, and pick edge, not as model
+  inputs. Event prediction accepts manual fighter odds in the dashboard so web
+  jobs never need to block on terminal prompts. Manual matchup prediction
+  defaults the fight date to today and does not expose per-fighter odds
+  controls. Use the advanced Flaresolverr proxy toggle only when BestFightOdds
+  is blocking normal odds scraping.
 
 Each long-running Data or Predict job streams stdout/stderr into a debug
 log under `data/logs/jobs` and exposes it through the dashboard and

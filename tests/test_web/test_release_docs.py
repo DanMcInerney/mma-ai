@@ -121,8 +121,9 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Train tab" not in release_notes
     assert "Predict tab" in release_notes
     assert "mma-evaluate" in release_notes
-    assert "Odds are not model inputs" in release_notes
-    assert "does not\n  expose odds controls" in release_notes
+    assert "Odds are enabled by default but are not model\n  inputs" in release_notes
+    assert "does not expose per-fighter odds controls" in release_notes
+    assert "Flaresolverr proxy toggle" in release_notes
     assert "wait for `/api/readiness`" in release_notes
     assert "databases to contain their imported tables" in release_notes
     assert "write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL`" in release_notes
