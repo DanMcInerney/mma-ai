@@ -3,7 +3,8 @@
 This repository combines the historical UFCStats scraper from `UFCScraper` with
 the feature store, training, and prediction code from `mma-ai-db`. The intended
 release artifact is a Dockerized app with a small web dashboard for data refresh,
-model training, analytics, and fight prediction.
+analytics, and fight prediction. Model training remains available through CLI
+scripts for advanced users, but it is not part of the dashboard.
 
 ## Current App Surface
 
@@ -29,17 +30,11 @@ model training, analytics, and fight prediction.
     recalculate odds features from the imported Hugging Face `odds` database,
     create finalized CSVs, and run read-only analytics. Live BestFightOdds
     refresh is opt-in, not part of the default dashboard update.
-  - Train tab: launch AutoGluon training with defaults from `libs/modeling/train.py`; advanced knobs stay collapsed.
-    The Evaluations subtab summarizes saved artifacts such as `evals.txt`,
-    `model_stats.txt`, `test_predictions.csv`, `all_predictions.csv`, and
-    `calibration_curve.png`; completed dashboard training jobs also write
-    `dashboard_evaluation_summary.json` and `dashboard_evaluation.md`, and the
-    `mma-evaluate --write-report --format text` script produces the same report
-    artifacts for automation.
   - Predict tab: choose a model, automatically load upcoming events from
     Wikipedia into an event-name dropdown, run event prediction, and validate
-    manual fighter matchups. Odds are not model inputs; they are only for market
-    probability and EV calculations.
+    manual fighter matchups. Event odds are not model inputs; they are only for
+    market probability and EV calculations. Manual matchup prediction does not
+    expose odds controls in the dashboard.
 
 LLM setup choices are OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini,
 xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI, Perplexity Sonar, local
@@ -139,9 +134,9 @@ Static or metadata fields that frequently matter:
 - `age`, `reach`, `height`, `ape`, `ufcage`
 - `odds`, implied market probability, and expected value fields
 
-## Training Defaults
+## CLI Training Defaults
 
-The dashboard mirrors `libs/modeling/train.py` defaults:
+`uv run mma-train` uses `libs/modeling/train.py` defaults:
 
 - target: `win`
 - preset: `extreme`
@@ -160,8 +155,8 @@ The dashboard mirrors `libs/modeling/train.py` defaults:
 - default model families: `TABICL`, `MITRA`, `TABM`, `GBM_PREP`, `CAT`, `GBM`, `REALTABPFN-V2`
 - custom feature list/include/exclude/required feature filters: unset by default
 
-Keep advanced training controls collapsed in the UI. The default path should be
-safe for a user who just wants to train the current best model.
+Do not reintroduce dashboard training controls by default. Users who want to train new
+models can use the CLI and evaluation scripts directly.
 
 ## Prediction Workflow
 
@@ -190,8 +185,9 @@ prediction. The CLI accepts `--fighter1`, `--fighter2`, optional `--fight-date`,
 and optional `--fighter1-odds` / `--fighter2-odds`; this skips Wikipedia event
 lookup while still routing through `InferenceDataBuilder`, model feature
 filtering, scaling, visualization, CSV output, and positive-EV calculation.
-The dashboard exposes the optional fight date as a `YYYY-MM-DD` date input and
-must validate it before starting a background job.
+The dashboard exposes the fight date as a `YYYY-MM-DD` date input, defaults it
+to today's date, and must validate it before starting a background job. The
+dashboard should not expose manual matchup odds inputs.
 Web-triggered prediction jobs must pass `--no-manual-odds` when fetching BFO
 odds so background jobs never block waiting for terminal input. Do not create a
 separate feature formula for manual matchups; that would drift from the
@@ -243,7 +239,7 @@ Add tests with every behavior change. For the web layer:
 - API tests should not run scrapers, train models, or call external services.
 - Service tests should use temporary `MMA_AI_*` paths.
 - Analytics tests should cover SQL guardrails.
-- Prediction and training integration tests should monkeypatch heavy functions
-  unless explicitly marked as slow.
+- Prediction integration tests should monkeypatch heavy functions unless
+  explicitly marked as slow.
 - Evaluation tests should use fixture model directories with saved artifact
   files rather than training real AutoGluon models.

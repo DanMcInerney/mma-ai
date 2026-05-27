@@ -2,7 +2,6 @@ const qs = (selector) => document.querySelector(selector);
 const qsa = (selector) => [...document.querySelectorAll(selector)];
 let activeEventJobId = null;
 let activeMatchupJobId = null;
-let activeTrainingJobId = null;
 let activeDataJobId = null;
 let selectedUpcomingNumber = 1;
 let upcomingEventsCache = [];
@@ -114,6 +113,13 @@ function formatEventDate(event) {
   return date ? date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "Date pending";
 }
 
+function todayDateInputValue() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 function commaList(value) {
   const items = String(value ?? "")
     .split(",")
@@ -170,33 +176,9 @@ function parseManualOdds(value) {
 
 function applyDashboardDefaults(defaults) {
   const data = defaults.data || {};
-  const train = defaults.train || {};
   const predict = defaults.predict || {};
 
   setValue("#analytics-max-rows", data.analytics_max_rows);
-
-  setValue("#train-model-type", train.model_type);
-  setValue("#train-preset", train.preset);
-  setValue("#train-time-limit", train.time_limit);
-  setValue("#train-split", train.split_strategy);
-  setValue("#train-walk-windows", train.walkforward_n_windows);
-  setValue("#train-walk-year", train.walkforward_initial_year);
-  setChecked("#train-refit", train.refit_full);
-  setChecked("#train-refit-all", train.refit_all);
-  setValue("#train-test-size", train.test_size);
-  setValue("#train-val-date", train.val_date);
-  setValue("#train-start-date", train.start_date);
-  setValue("#train-num-fights", train.num_fights);
-  setChecked("#train-include-split-dec", train.include_split_dec);
-  setValue("#train-decay", train.decay_rate);
-  setValue("#train-normalize", train.normalize);
-  setChecked("#train-recency", train.use_recency_weights);
-  setChecked("#train-importance", train.calculate_importance);
-  setValue("#train-feature-list", listValue(train.feature_list));
-  setValue("#train-include-patterns", listValue(train.included_strings));
-  setValue("#train-exclude-patterns", listValue(train.excluded_strings));
-  setValue("#train-required-features", listValue(train.required_strings));
-  setValue("#train-model-families", listValue(train.included_model_types));
 
   setValue("#predict-model-type", predict.model_type);
   selectedUpcomingNumber = Number(predict.upcoming_number || 1);
@@ -460,78 +442,6 @@ function formatMetric(value) {
   return Math.abs(number) <= 1 ? number.toFixed(3) : number.toFixed(2);
 }
 
-function renderEvaluation(summary) {
-  if (!summary?.available) {
-    qs("#eval-output").innerHTML = `<div class="muted">${escapeHtml(summary?.message || "No evaluation artifacts found.")}</div>`;
-    return;
-  }
-  const holdout = summary.metrics?.holdout_predictions || {};
-  const train = summary.metrics?.training || {};
-  const validation = summary.metrics?.validation || {};
-  const holdoutScores = summary.metrics?.holdout || {};
-  const metricCards = [
-    ["Samples", holdout.samples],
-    ["Holdout Accuracy", holdout.accuracy ?? holdoutScores.accuracy],
-    ["Holdout Log Loss", holdout.log_loss ?? holdoutScores.log_loss],
-    ["Brier Score", holdout.brier_score],
-    ["ROC AUC", holdout.roc_auc],
-    ["Train Accuracy", train.accuracy],
-    ["Validation Accuracy", validation.accuracy],
-    ["Mean Probability", holdout.mean_probability],
-  ];
-  const features = (summary.feature_importance || []).slice(0, 10);
-  const weights = summary.model_weights || [];
-  const checks = summary.best_practices || [];
-  const reportPaths = summary.report_paths || {};
-  qs("#eval-output").innerHTML = `
-    <div>
-      <h2>${escapeHtml(summary.model_name)}</h2>
-      <p>${escapeHtml(summary.model_path)}</p>
-      ${reportPaths.markdown ? `<p>Evaluation report: ${escapeHtml(reportPaths.markdown)}</p>` : ""}
-    </div>
-    <div class="eval-grid">
-      ${metricCards.map(([label, value]) => `<div class="eval-card"><strong>${formatMetric(value)}</strong><span>${label}</span></div>`).join("")}
-    </div>
-    <div class="eval-chart-grid">
-      <div id="eval-calibration" class="eval-chart"></div>
-      <div id="eval-confidence" class="eval-chart"></div>
-      <div id="eval-outcomes" class="eval-chart"></div>
-    </div>
-    <div class="eval-list">
-      <details open>
-        <summary>Best Practices Notes</summary>
-        <ul>${(summary.notes || []).map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>
-      </details>
-      <details open>
-        <summary>Best-Practice Checks</summary>
-        <div class="check-list">
-          ${checks.map((check) => `
-            <div class="check-row">
-              <span class="check-status ${escapeHtml(check.status)}">${escapeHtml(check.status)}</span>
-              <div><strong>${escapeHtml(check.name)}</strong><p>${escapeHtml(check.detail)}</p></div>
-            </div>`).join("") || "<p>No best-practice checks could be derived from this model.</p>"}
-        </div>
-      </details>
-      <details>
-        <summary>Top Features</summary>
-        <ol>${features.map((row) => `<li>${escapeHtml(row.feature)}: ${formatMetric(row.importance)}</li>`).join("") || "<li>No feature importance artifact found.</li>"}</ol>
-      </details>
-      <details>
-        <summary>Model Weights</summary>
-        <ol>${weights.map((row) => `<li>${escapeHtml(row.model)}: ${formatMetric(row.weight)}</li>`).join("") || "<li>No ensemble weights found.</li>"}</ol>
-      </details>
-      <details>
-        <summary>Artifacts</summary>
-        <ul>${(summary.artifacts || []).map((artifact) => `<li>${escapeHtml(artifact.name)} (${artifact.size_bytes} bytes)</li>`).join("")}</ul>
-      </details>
-    </div>`;
-
-  const charts = summary.charts || {};
-  if (charts.calibration) Plotly.newPlot("eval-calibration", charts.calibration.data, charts.calibration.layout, { responsive: true });
-  if (charts.confidence) Plotly.newPlot("eval-confidence", charts.confidence.data, charts.confidence.layout, { responsive: true });
-  if (charts.outcomes) Plotly.newPlot("eval-outcomes", charts.outcomes.data, charts.outcomes.layout, { responsive: true });
-}
-
 async function refreshStatus() {
   const status = await api("/api/data/status");
   qs("#status-line").textContent = `Raw: ${status.raw_data_dir} | Data: ${status.data_dir}`;
@@ -565,19 +475,6 @@ async function refreshJobs() {
   qs("#job-strip").textContent = jobs.length
     ? jobs.slice(0, 4).map((job) => `${job.kind}: ${job.state}`).join(" | ")
     : "No background jobs yet";
-  qs("#train-jobs").textContent = jobs.length ? JSON.stringify(jobs, null, 2) : "No training jobs yet.";
-  const trainingJob = jobs.find((job) => job.id === activeTrainingJobId);
-  if (activeTrainingJobId) await renderJobLog("#train-log", activeTrainingJobId);
-  if (trainingJob?.state === "succeeded") {
-    renderEvaluation(trainingJob.result?.evaluation || { available: false, message: "Training finished without evaluation artifacts." });
-    await refreshModels().catch(() => {});
-    activateSubtab("train-evals");
-    activeTrainingJobId = null;
-  } else if (trainingJob?.state === "failed") {
-    renderJson("#eval-output", trainingJob.error || "Training failed");
-    activateSubtab("train-evals");
-    activeTrainingJobId = null;
-  }
   const dataJob = jobs.find((job) => job.id === activeDataJobId);
   if (activeDataJobId) await renderJobLog("#data-log", activeDataJobId);
   if (dataJob?.state === "succeeded") {
@@ -619,11 +516,6 @@ async function renderJobLog(target, jobId) {
   }
 }
 
-function activateSubtab(subtabId) {
-  qsa(".subtab").forEach((item) => item.classList.toggle("active", item.dataset.subtab === subtabId));
-  qsa(".subpanel").forEach((item) => item.classList.toggle("active", item.id === subtabId));
-}
-
 function wireTabs() {
   qsa(".tab").forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -631,11 +523,6 @@ function wireTabs() {
       qsa(".panel").forEach((item) => item.classList.remove("active"));
       tab.classList.add("active");
       qs(`#${tab.dataset.tab}`).classList.add("active");
-    });
-  });
-  qsa(".subtab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      activateSubtab(tab.dataset.subtab);
     });
   });
 }
@@ -682,63 +569,11 @@ function wireData() {
   });
 }
 
-function wireTraining() {
-  qs("#run-train").addEventListener("click", async () => {
-    try {
-      const payload = {
-        model_type: qs("#train-model-type").value,
-        preset: qs("#train-preset").value,
-        time_limit: Number(qs("#train-time-limit").value),
-        split_strategy: qs("#train-split").value,
-        walkforward_n_windows: Number(qs("#train-walk-windows").value),
-        walkforward_initial_year: Number(qs("#train-walk-year").value),
-        refit_full: qs("#train-refit").checked,
-        refit_all: qs("#train-refit-all").checked,
-        use_script_defaults: qs("#train-script-defaults").checked,
-        test_size: qs("#train-test-size").value || null,
-        val_date: qs("#train-val-date").value || null,
-        start_date: qs("#train-start-date").value,
-        num_fights: Number(qs("#train-num-fights").value),
-        include_split_dec: qs("#train-include-split-dec").checked,
-        decay_rate: Number(qs("#train-decay").value),
-        normalize: qs("#train-normalize").value,
-        use_recency_weights: qs("#train-recency").checked,
-        calculate_importance: qs("#train-importance").checked,
-        feature_list: commaList(qs("#train-feature-list").value),
-        included_strings: commaList(qs("#train-include-patterns").value),
-        excluded_strings: commaList(qs("#train-exclude-patterns").value),
-        required_strings: commaList(qs("#train-required-features").value),
-        included_model_types: commaList(qs("#train-model-families").value),
-      };
-      const job = await api("/api/train", { method: "POST", body: JSON.stringify(payload) });
-      activeTrainingJobId = job.job_id;
-      qs("#train-log").textContent = "Queued...";
-      renderJson("#train-jobs", job);
-      await refreshJobs();
-    } catch (error) {
-      renderJson("#train-jobs", error.message);
-    }
-  });
-  qs("#load-eval").addEventListener("click", async () => {
-    try {
-      const modelPath = qs("#train-eval-model").value;
-      const query = modelPath ? `?model_path=${encodeURIComponent(modelPath)}` : "";
-      renderEvaluation(await api(`/api/train/evaluations${query}`));
-    } catch (error) {
-      renderJson("#eval-output", error.message);
-    }
-  });
-}
-
 async function refreshModels() {
   const modelType = qs("#predict-model-type").value || "win";
-  const [predictPayload, allPayload] = await Promise.all([
-    api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`),
-    api("/api/predict/models"),
-  ]);
+  const predictPayload = await api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`);
   const predictModels = predictPayload.models || [];
   qs("#predict-model").innerHTML = modelOptions(predictModels);
-  qs("#train-eval-model").innerHTML = modelOptions(allPayload.models || []);
   renderPredictModelState(modelType, predictModels);
 }
 
@@ -758,7 +593,7 @@ function renderPredictModelState(modelType, models) {
   status.classList.add(predictModelsAvailable ? "ready" : "blocked");
   status.textContent = predictModelsAvailable
     ? `${models.length} ${modelType} model${models.length === 1 ? "" : "s"} available. Leave Model on Latest model to use the newest one.`
-    : `No ${modelType} models found. Run setup again or train a ${modelType} model before predicting.`;
+    : `No ${modelType} models found. Run setup again or provide a compatible ${modelType} model before predicting.`;
 }
 
 function updatePredictionButtons() {
@@ -817,6 +652,7 @@ async function loadUpcomingEventsWithStatus() {
 }
 
 function wirePrediction() {
+  setValue("#fight-date", qs("#fight-date").value || todayDateInputValue());
   qs("#predict-model-type").addEventListener("change", () => {
     refreshModels().catch(() => {});
   });
@@ -844,7 +680,7 @@ function wirePrediction() {
     try {
       const upcomingNumber = selectedUpcomingNumber || Number(qs("#predict-event").value || 0);
       if (!predictModelsAvailable) {
-        renderJson("#events-output", "No model is available for this target. Run setup again or train a model before predicting.");
+        renderJson("#events-output", "No model is available for this target. Run setup again or provide a compatible model before predicting.");
         return;
       }
       if (!upcomingNumber) {
@@ -881,7 +717,7 @@ function wirePrediction() {
       const fighter1 = qs("#fighter1").value.trim();
       const fighter2 = qs("#fighter2").value.trim();
       if (!predictModelsAvailable) {
-        renderJson("#prediction-output", "No model is available for this target. Run setup again or train a model before predicting.");
+        renderJson("#prediction-output", "No model is available for this target. Run setup again or provide a compatible model before predicting.");
         return;
       }
       if (!fighter1 || !fighter2) {
@@ -897,9 +733,7 @@ function wirePrediction() {
         fighter1,
         fighter2,
         fight_date: qs("#fight-date").value || null,
-        odds_fighter1: qs("#fighter1-odds").value ? Number(qs("#fighter1-odds").value) : null,
-        odds_fighter2: qs("#fighter2-odds").value ? Number(qs("#fighter2-odds").value) : null,
-        odds: true,
+        odds: false,
         use_calibrated: qs("#predict-calibrated").checked,
         shap: qs("#predict-shap").checked,
       };
@@ -916,7 +750,6 @@ function wirePrediction() {
 
 wireTabs();
 wireData();
-wireTraining();
 wirePrediction();
 loadDashboardDefaults().catch(() => {}).finally(() => loadUpcomingEventsWithStatus());
 refreshStatus().catch(() => {});

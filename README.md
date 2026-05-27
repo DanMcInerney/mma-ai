@@ -191,9 +191,9 @@ If you want a fully isolated Docker database instead, leave those Compose URLs
 unset and import the Hugging Face dumps into the Compose Postgres volume. The
 Data tab defaults to incremental UFCStats scrape plus generated-schema
 recreation, so future raw CSV updates rebuild the local feature store without
-requiring another dump import. Train/Predict also need generated CSVs and model
-artifacts in the mounted `data/` and `AutogluonModels/` folders, or you need to
-run the Data and Train tabs to create them.
+requiring another dump import. Predict needs generated CSVs and model artifacts
+in the mounted `data/` and `AutogluonModels/` folders; training new models is a
+CLI workflow for advanced users.
 
 ## Dashboard
 
@@ -204,20 +204,15 @@ run the Data and Train tabs to create them.
   before and after row deltas so new fights/fighters are visible without
   opening CSVs. The Analytics panel shows whether an LLM provider is ready or
   the dashboard is currently in SQL-only analytics mode.
-- Train: launch model training with the existing `libs/modeling/train.py`
-  defaults, keep all training knobs collapsed under Advanced Training Knobs, and
-  inspect saved evaluation artifacts with accuracy, log loss, Brier score, ROC
-  AUC, calibration, confidence, feature-importance, and best-practice summaries.
-  Completed dashboard training jobs also write `dashboard_evaluation_summary.json`
-  and `dashboard_evaluation.md` into the model directory.
 - Predict: choose a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, or run a
-  manual fighter-vs-fighter matchup with positive-EV output cards. Odds are used
-  only for market probability and EV calculations, not as model inputs. Event
-  prediction accepts manual fighter odds in the dashboard so web jobs never need
-  to block on terminal prompts.
+  manual fighter-vs-fighter matchup. Event odds are used only for market
+  probability and EV calculations, not as model inputs. Event prediction accepts
+  manual fighter odds in the dashboard so web jobs never need to block on
+  terminal prompts. Manual matchup prediction defaults the fight date to today
+  and does not expose odds controls.
 
-Each long-running Data, Train, or Predict job streams stdout/stderr into a debug
+Each long-running Data or Predict job streams stdout/stderr into a debug
 log under `data/logs/jobs` and exposes it through the dashboard and
 `/api/jobs/{job_id}/log`. Dashboard jobs run one at a time so model/data writes
 and captured debug logs remain deterministic.

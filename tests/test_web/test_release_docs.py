@@ -36,7 +36,7 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "Data: update the shipped raw UFCStats CSVs" in readme
     assert "recalculate odds features from the imported" in readme
     assert "SQL-only analytics mode" in readme
-    assert "Train: launch model training" in readme
+    assert "Training remains a CLI workflow" in readme or "training new models is a\nCLI workflow" in readme
     assert "Predict: choose a model" in readme
     assert "uv run mma-evaluate" in readme
     assert "uv run mma-docker-smoke" in readme
@@ -78,7 +78,8 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
 
     assert "Data tab" in agents
     assert "./setup.sh" in agents
-    assert "Train tab" in agents
+    assert "Train tab" not in agents
+    assert "CLI Training Defaults" in agents
     assert "Predict tab" in agents
     assert "01-create-odds.sql" in agents
     assert "/vendor/plotly.min.js" in agents
@@ -117,10 +118,11 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "transaction with a statement timeout" in release_notes
     assert "SQLite query-only mode" in release_notes
     assert "SQL-only mode" in release_notes
-    assert "Train tab" in release_notes
+    assert "Train tab" not in release_notes
     assert "Predict tab" in release_notes
     assert "mma-evaluate" in release_notes
     assert "Odds are not model inputs" in release_notes
+    assert "does not\n  expose odds controls" in release_notes
     assert "wait for `/api/readiness`" in release_notes
     assert "databases to contain their imported tables" in release_notes
     assert "write matching host-side `DATABASE_URL` and `ODDS_DATABASE_URL`" in release_notes

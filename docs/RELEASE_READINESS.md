@@ -59,23 +59,17 @@ badge.
   transaction with a statement timeout, and uses SQLite query-only mode for
   finalized CSV fallbacks. The Analytics panel exposes a non-secret LLM status
   line so users know whether Ask is in LLM-backed or SQL-only mode.
-- Train tab: run `libs/modeling/train.py` defaults through a compact UI, keep
-  advanced knobs collapsed, and summarize saved model evaluation artifacts with
-  metrics and charts. Completed dashboard training jobs write
-  `dashboard_evaluation_summary.json` and `dashboard_evaluation.md` into the
-  model directory; `mma-evaluate --write-report --format text` and
-  `python scripts/evaluate_model.py --write-report --format text` emit the same
-  report artifacts for automation and local inspection.
 - Predict tab: list models, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, run manual
   fighter matchups, and show AI probability, market probability, AI odds, and
   positive EV status. Odds are not model inputs; event prediction can ingest
   manual American odds through the dashboard/API instead of waiting on terminal
-  input.
-- Job logs: Data, Train, and Predict jobs stream and persist stdout, stderr,
+  input. Manual matchup prediction defaults the fight date to today and does not
+  expose odds controls.
+- Job logs: Data and Predict jobs stream and persist stdout, stderr,
   command lines, exit codes, and tracebacks under `data/logs/jobs` and expose them at
   `/api/jobs/{job_id}/log`. Dashboard jobs are serialized so long-running data,
-  training, and prediction workflows do not interleave process-wide stdout/stderr
+  and prediction workflows do not interleave process-wide stdout/stderr
   captures or write shared artifacts at the same time.
 - Bootstrap scripts: `setup.ps1` and `setup.sh` download the Hugging Face
   dataset artifacts, verify checksums, resume complete database imports by

@@ -24,7 +24,6 @@
 
     <nav class="tabs" aria-label="Dashboard tabs">
       <button class="tab active" data-tab="data"><i data-lucide="database"></i><span>Data</span></button>
-      <button class="tab" data-tab="train"><i data-lucide="sliders-horizontal"></i><span>Train</span></button>
       <button class="tab" data-tab="predict"><i data-lucide="target"></i><span>Predict</span></button>
     </nav>
 
@@ -64,96 +63,6 @@
             <div id="analytics-chart" class="chart"></div>
           </section>
         </div>
-      </section>
-
-      <section id="train" class="panel">
-        <section class="surface">
-          <div class="section-head">
-            <h2>Train Model</h2>
-            <button id="run-train" class="primary"><i data-lucide="brain"></i><span>Train</span></button>
-          </div>
-          <details>
-            <summary>Advanced Training Knobs</summary>
-            <div class="form-grid">
-              <label>Target
-                <select id="train-model-type">
-                  <option value="win">Win</option>
-                  <option value="decision">Decision</option>
-                </select>
-              </label>
-              <label>Preset
-                <select id="train-preset">
-                  <option value="extreme">Extreme</option>
-                  <option value="best">Best</option>
-                </select>
-              </label>
-              <label>Time Limit
-                <input id="train-time-limit" type="number" min="30" value="3000" />
-              </label>
-              <label>Split
-                <select id="train-split">
-                  <option value="timeseries_split">Time Series</option>
-                  <option value="walkforward">Walk Forward</option>
-                  <option value="standard">Standard</option>
-                </select>
-              </label>
-              <label>Start Date <input id="train-start-date" value="2014-01-01" /></label>
-              <label>Holdout Cutoff <input id="train-test-size" placeholder="None" /></label>
-              <label>Validation Start <input id="train-val-date" placeholder="Auto" /></label>
-              <label>Minimum Fights <input id="train-num-fights" type="number" min="0" value="2" /></label>
-              <label>Walk Windows <input id="train-walk-windows" type="number" min="1" max="24" value="4" /></label>
-              <label>Walk Start Year <input id="train-walk-year" type="number" min="1993" max="2100" value="2021" /></label>
-              <label>Decay Rate <input id="train-decay" type="number" min="0" max="1" step="0.01" value="0.15" /></label>
-              <label>Normalize
-                <select id="train-normalize">
-                  <option value="robust">Robust</option>
-                  <option value="zscore">Z-Score</option>
-                  <option value="none">None</option>
-                </select>
-              </label>
-              <label><input id="train-refit" type="checkbox" checked /> Refit full</label>
-              <label><input id="train-refit-all" type="checkbox" /> Refit all data</label>
-              <label><input id="train-recency" type="checkbox" checked /> Recency weights</label>
-              <label><input id="train-importance" type="checkbox" checked /> Feature importance</label>
-              <label><input id="train-script-defaults" type="checkbox" checked /> Script defaults</label>
-              <label><input id="train-include-split-dec" type="checkbox" checked /> Include split decisions</label>
-              <label class="span-two">Model Families
-                <input id="train-model-families" value="TABICL, MITRA, TABM, GBM_PREP, CAT, GBM, REALTABPFN-V2" />
-              </label>
-              <label class="span-two">Feature List
-                <input id="train-feature-list" placeholder="Optional exact feature names, comma-separated" />
-              </label>
-              <label class="span-two">Include Feature Patterns
-                <input id="train-include-patterns" placeholder="Optional substrings that features must include" />
-              </label>
-              <label class="span-two">Exclude Feature Patterns
-                <input id="train-exclude-patterns" placeholder="Optional substrings to remove from features" />
-              </label>
-              <label class="span-two">Required Features
-                <input id="train-required-features" placeholder="Optional exact features to keep even if excluded" />
-              </label>
-            </div>
-          </details>
-          <div class="subtabs">
-            <button class="subtab active" data-subtab="train-jobs">Jobs</button>
-            <button class="subtab" data-subtab="train-evals">Evaluations</button>
-          </div>
-          <div id="train-jobs" class="subpanel active result"></div>
-          <details open>
-            <summary>Debug Log</summary>
-            <pre id="train-log" class="debug-log">No training logs yet.</pre>
-          </details>
-          <div id="train-evals" class="subpanel">
-            <div class="section-head compact">
-              <h2>Model Evaluation</h2>
-              <button id="load-eval" class="secondary"><i data-lucide="bar-chart-3"></i><span>Load</span></button>
-            </div>
-            <label>Model
-              <select id="train-eval-model"></select>
-            </label>
-            <div id="eval-output" class="eval-summary">Training evaluation artifacts appear here after a completed run.</div>
-          </div>
-        </section>
       </section>
 
       <section id="predict" class="panel">
@@ -225,14 +134,6 @@
               <label>Fighter 2 <input id="fighter2" list="fighters-list" /></label>
               <label>Fight Date <input id="fight-date" type="date" /></label>
             </div>
-            <details>
-              <summary>Matchup Odds</summary>
-              <div class="form-grid">
-                <label>Fighter 1 Odds <input id="fighter1-odds" type="number" placeholder="-150" /></label>
-                <label>Fighter 2 Odds <input id="fighter2-odds" type="number" placeholder="+200" /></label>
-                <p class="field-note span-two">Odds are not included in the model. They are only used to calculate market-implied probability and expected value. Blank odds are fetched without prompting.</p>
-              </div>
-            </details>
             <datalist id="fighters-list"></datalist>
             <button id="run-matchup" class="primary wide" disabled><i data-lucide="swords"></i><span>Predict Matchup</span></button>
             <details open>

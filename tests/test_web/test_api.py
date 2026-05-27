@@ -374,6 +374,7 @@ def test_matchup_prediction_endpoint_rejects_missing_model_before_job(monkeypatc
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
     data_dir.mkdir()
     models_dir.mkdir()
+    monkeypatch.setattr("libs.web.services.assert_prediction_runtime_dependencies", lambda: None)
     prediction_csv = data_dir / "prediction_data.csv"
     prediction_csv.write_text("fighter_name\nfighter one\nfighter two\n", encoding="utf-8")
     client = TestClient(create_app())
@@ -396,6 +397,7 @@ def test_event_prediction_endpoint_rejects_missing_latest_model_before_job(monke
     models_dir = tmp_path / "models"
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
     models_dir.mkdir()
+    monkeypatch.setattr("libs.web.services.assert_prediction_runtime_dependencies", lambda: None)
     client = TestClient(create_app())
 
     response = client.post("/api/predict/event", json={"model_type": "win", "upcoming_number": 1})

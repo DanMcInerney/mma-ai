@@ -3,7 +3,7 @@
 This repo is becoming a public, Dockerized MMA AI app that combines the old
 `UFCScraper` raw-data scraper with the `mma-ai-db` feature store, training, and
 prediction system. Keep changes simple, tested, and aligned with the Data,
-Train, and Predict dashboard.
+and Predict dashboard. Training remains a CLI workflow, not a dashboard tab.
 
 ## Main Entry Points
 
@@ -18,7 +18,7 @@ Train, and Predict dashboard.
 - Local icon asset: `/static/icons.js`; do not reintroduce CDN icon dependencies
 - Scrape raw UFCStats CSVs: `uv run mma-scrape-ufcstats`
 - Rebuild database and finalized CSVs: `uv run mma-rebuild-db --reset-db`
-- Train model: `uv run mma-train`
+- Train model from the CLI: `uv run mma-train`
 - Summarize model evaluation artifacts: `uv run mma-evaluate`
 - Predict upcoming event: `uv run mma-predict`
 
@@ -30,17 +30,11 @@ Train, and Predict dashboard.
   `training_data_dec.csv`, then support read-only analytics. Live
   BestFightOdds refresh is opt-in rather than part of the default dashboard
   update.
-- Train: expose defaults from `libs/modeling/train.py`; keep advanced knobs in
-  collapsed UI controls. The Evaluations subtab reads saved model artifacts and
-  charts holdout prediction metrics including accuracy, log loss, Brier score,
-  ROC AUC, calibration, confidence, feature importance, and best-practice
-  checks. Completed dashboard training jobs write `dashboard_evaluation_summary.json`
-  and `dashboard_evaluation.md`; `mma-evaluate --write-report --format text`
-  emits the same report artifacts.
 - Predict: select a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict the selected event, and run
-  manual fighter matchups through the same inference path. Odds are only for EV
-  and market probability calculations, not model inputs.
+  manual fighter matchups through the same inference path. Event odds are only
+  for EV and market probability calculations, not model inputs. Manual matchup
+  odds controls are not exposed in the dashboard.
 
 LLM-assisted analytics use `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
 optional `LLM_BASE_URL` first. The setup scripts can configure OpenAI,
@@ -158,9 +152,9 @@ fight's `event_date`.
 
 ## Prediction Rules
 
-Manual matchups use `predict.py --fighter1 ... --fighter2 ...`, optional
-`--fight-date`, and optional manual American odds. Web jobs must use
-`--no-manual-odds` for BFO lookups so prediction never waits for terminal input.
+Manual matchups use `predict.py --fighter1 ... --fighter2 ...` with a fight
+date. The dashboard defaults that date to today and does not expose matchup odds
+inputs. Web jobs must use `--no-manual-odds` for BFO lookups so prediction never waits for terminal input.
 Keep event and manual prediction on the same `InferenceDataBuilder` path.
 Advanced dashboard prediction CSV path overrides must stay under
 `MMA_AI_DATA_DIR`, prediction output directory overrides must stay under

@@ -52,14 +52,13 @@ def test_local_icon_bundle_covers_dashboard_icons():
 def test_primary_workflow_buttons_render_api_errors_in_place():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
-    assert app_js.count("catch (error)") >= 8
+    assert app_js.count("catch (error)") >= 7
     assert 'renderJson("#data-output", error.message)' in app_js
-    assert 'renderJson("#train-jobs", error.message)' in app_js
     assert 'renderJson("#events-output", error.message)' in app_js
     assert 'renderJson("#prediction-output", error.message)' in app_js
 
 
-def test_data_and_training_ui_are_simplified():
+def test_data_ui_is_simplified_and_train_tab_is_removed():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
@@ -70,6 +69,13 @@ def test_data_and_training_ui_are_simplified():
     assert "Training Chat" not in html
     assert "run-train-chat" not in html
     assert "run-train-chat" not in app_js
+    assert 'data-tab="train"' not in html
+    assert 'id="train"' not in html
+    assert "Train Model" not in html
+    assert "Advanced Training Knobs" not in html
+    assert "run-train" not in html
+    assert "wireTraining" not in app_js
+    assert "/api/train" not in app_js
     assert "scrape: true" in app_js
     assert "rebuild: true" in app_js
     assert "reset_db: true" in app_js
@@ -77,7 +83,6 @@ def test_data_and_training_ui_are_simplified():
     assert "row_deltas" in app_js
     assert "function renderDataMetrics(status, deltas = {})" in app_js
     assert "this run" in app_js
-    assert html.index("Advanced Training Knobs") < html.index('id="train-model-type"')
 
 
 def test_manual_matchup_validates_required_fighter_names_before_api_call():
@@ -87,27 +92,31 @@ def test_manual_matchup_validates_required_fighter_names_before_api_call():
     assert 'qs("#fighter1").value.trim()' in app_js
     assert 'qs("#fighter2").value.trim()' in app_js
     assert 'id="fight-date" type="date"' in html
+    assert "function todayDateInputValue()" in app_js
+    assert 'setValue("#fight-date", qs("#fight-date").value || todayDateInputValue())' in app_js
     assert 'fight_date: qs("#fight-date").value || null' in app_js
     assert "Enter both fighter names before prediction." in app_js
 
 
-def test_training_advanced_feature_filter_controls_are_wired():
+def test_training_dashboard_controls_are_removed():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
     for element_id in [
+        "run-train",
+        "train-log",
+        "train-jobs",
+        "train-eval-model",
         "train-feature-list",
         "train-include-patterns",
         "train-exclude-patterns",
         "train-required-features",
     ]:
-        assert f'id="{element_id}"' in html
-        assert f'qs("#{element_id}").value' in app_js
+        assert f'id="{element_id}"' not in html
+        assert f'#{element_id}' not in app_js
 
-    assert "feature_list" in app_js
-    assert "included_strings" in app_js
-    assert "excluded_strings" in app_js
-    assert "required_strings" in app_js
+    assert "activeTrainingJobId" not in app_js
+    assert "renderEvaluation" not in app_js
 
 
 def test_prediction_advanced_csv_controls_are_wired():
@@ -137,7 +146,13 @@ def test_predict_model_dropdown_filters_with_selected_target():
     assert html.index("Advanced Prediction Knobs") < html.index('id="predict-model-type"')
     assert 'id="predict-odds"' not in html
     assert 'id="matchup-odds"' not in html
+    assert "Matchup Odds" not in html
+    assert 'id="fighter1-odds"' not in html
+    assert 'id="fighter2-odds"' not in html
     assert 'odds: true' in app_js
+    assert 'odds: false' in app_js
+    assert "odds_fighter1" not in app_js
+    assert "odds_fighter2" not in app_js
     assert 'id="run-event-predict" class="primary wide" disabled' in html
     assert 'id="run-matchup" class="primary wide" disabled' in html
     assert 'api(`/api/predict/models?model_type=${encodeURIComponent(modelType)}`)' in app_js
@@ -149,7 +164,6 @@ def test_predict_model_dropdown_filters_with_selected_target():
     assert "function updatePredictionButtons()" in app_js
     assert 'setDisabled("#run-event-predict", !predictModelsAvailable || !selectedEventHasMatchedFights)' in app_js
     assert 'setDisabled("#run-matchup", !predictModelsAvailable)' in app_js
-    assert 'api("/api/predict/models")' in app_js
     assert ".model-status.blocked" in styles
     assert "button:disabled" in styles
 
@@ -167,10 +181,7 @@ def test_dashboard_controls_hydrate_from_defaults_endpoint():
     assert 'api("/api/defaults")' in app_js
     assert "function applyDashboardDefaults(defaults)" in app_js
     assert "setValue(\"#analytics-max-rows\", data.analytics_max_rows)" in app_js
-    assert "setValue(\"#train-time-limit\", train.time_limit)" in app_js
-    assert "setValue(\"#train-split\", train.split_strategy)" in app_js
-    assert "setValue(\"#train-model-families\", listValue(train.included_model_types))" in app_js
-    assert "setChecked(\"#train-refit\", train.refit_full)" in app_js
+    assert "const train = defaults.train" not in app_js
     assert "selectedUpcomingNumber = Number(predict.upcoming_number || 1)" in app_js
     assert "const existingSelection = select?.value ? Number(select.value) : null" in app_js
     assert ": Number(events[0].upcoming_number)" in app_js
@@ -244,7 +255,7 @@ def test_debug_logs_and_manual_event_odds_are_wired():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
-    for element_id in ["data-log", "train-log", "events-log", "prediction-log", "event-manual-odds"]:
+    for element_id in ["data-log", "events-log", "prediction-log", "event-manual-odds"]:
         assert f'id="{element_id}"' in html
 
     assert "function parseManualOdds(value)" in app_js
@@ -267,5 +278,4 @@ def test_sticky_job_footer_does_not_cover_lower_predict_controls():
 def test_successful_background_jobs_refresh_dependent_dashboard_state():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
-    assert "await refreshModels().catch(() => {});" in app_js
     assert "await loadUpcomingEventsWithStatus();" in app_js
