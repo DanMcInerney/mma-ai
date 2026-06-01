@@ -10,7 +10,9 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
     styles = (STATIC_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert 'src="/vendor/plotly.min.js"' in html
-    assert 'src="/static/icons.js"' in html
+    assert 'src="/static/icons.js' in html
+    assert 'src="/static/app.js?v=analytics-python-20260601"' in html
+    assert 'href="/static/styles.css?v=analytics-python-20260601"' in html
     assert "cdn.plot.ly" not in html
     assert "unpkg.com" not in html
     assert "Pick" in app_js
@@ -248,16 +250,30 @@ def test_analytics_options_expose_bounded_row_limit():
 
     assert 'id="analytics-max-rows" type="number" min="1" max="1000" value="100"' in html
     assert 'id="analytics-status"' in html
+    assert 'id="analytics-copy-status"' in html
+    assert 'id="copy-analytics-system-prompt"' in html
+    assert "Copy Analytics Agent System Prompt" in html
+    assert 'api("/api/data/analytics/system-prompt")' in app_js
+    assert "function copyText(value)" in app_js
+    assert "Analytics agent system prompt copied." in app_js
     assert "max_rows: Number(qs(\"#analytics-max-rows\").value || 100)" in app_js
-    assert "function renderPlotlyChart(target, chart)" in app_js
+    assert "function renderAnalyticsReport(result)" in app_js
+    assert "function renderPlotlyCharts(target, charts)" in app_js
+    assert "normalizeAnalyticsCharts(result)" in app_js
+    assert "function renderPlotlyChart(target, chart)" not in app_js
     assert "function refreshAnalyticsStatus()" in app_js
     assert 'api("/api/data/analytics/status")' in app_js
     assert "LLM analytics ready" in app_js
     assert "Plotly.purge(element)" in app_js
-    assert 'renderPlotlyChart("#analytics-chart", result.chart)' in app_js
-    assert 'renderPlotlyChart("#analytics-chart", null)' in app_js
+    assert "renderAnalyticsReport(result)" in app_js
+    assert "renderAnalyticsError(error.message)" in app_js
+    assert 'id="analytics-output" class="result analytics-report"' in html
+    assert 'id="analytics-chart" class="chart analytics-chart-grid"' in html
     assert ".analytics-status.ready" in styles
     assert ".analytics-status.blocked" in styles
+    assert ".copy-status" in styles
+    assert ".analytics-chart-card" in styles
+    assert ".analytics-table" in styles
 
 
 def test_debug_logs_and_manual_event_odds_are_wired():

@@ -5,7 +5,16 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import pandas as pd
 
-from libs.web.analytics import _execute_read_only_query, database_context, is_read_only_sql, parse_llm_json, run_analytics
+from libs.web.analytics import (
+    _execute_read_only_query,
+    _run_python_analysis,
+    _validate_python_analysis_code,
+    database_context,
+    is_read_only_sql,
+    parse_llm_json,
+    run_analytics,
+)
+from libs.web.analytics_prompt import analytics_system_prompt
 
 
 def clear_llm_env(monkeypatch):
@@ -106,7 +115,8 @@ def test_run_analytics_executes_against_finalized_csv_fallback(monkeypatch, tmp_
     )
 
     assert result["rows"] == [{"fighter1_name": "a", "y_true": 1, "feature_diff": 0.4}]
-    assert result["chart"] is not None
+    assert "chart" not in result
+    assert result["charts"]
 
 
 def test_database_analytics_runs_inside_postgres_read_only_transaction(monkeypatch):
@@ -174,6 +184,75 @@ def test_database_analytics_runs_inside_postgres_read_only_transaction(monkeypat
     assert executed[-2:] == ["END", "DISPOSE"]
 
 
+def test_python_analytics_runner_uses_guarded_postgres_helper(monkeypatch):
+    captured = {}
+
+    def fake_database_query(sql, max_rows):
+        captured["sql"] = sql
+        captured["max_rows"] = max_rows
+        return pd.DataFrame(
+            [
+                {"weightclass": "Lightweight", "fights": 28},
+                {"weightclass": "Welterweight", "fights": 31},
+            ]
+        )
+
+    monkeypatch.setattr("libs.web.analytics._execute_database_only_read_only_query", fake_database_query)
+
+    result = _run_python_analysis(
+        "\n".join(
+            [
+                "df = run_sql('select weightclass, fights from features.fight_mapping', limit=50)",
+                "set_answer('Weight class summary')",
+                "set_rows(df)",
+                "fig = px.bar(df, x='weightclass', y='fights', title='Fights by weight class')",
+                "add_chart(fig)",
+            ]
+        ),
+        max_rows=100,
+    )
+
+    assert captured == {"sql": "select weightclass, fights from features.fight_mapping", "max_rows": 50}
+    assert result["answer"] == "Weight class summary"
+    assert result["sql"] == "select weightclass, fights from features.fight_mapping"
+    assert result["rows"][0]["weightclass"] == "Lightweight"
+    assert result["columns"] == ["weightclass", "fights"]
+    assert len(result["charts"]) == 1
+    assert result["charts"][0]["layout"]["title"]["text"] == "Fights by weight class"
+
+
+def test_python_analytics_runner_normalizes_escaped_llm_newlines(monkeypatch):
+    monkeypatch.setattr(
+        "libs.web.analytics._execute_database_only_read_only_query",
+        lambda _sql, _max_rows: pd.DataFrame([{"weightclass": "Lightweight", "fights": 28}]),
+    )
+
+    result = _run_python_analysis(
+        (
+            "df = run_sql('select weightclass, fights from features.fight_mapping', limit=50)\\n"
+            "set_answer('Escaped newlines work')\\n"
+            "set_rows(df)\\n"
+            "add_chart(px.bar(df, x='weightclass', y='fights', title='Escaped chart'))"
+        ),
+        max_rows=100,
+    )
+
+    assert result["answer"] == "Escaped newlines work"
+    assert result["rows"] == [{"weightclass": "Lightweight", "fights": 28}]
+    assert result["charts"][0]["layout"]["title"]["text"] == "Escaped chart"
+
+
+def test_python_analytics_runner_rejects_unsafe_code():
+    with pytest.raises(ValueError, match="import"):
+        _validate_python_analysis_code("import os\nset_answer('bad')")
+
+    with pytest.raises(ValueError, match="open"):
+        _validate_python_analysis_code("open('secret.txt').read()")
+
+    with pytest.raises(ValueError, match="read_csv"):
+        _validate_python_analysis_code("pd.read_csv('training_data.csv')")
+
+
 def test_run_analytics_uses_google_api_key_alias(monkeypatch, tmp_path):
     clear_llm_env(monkeypatch)
     monkeypatch.setenv("GOOGLE_API_KEY", "google-key")
@@ -184,11 +263,18 @@ def test_run_analytics_uses_google_api_key_alias(monkeypatch, tmp_path):
         monkeypatch,
         json.dumps(
             {
-                "answer": "AI summary",
-                "sql": "select fighter1_name, wins from training_data",
-                "chart": {"type": "bar", "x": "fighter1_name", "y": "wins"},
+                "python": (
+                    "df = run_sql('select fighter1_name, wins from features.win_summary', limit=100)\n"
+                    "set_answer('AI summary')\n"
+                    "set_rows(df)\n"
+                    "add_chart(px.bar(df, x='fighter1_name', y='wins', title='Wins by fighter'))"
+                ),
             }
         ),
+    )
+    monkeypatch.setattr(
+        "libs.web.analytics._execute_database_only_read_only_query",
+        lambda _sql, _max_rows: pd.DataFrame([{"fighter1_name": "a", "wins": 3}]),
     )
 
     result = run_analytics("Show wins")
@@ -197,7 +283,39 @@ def test_run_analytics_uses_google_api_key_alias(monkeypatch, tmp_path):
     assert captured["model_name"] == "gemini-1.5-pro"
     assert result["answer"] == "AI summary"
     assert result["rows"] == [{"fighter1_name": "a", "wins": 3}]
-    assert result["chart"] is not None
+    assert "chart" not in result
+    assert result["charts"]
+
+
+def test_analytics_llm_prompt_includes_copyable_system_prompt(monkeypatch, tmp_path):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv("GOOGLE_API_KEY", "google-key")
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:1/missing")
+    pd.DataFrame([{"fighter1_name": "a", "wins": 3}]).to_csv(tmp_path / "training_data.csv", index=False)
+    captured = install_fake_gemini(
+        monkeypatch,
+        json.dumps(
+            {
+                "python": (
+                    "df = run_sql('select fighter1_name, wins from features.win_summary', limit=100)\n"
+                    "set_answer('AI summary')\n"
+                    "set_rows(df)"
+                )
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        "libs.web.analytics._execute_database_only_read_only_query",
+        lambda _sql, _max_rows: pd.DataFrame([{"fighter1_name": "a", "wins": 3}]),
+    )
+
+    run_analytics("Show wins")
+
+    payload = json.loads(captured["prompt"])
+    assert payload["system_prompt"] == analytics_system_prompt()
+    assert "_adjperf" in payload["system_prompt"]
+    assert "features.odds" in payload["system_prompt"]
 
 
 def test_run_analytics_uses_openai_compatible_llm(monkeypatch, tmp_path):
@@ -221,9 +339,12 @@ def test_run_analytics_uses_openai_compatible_llm(monkeypatch, tmp_path):
                         "message": {
                             "content": json.dumps(
                                 {
-                                    "answer": "AI summary",
-                                    "sql": "select fighter1_name, wins from training_data",
-                                    "chart": {"type": "bar", "x": "fighter1_name", "y": "wins"},
+                                    "python": (
+                                        "df = run_sql('select fighter1_name, wins from features.win_summary', limit=100)\n"
+                                        "set_answer('AI summary')\n"
+                                        "set_rows(df)\n"
+                                        "add_chart(px.bar(df, x='fighter1_name', y='wins', title='Wins by fighter'))"
+                                    ),
                                 }
                             )
                         }
@@ -236,6 +357,10 @@ def test_run_analytics_uses_openai_compatible_llm(monkeypatch, tmp_path):
         return FakeResponse()
 
     monkeypatch.setattr("libs.web.llm.requests.post", fake_post)
+    monkeypatch.setattr(
+        "libs.web.analytics._execute_database_only_read_only_query",
+        lambda _sql, _max_rows: pd.DataFrame([{"fighter1_name": "a", "wins": 3}]),
+    )
 
     result = run_analytics("Show wins")
 
@@ -247,7 +372,7 @@ def test_run_analytics_uses_openai_compatible_llm(monkeypatch, tmp_path):
     assert result["rows"] == [{"fighter1_name": "a", "wins": 3}]
 
 
-def test_run_analytics_accepts_llm_plotly_figure_spec(monkeypatch, tmp_path):
+def test_run_analytics_accepts_llm_plotly_figure_specs(monkeypatch, tmp_path):
     clear_llm_env(monkeypatch)
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
@@ -265,12 +390,13 @@ def test_run_analytics_accepts_llm_plotly_figure_spec(monkeypatch, tmp_path):
                         "message": {
                             "content": json.dumps(
                                 {
-                                    "answer": "AI chart",
-                                    "sql": "select fighter1_name, wins from training_data",
-                                    "chart": {
-                                        "data": [{"type": "bar", "x": ["a"], "y": [3], "name": "Wins"}],
-                                        "layout": {"title": "Wins by fighter"},
-                                    },
+                                    "python": (
+                                        "df = run_sql('select fighter1_name, wins from features.win_summary', limit=100)\n"
+                                        "set_answer('AI chart')\n"
+                                        "set_rows(df)\n"
+                                        "add_chart({'data': [{'type': 'bar', 'x': ['a'], 'y': [3], 'name': 'Wins'}], "
+                                        "'layout': {'title': 'Wins by fighter'}})"
+                                    ),
                                 }
                             )
                         }
@@ -279,15 +405,81 @@ def test_run_analytics_accepts_llm_plotly_figure_spec(monkeypatch, tmp_path):
             }
 
     monkeypatch.setattr("libs.web.llm.requests.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(
+        "libs.web.analytics._execute_database_only_read_only_query",
+        lambda _sql, _max_rows: pd.DataFrame([{"fighter1_name": "a", "wins": 3}]),
+    )
 
     result = run_analytics("Show wins")
 
-    assert result["chart"]["data"] == [{"type": "bar", "x": ["a"], "y": [3], "name": "Wins"}]
-    assert result["chart"]["layout"]["title"] == "Wins by fighter"
-    assert result["chart"]["layout"]["template"] == "plotly_white"
+    assert "chart" not in result
+    assert result["charts"][0]["data"] == [{"type": "bar", "x": ["a"], "y": [3], "name": "Wins"}]
+    assert result["charts"][0]["layout"]["title"] == "Wins by fighter"
+    assert result["charts"][0]["layout"]["template"] == "plotly_white"
 
 
-def test_run_analytics_falls_back_when_llm_chart_spec_is_not_an_object(monkeypatch, tmp_path):
+def test_run_analytics_accepts_llm_charts_array(monkeypatch, tmp_path):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:1/missing")
+    pd.DataFrame(
+        [
+            {"weightclass": "Lightweight", "avg_sig_str_acc": 0.48, "fight_count": 28},
+            {"weightclass": "Welterweight", "avg_sig_str_acc": 0.44, "fight_count": 31},
+        ]
+    ).to_csv(tmp_path / "training_data.csv", index=False)
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "python": (
+                                        "df = run_sql('select weightclass, avg_sig_str_acc, fight_count "
+                                        "from features.sig_str_summary', limit=100)\n"
+                                        "set_answer('Two coordinated charts')\n"
+                                        "set_rows(df)\n"
+                                        "add_chart(px.bar(df, x='weightclass', y='avg_sig_str_acc', "
+                                        "title='Significant strike accuracy by weight class'))\n"
+                                        "add_chart(px.scatter(df, x='fight_count', y='avg_sig_str_acc', "
+                                        "title='Volume versus accuracy'))"
+                                    ),
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr("libs.web.llm.requests.post", lambda *_args, **_kwargs: FakeResponse())
+    monkeypatch.setattr(
+        "libs.web.analytics._execute_database_only_read_only_query",
+        lambda _sql, _max_rows: pd.DataFrame(
+            [
+                {"weightclass": "Lightweight", "avg_sig_str_acc": 0.48, "fight_count": 28},
+                {"weightclass": "Welterweight", "avg_sig_str_acc": 0.44, "fight_count": 31},
+            ]
+        ),
+    )
+
+    result = run_analytics("Compare striking accuracy and volume")
+
+    assert result["answer"] == "Two coordinated charts"
+    assert "chart" not in result
+    assert len(result["charts"]) == 2
+    assert result["charts"][0]["layout"]["title"]["text"] == "Significant strike accuracy by weight class"
+    assert result["charts"][1]["layout"]["title"]["text"] == "Volume versus accuracy"
+    assert result["charts"][1]["layout"]["paper_bgcolor"] == "#ffffff"
+
+
+def test_run_analytics_requires_llm_python_script(monkeypatch, tmp_path):
     clear_llm_env(monkeypatch)
     monkeypatch.setenv("GOOGLE_API_KEY", "google-key")
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
@@ -299,15 +491,12 @@ def test_run_analytics_falls_back_when_llm_chart_spec_is_not_an_object(monkeypat
             {
                 "answer": "AI summary",
                 "sql": "select fighter1_name, wins from training_data",
-                "chart": "not a chart object",
             }
         ),
     )
 
-    result = run_analytics("Show wins")
-
-    assert result["chart"] is not None
-    assert result["chart"]["data"][0]["type"] == "bar"
+    with pytest.raises(ValueError, match="python script"):
+        run_analytics("Show wins")
 
 
 def test_database_context_lists_finalized_csvs(monkeypatch, tmp_path):
@@ -324,7 +513,7 @@ def test_database_context_lists_finalized_csvs(monkeypatch, tmp_path):
 def test_parse_llm_json_accepts_markdown_fence():
     parsed = parse_llm_json(
         """```json
-        {"answer": "ok", "sql": "select * from training_data", "chart": {"type": "bar", "x": "fighter1_name", "y": "y_true"}}
+        {"answer": "ok", "sql": "select * from training_data", "charts": [{"type": "bar", "x": "fighter1_name", "y": "y_true"}]}
         ```"""
     )
 
