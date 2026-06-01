@@ -4,9 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MMA AI</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=analytics-python-20260601" />
     <script src="/vendor/plotly.min.js"></script>
-    <script src="/static/icons.js"></script>
+    <script src="/static/icons.js?v=analytics-python-20260601"></script>
   </head>
   <body>
     <header class="topbar">
@@ -46,9 +46,15 @@
           <section class="surface">
             <div class="section-head">
               <h2>Analytics</h2>
-              <button id="run-analytics" class="primary"><i data-lucide="sparkles"></i><span>Ask</span></button>
+              <div class="section-actions">
+                <button id="copy-analytics-system-prompt" class="secondary" title="Copy the full MMA analytics system prompt for coding agents">
+                  <i data-lucide="copy"></i><span>Copy Analytics Agent System Prompt</span>
+                </button>
+                <button id="run-analytics" class="primary"><i data-lucide="sparkles"></i><span>Ask</span></button>
+              </div>
             </div>
             <p id="analytics-status" class="field-note analytics-status">Checking analytics setup...</p>
+            <p id="analytics-copy-status" class="field-note copy-status" aria-live="polite"></p>
             <textarea id="analytics-question" rows="4" placeholder="Which features changed most over the last five UFC events?"></textarea>
             <textarea id="analytics-sql" rows="4" placeholder="Optional read-only SQL"></textarea>
             <details>
@@ -59,8 +65,8 @@
                 </label>
               </div>
             </details>
-            <div id="analytics-output" class="result"></div>
-            <div id="analytics-chart" class="chart"></div>
+            <div id="analytics-output" class="result analytics-report" aria-live="polite"></div>
+            <div id="analytics-chart" class="chart analytics-chart-grid"></div>
           </section>
         </div>
       </section>
@@ -158,6 +164,6 @@
     </main>
 
     <footer id="job-strip"></footer>
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=analytics-python-20260601"></script>
   </body>
 </html>

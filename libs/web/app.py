@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 
 from libs.paths import data_dir
 from libs.web.analytics import run_analytics
+from libs.web.analytics_prompt import ANALYTICS_AGENT_SYSTEM_PROMPT_VERSION, analytics_system_prompt
 from libs.web.evaluations import summarize_model_evaluation
 from libs.web.jobs import JobManager
 from libs.web.models import (
@@ -107,6 +108,10 @@ def create_app() -> FastAPI:
     @app.get("/api/data/analytics/status")
     def analytics_status() -> dict:
         return get_analytics_status()
+
+    @app.get("/api/data/analytics/system-prompt")
+    def analytics_prompt() -> dict:
+        return {"version": ANALYTICS_AGENT_SYSTEM_PROMPT_VERSION, "system_prompt": analytics_system_prompt()}
 
     @app.get("/api/train/defaults")
     def train_defaults() -> dict:

@@ -24,14 +24,106 @@ function renderJson(target, value) {
   qs(target).textContent = typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
 
-function renderPlotlyChart(target, chart) {
+function chartTitle(chart, index) {
+  const title = chart?.layout?.title;
+  if (typeof title === "string" && title.trim()) return title;
+  if (title?.text) return title.text;
+  return `Chart ${index + 1}`;
+}
+
+function normalizeAnalyticsCharts(result) {
+  if (Array.isArray(result?.charts)) return result.charts.filter((chart) => chart?.data && chart?.layout);
+  return [];
+}
+
+function renderPlotlyCharts(target, charts) {
   const element = qs(target);
-  if (!chart) {
-    if (window.Plotly) Plotly.purge(element);
-    element.innerHTML = "";
+  if (window.Plotly) {
+    element.querySelectorAll(".analytics-plot").forEach((plot) => Plotly.purge(plot));
+    if (element.classList.contains("js-plotly-plot")) Plotly.purge(element);
+  }
+  element.innerHTML = "";
+
+  const normalizedCharts = (Array.isArray(charts) ? charts : charts ? [charts] : [])
+    .filter((chart) => chart?.data && chart?.layout);
+  if (!normalizedCharts.length) {
+    element.classList.remove("has-charts");
     return;
   }
-  Plotly.newPlot(element, chart.data, chart.layout, { responsive: true });
+
+  element.classList.add("has-charts");
+  normalizedCharts.forEach((chart, index) => {
+    const title = chartTitle(chart, index);
+    const card = document.createElement("article");
+    card.className = "analytics-chart-card";
+    card.innerHTML = `<div class="analytics-chart-title">${escapeHtml(title)}</div>`;
+    const plot = document.createElement("div");
+    plot.className = "analytics-plot";
+    plot.setAttribute("aria-label", title);
+    card.appendChild(plot);
+    element.appendChild(card);
+    Plotly.newPlot(plot, chart.data, chart.layout, { responsive: true, displaylogo: false });
+  });
+}
+
+function renderAnalyticsRows(rows, columns) {
+  if (!rows.length) return `<div class="analytics-empty">No rows returned for this query.</div>`;
+  const visibleColumns = (columns.length ? columns : Object.keys(rows[0])).slice(0, 7);
+  const extraColumns = Math.max((columns.length || Object.keys(rows[0]).length) - visibleColumns.length, 0);
+  const visibleRows = rows.slice(0, 8);
+  const header = visibleColumns.map((column) => `<th>${escapeHtml(column)}</th>`).join("");
+  const body = visibleRows.map((row) => (
+    `<tr>${visibleColumns.map((column) => `<td>${escapeHtml(row[column])}</td>`).join("")}</tr>`
+  )).join("");
+  const noteParts = [];
+  if (rows.length > visibleRows.length) noteParts.push(`${rows.length - visibleRows.length} more rows`);
+  if (extraColumns > 0) noteParts.push(`${extraColumns} more columns`);
+  const note = noteParts.length ? `<div class="analytics-table-note">${escapeHtml(noteParts.join(", "))}</div>` : "";
+  return `
+    <div class="analytics-table-wrap">
+      <table class="analytics-table">
+        <thead><tr>${header}</tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    ${note}
+  `;
+}
+
+function renderAnalyticsReport(result) {
+  const output = qs("#analytics-output");
+  const rows = Array.isArray(result?.rows) ? result.rows : [];
+  const columns = Array.isArray(result?.columns) ? result.columns : [];
+  const charts = normalizeAnalyticsCharts(result);
+  const paragraphs = String(result?.answer || "Query executed.")
+    .split(/\n{2,}/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+    .join("");
+  const sql = result?.sql ? escapeHtml(result.sql) : "No SQL was returned.";
+  output.innerHTML = `
+    <div class="analytics-answer">
+      <span class="analytics-kicker">Analysis</span>
+      ${paragraphs || "<p>Query executed.</p>"}
+    </div>
+    <div class="analytics-metrics">
+      <div><strong>${rows.length}</strong><span>Rows</span></div>
+      <div><strong>${columns.length}</strong><span>Columns</span></div>
+      <div><strong>${charts.length}</strong><span>Charts</span></div>
+    </div>
+    <details class="analytics-sql">
+      <summary>SQL</summary>
+      <pre>${sql}</pre>
+    </details>
+    ${renderAnalyticsRows(rows, columns)}
+  `;
+  renderPlotlyCharts("#analytics-chart", charts);
+}
+
+function renderAnalyticsError(message) {
+  qs("#analytics-output").innerHTML = `<div class="analytics-error">${escapeHtml(message)}</div>`;
+  renderPlotlyCharts("#analytics-chart", []);
 }
 
 function escapeHtml(value) {
@@ -163,6 +255,32 @@ function setLogText(selector, value) {
   if (!element) return;
   element.textContent = value;
   element.scrollTop = element.scrollHeight;
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch (_error) {
+      // Fall through to the textarea fallback for browsers that expose the API
+      // but block write permission in this context.
+    }
+  }
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.setAttribute("readonly", "");
+  textArea.style.position = "fixed";
+  textArea.style.left = "-9999px";
+  document.body.appendChild(textArea);
+  textArea.select();
+  try {
+    if (!document.execCommand("copy")) {
+      throw new Error("Clipboard copy was blocked.");
+    }
+  } finally {
+    textArea.remove();
+  }
 }
 
 function listValue(value) {
@@ -554,6 +672,16 @@ function wireData() {
   qs("#refresh-status").addEventListener("click", async () => {
     await Promise.allSettled([refreshStatus(), refreshReadiness(), refreshAnalyticsStatus()]);
   });
+  qs("#copy-analytics-system-prompt").addEventListener("click", async () => {
+    const status = qs("#analytics-copy-status");
+    try {
+      const payload = await api("/api/data/analytics/system-prompt");
+      await copyText(payload.system_prompt);
+      status.textContent = "Analytics agent system prompt copied.";
+    } catch (error) {
+      status.textContent = `Could not copy prompt: ${error.message}`;
+    }
+  });
   qs("#run-data").addEventListener("click", async () => {
     try {
       const payload = {
@@ -583,11 +711,9 @@ function wireData() {
           max_rows: Number(qs("#analytics-max-rows").value || 100),
         }),
       });
-      renderJson("#analytics-output", { answer: result.answer, sql: result.sql, rows: result.rows });
-      renderPlotlyChart("#analytics-chart", result.chart);
+      renderAnalyticsReport(result);
     } catch (error) {
-      renderJson("#analytics-output", error.message);
-      renderPlotlyChart("#analytics-chart", null);
+      renderAnalyticsError(error.message);
     }
   });
 }

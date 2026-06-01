@@ -5,6 +5,7 @@
     "bar-chart-3": '<path d="M3 3v18h18"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-4"/>',
     brain: '<path d="M8.5 14.5A3.5 3.5 0 0 1 5 11c0-1.6 1.1-3 2.6-3.4A3.6 3.6 0 0 1 14 5.3 3.7 3.7 0 0 1 19 8.8a3.7 3.7 0 0 1-.9 7.2H16"/><path d="M12 5v14"/><path d="M8 19a3 3 0 0 1-3-3v-1"/><path d="M16 19a3 3 0 0 0 3-3v-1"/><path d="M8.5 10.5h2"/><path d="M13.5 10.5h2"/><path d="M9 15h2"/><path d="M13 15h2"/>',
     "calendar-search": '<path d="M8 2v4"/><path d="M16 2v4"/><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><circle cx="11" cy="15" r="2.5"/><path d="M13 17l2 2"/>',
+    copy: '<rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>',
     database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
     "message-square-text": '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 8h8"/><path d="M8 12h6"/>',
     play: '<polygon points="6,4 20,12 6,20"/>',
