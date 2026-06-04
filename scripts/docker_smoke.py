@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import textwrap
 import time
 import uuid
 from dataclasses import dataclass
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 
 DEFAULT_IMAGE = "mma-ai-web:latest"
@@ -79,6 +83,109 @@ def _docker_exec(container_name: str, command: list[str], *, timeout: int | None
 
 def _docker_exec_allow_failure(container_name: str, command: list[str], *, timeout: int | None = None) -> CommandResult:
     return _run_allow_failure(["docker", "exec", container_name, *command], timeout=timeout)
+
+
+def _join_url(base_url: str, path: str) -> str:
+    return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
+
+
+def _fetch_json(base_url: str, path: str, *, timeout_seconds: int) -> tuple[int, dict]:
+    url = _join_url(base_url, path)
+    request = Request(url, headers={"Accept": "application/json"})
+    try:
+        with urlopen(request, timeout=timeout_seconds) as response:
+            status = int(getattr(response, "status", 200))
+            body = response.read().decode("utf-8", errors="replace")
+    except HTTPError as exc:
+        status = exc.code
+        body = exc.read().decode("utf-8", errors="replace")
+    except URLError as exc:
+        raise SmokeError(f"Could not reach {url}: {exc}") from exc
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise SmokeError(f"Expected JSON from {url}, got: {body[:500]!r}") from exc
+    if not isinstance(payload, dict):
+        raise SmokeError(f"Expected JSON object from {url}, got: {type(payload).__name__}")
+    return status, payload
+
+
+def _readiness_payload(payload: dict) -> dict:
+    detail = payload.get("detail")
+    if isinstance(detail, dict) and "ready" in detail:
+        return detail
+    return payload
+
+
+def _format_readiness_failure(name: str, check: object) -> str:
+    if not isinstance(check, dict):
+        return f"{name} (invalid check payload)"
+
+    details: list[str] = []
+    missing_columns = check.get("missing_columns") or []
+    if missing_columns:
+        details.append(f"missing columns: {', '.join(str(column) for column in missing_columns)}")
+
+    if "rows" in check and not check.get("rows"):
+        details.append(f"rows: {check.get('rows')}")
+
+    missing_tables = check.get("missing_tables") or []
+    if missing_tables:
+        details.append(f"missing tables: {', '.join(str(table) for table in missing_tables)}")
+
+    if check.get("error"):
+        details.append(f"error: {check['error']}")
+
+    if name == "starter_model":
+        expected = check.get("expected") or "configured starter model"
+        models = check.get("models") or []
+        discovered = ", ".join(str(model) for model in models) if models else "none"
+        details.append(f"expected {expected}; discovered {discovered}")
+
+    suffix = "; ".join(details) if details else "not ok"
+    return f"{name} ({suffix})"
+
+
+def _failed_readiness_checks(readiness: dict) -> list[str]:
+    checks = readiness.get("checks")
+    if not isinstance(checks, dict):
+        return ["readiness checks unavailable"]
+    failures = [
+        _format_readiness_failure(name, check)
+        for name, check in checks.items()
+        if not isinstance(check, dict) or check.get("ok") is not True
+    ]
+    return failures or ["ready=false"]
+
+
+def check_deployed_readiness(base_url: str, model_type: str = "win", timeout_seconds: int = 30) -> None:
+    """Verify a deployed dashboard has the artifacts needed for prediction."""
+    health_status, health = _fetch_json(base_url, "/api/health", timeout_seconds=timeout_seconds)
+    if health_status != 200 or health.get("status") != "ok":
+        raise SmokeError(f"Deployed health check failed for {base_url}: HTTP {health_status} {health}")
+    print("[docker-smoke] deployed health ok")
+
+    readiness_status, readiness_response = _fetch_json(base_url, "/api/readiness", timeout_seconds=timeout_seconds)
+    readiness = _readiness_payload(readiness_response)
+    if readiness_status != 200 or readiness.get("ready") is not True:
+        failures = "\n".join(f"- {failure}" for failure in _failed_readiness_checks(readiness))
+        raise SmokeError(f"Deployed readiness check failed for {base_url}:\n{failures}")
+    print("[docker-smoke] deployed readiness ok")
+
+    query = urlencode({"model_type": model_type})
+    models_status, models_payload = _fetch_json(
+        base_url,
+        f"/api/predict/models?{query}",
+        timeout_seconds=timeout_seconds,
+    )
+    if models_status != 200:
+        raise SmokeError(f"Deployed model discovery failed for {base_url}: HTTP {models_status} {models_payload}")
+    models = models_payload.get("models") or []
+    if not models:
+        raise SmokeError(f"No {model_type} models found at {base_url}. Run setup again or provide a compatible model.")
+    model_names = ", ".join(str(model.get("name", "<unnamed>")) for model in models[:5] if isinstance(model, dict))
+    print(f"[docker-smoke] deployed {model_type} models ok: {model_names}")
 
 
 def wait_for_health(container_name: str, timeout_seconds: int) -> None:
@@ -192,14 +299,19 @@ def run_smoke(image: str = DEFAULT_IMAGE, timeout_seconds: int = 90, container_n
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Smoke-test a built MMA AI Docker web image.")
+    parser = argparse.ArgumentParser(description="Smoke-test a built MMA AI Docker image or a deployed dashboard.")
     parser.add_argument("--image", default=DEFAULT_IMAGE, help=f"Docker image to run. Default: {DEFAULT_IMAGE}")
     parser.add_argument("--timeout", type=int, default=90, help="Seconds to wait for /api/health. Default: 90")
     parser.add_argument("--container-name", help="Optional explicit container name for debugging.")
+    parser.add_argument("--deployed-url", help="Check an already deployed dashboard, for example http://127.0.0.1:8001.")
+    parser.add_argument("--model-type", default="win", help="Prediction model type to require in deployed mode. Default: win")
     args = parser.parse_args(argv)
 
     try:
-        run_smoke(args.image, args.timeout, args.container_name)
+        if args.deployed_url:
+            check_deployed_readiness(args.deployed_url, args.model_type, args.timeout)
+        else:
+            run_smoke(args.image, args.timeout, args.container_name)
     except SmokeError as exc:
         print(f"[docker-smoke] failed: {exc}", file=sys.stderr)
         return 1
