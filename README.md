@@ -1,17 +1,32 @@
 # MMA AI
 
-Dockerized UFC fight data, model training, analytics, and prediction dashboard.
-This repository combines the raw UFCStats scraping workflow from `UFCScraper`
-with the feature store, training, and prediction system from `mma-ai-db`.
+Dockerized UFC fight data, feature engineering, analytics, and fight prediction.
+This repository combines the historical UFCStats scraping workflow from
+`UFCScraper` with the PostgreSQL feature store, modeling code, and prediction
+pipeline from `mma-ai-db`.
+
+The public app is a small FastAPI dashboard for data refresh, read-only
+analytics, and fight prediction. Training remains a CLI workflow for advanced
+users.
+
+## Contents
+
+1. [Quick Start](#quick-start)
+2. [Dashboard](#dashboard)
+3. [Data Model Overview](#data-model-overview)
+4. [Core Tables](#core-tables)
+5. [Feature Engineering Pipeline](#feature-engineering-pipeline)
+6. [Layer Reference](#layer-reference)
+7. [Query Patterns](#query-patterns)
+8. [Manual Development Setup](#manual-development-setup)
 
 ## Quick Start
 
 For a first-time local install with predictions ready, run the bootstrap script.
-It downloads the database dumps, processed prediction/training CSVs, and starter
+It downloads database dumps, processed prediction/training CSVs, and the starter
 AutoGluon model from `https://huggingface.co/datasets/DanMcInerney/mma-ai`,
-imports the dumps into Docker Postgres, optionally configures your preferred
-analytics LLM provider/model/API key, starts the dashboard, and opens it in your
-browser.
+imports the dumps into Docker Postgres, optionally configures an analytics LLM,
+starts the dashboard, and opens it in your browser.
 
 Windows PowerShell:
 
@@ -26,14 +41,14 @@ macOS/Linux:
 ```
 
 Run `powershell -ExecutionPolicy Bypass -File .\setup.ps1 -Help` or
-`./setup.sh --help` to see all non-interactive setup options before starting
-Docker, downloads, or database imports.
+`./setup.sh --help` to see all non-interactive setup options before Docker,
+downloads, or database imports begin.
 
-Open the dashboard at http://localhost:8000, or the alternate port printed by
-setup if port 8000 is already in use. The top bar shows a `Ready` badge when
-the imported database tables, processed CSVs, and starter model are available.
-Readiness also validates the required CSV headers, so a partial or malformed
-artifact reports the missing columns before prediction or training begins.
+Open the dashboard at http://localhost:8000, or at the alternate port printed by
+setup if port 8000 is already in use. The top bar shows a `Ready` badge when the
+imported database tables, processed CSVs, and starter model are visible to the
+web app. Readiness also validates required CSV headers, so a partial or malformed
+artifact reports the missing columns before prediction begins.
 
 The bootstrap download is about 2.5 GB. Docker is required. Optional: copy
 `.env.example` to `.env` yourself if you want to provide keys or non-default
@@ -45,10 +60,16 @@ restore when the existing Docker databases already contain the expected
 `features.fight_mapping` and `bestfightodds.bfo` tables. Use `-ForceImport` or
 `--force-import` when you intentionally want to restore the Hugging Face dumps
 again. Use `-SkipDownload` or `--skip-download` only when the artifact cache
-already exists; the scripts validate the cache before copying CSVs, extracting
-the model, or importing dumps. Use `-ForceDownload` or `--force-download` to
-repair a corrupt cache.
-If readiness still times out, inspect `docker compose logs --tail 120 web db`.
+already exists; setup validates the cache before copying CSVs, extracting the
+model, or importing dumps. Use `-ForceDownload` or `--force-download` to repair a
+corrupt cache.
+
+If readiness still times out, inspect the stack logs:
+
+```bash
+docker compose logs --tail 120 web db
+```
+
 Missing database-table readiness errors usually mean rerun setup with
 `-ForceImport` or `--force-import`; missing CSV/model errors usually mean rerun
 without skip-download or with force-download.
@@ -93,6 +114,7 @@ database and the auxiliary `odds` database used by odds-related workflows. The
 setup scripts restore the Hugging Face dumps into those databases. The web
 service waits for the PostgreSQL healthcheck before starting, so first-run
 readiness checks do not race a cold database container.
+
 Compose also maps `host.docker.internal` to Docker's host gateway, so Linux,
 macOS, and Windows users can point the web container at host-side services such
 as a local Postgres instance, Ollama, or LM Studio with the same URL shape.
@@ -100,9 +122,9 @@ as a local Postgres instance, Ollama, or LM Studio with the same URL shape.
 During setup you can choose OpenAI, Codex/OpenAI-compatible, Anthropic Claude,
 Google Gemini, xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI,
 Perplexity Sonar, a local OpenAI-compatible server such as Ollama or LM Studio,
-or a custom endpoint for Data-tab analytics. The
-choices are saved in `.env` as `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
-optional `LLM_BASE_URL`. Non-interactive installs can pass values directly:
+or a custom OpenAI-compatible endpoint for Data-tab analytics. These choices are
+saved in `.env` as `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and optional
+`LLM_BASE_URL`. Non-interactive installs can pass values directly:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup.ps1 `
@@ -122,54 +144,14 @@ uv sync
 uv run mma-web
 ```
 
-Local Python commands automatically load the repo `.env` file without
-overriding values already exported in your shell, so the URLs written by setup
-work for `uv run mma-web`, `uv run mma-predict`, and the other CLI entrypoints.
-The local web command uses `MMA_AI_PORT` first, then the setup-selected
+Local Python commands automatically load the repo `.env` file without overriding
+values already exported in your shell, so the URLs written by setup work for
+`uv run mma-web`, `uv run mma-predict`, and the other CLI entrypoints. The local
+web command uses `MMA_AI_PORT` first, then the setup-selected
 `MMA_AI_WEB_PORT`, and also accepts explicit overrides:
 
 ```bash
 uv run mma-web --host 127.0.0.1 --port 18000
-```
-
-Before publishing a release, run the tracked-file hygiene audit:
-
-```bash
-uv run mma-release-audit
-```
-
-## Seed Data And Database Bootstrap
-
-This repo ships with current seed UFCStats CSVs at
-`data/raw/ufcstats/competitions.csv` and `data/raw/ufcstats/individuals.csv`.
-Generated training/prediction CSVs, trained models, screenshots, logs, and
-database dumps stay out of git. Docker Compose bind-mounts local `data/` to
-`/app/data`, so the checked-in seed CSVs are available to the web app and can be
-updated in place.
-
-Large PostgreSQL dumps for the main `mma-ai` database and the auxiliary `odds`
-database are distributed through the companion Hugging Face Dataset:
-`https://huggingface.co/datasets/DanMcInerney/mma-ai`. Import those once for the
-fast bootstrap path. `setup.ps1` and `setup.sh` perform that import and extract
-the pretrained `ag-20260304_110750-win-extreme` model as the initial Predict tab
-model. After that, normal data updates are:
-
-```bash
-uv run mma-rebuild-db --scrape --reset-db --odds-features
-```
-
-The UFCStats scraper is incremental by default. It reads the existing CSVs,
-skips fighter URLs and event URLs already present, merges only newly discovered
-fighters/fights, and preserves the existing rows. Use `uv run
-mma-scrape-ufcstats --force-full` only when you intentionally want to rebuild
-the raw CSVs from scratch.
-
-To run the dashboard directly against your current host PostgreSQL databases:
-
-```powershell
-$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/mma-ai"
-$env:ODDS_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/odds"
-uv run mma-web
 ```
 
 To run the Docker web app against an existing Postgres instance on your host,
@@ -188,12 +170,13 @@ docker compose up --no-deps --build web
 ```
 
 If you want a fully isolated Docker database instead, leave those Compose URLs
-unset and import the Hugging Face dumps into the Compose Postgres volume. The
-Data tab defaults to incremental UFCStats scrape plus generated-schema
-recreation, so future raw CSV updates rebuild the local feature store without
-requiring another dump import. Predict needs generated CSVs and model artifacts
-in the mounted `data/` and `AutogluonModels/` folders; training new models is a
-CLI workflow for advanced users.
+unset and import the Hugging Face dumps into the Compose Postgres volume.
+
+Before publishing a release, run the tracked-file hygiene audit:
+
+```bash
+uv run mma-release-audit
+```
 
 ## Dashboard
 
@@ -214,24 +197,33 @@ CLI workflow for advanced users.
   controls. Use the advanced Flaresolverr proxy toggle only when BestFightOdds
   is blocking normal odds scraping.
 
-Each long-running Data or Predict job streams stdout/stderr into a debug
-log under `data/logs/jobs` and exposes it through the dashboard and
+Each long-running Data or Predict job streams stdout/stderr into a debug log
+under `data/logs/jobs` and exposes it through the dashboard and
 `/api/jobs/{job_id}/log`. Dashboard jobs run one at a time so model/data writes
 and captured debug logs remain deterministic.
+
+Dashboard charts use the local `/vendor/plotly.min.js` route backed by the
+installed Python `plotly` package. Icons use `libs/web/static/icons.js`, a local
+Lucide-compatible shim. The Docker smoke command checks `/api/health`, verifies
+that the dashboard HTML plus local Plotly/icon assets are served, and confirms
+the runtime image does not include test tooling.
 
 ## Commands
 
 ```bash
 uv run mma-scrape-ufcstats
 uv run mma-rebuild-db
+uv run mma-rebuild-db --scrape --reset-db --odds-features
 uv run mma-train
 uv run mma-evaluate --write-report --format text
 uv run python scripts/evaluate_model.py --write-report --format text
 uv run mma-predict --help
 uv run mma-web --help
 uv run pytest
+docker compose up --build
 docker compose build web
 uv run mma-docker-smoke
+uv run mma-release-audit
 ```
 
 Optional real-browser Predict tab e2e, useful before release when Chrome is
@@ -253,760 +245,880 @@ fork a separate feature or prediction implementation.
 - `AGENTS.md` and `CLAUDE.md`: agent guidance for safe analytics, training,
   prediction, feature semantics, and test expectations.
 - `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
-  and the FastAPI dashboard. After building the web image, `uv run
-  mma-docker-smoke` runs the container, checks `/api/health`, verifies the
-  dashboard HTML plus local Plotly/icon assets are served, and confirms the
-  runtime image does not include test tooling.
+  and the FastAPI dashboard.
 - `libs/web`: FastAPI app, background jobs, web service adapters, analytics,
   evaluation summaries, and static UI.
-- `data`: finalized CSV outputs such as `prediction_data.csv`,
-  `training_data.csv`, and `training_data_dec.csv`.
+- `libs/scraping/ufcstats.py`: in-repo UFCStats scraper adapter.
+- `libs/feature_store`: PostgreSQL schemas, feature calculators, training-data
+  assembly, and inference feature builders.
+- `libs/modeling`: training, evaluation, calibration, profit reporting, and
+  portable model artifact helpers.
+- `data/raw/ufcstats`: tracked seed raw CSVs. Generated model CSVs, predictions,
+  DB dumps, logs, and models stay out of git.
 
-## Architecture Reference
+## Data Model Overview
 
-The remainder of this README preserves the technical feature-store guide from
-the original `mma-ai-db` project. For installation and first-time use, prefer
-the Quick Start above; the setup section in this reference is an advanced manual
-path for developers who intentionally want to restore artifacts and run local
-PostgreSQL commands themselves.
+The database is designed around one central grain:
 
-**Last Updated:** 2026-01-01
-**System Version:** Production (Post Tau & Decay Optimization)
-
----
-
-## Table of Contents
-
-1. [System Overview](#system-overview)
-2. [High-Level Architecture](#high-level-architecture)
-3. [Data Ingestion & Schema](#data-ingestion--schema)
-4. [Feature Engineering Pipeline](#feature-engineering-pipeline)
-5. [Calculator Execution Order & Dependencies](#calculator-execution-order--dependencies)
-6. [Data Leakage Prevention](#data-leakage-prevention)
-7. [Configuration System](#configuration-system)
-8. [Parameter Optimization](#parameter-optimization)
-9. [Training Data Creation](#training-data-creation)
-10. [Critical Design Decisions](#critical-design-decisions)
-11. [Manual Development Setup](#manual-development-setup)
-12. [Troubleshooting & FAQ](#troubleshooting--faq)
-
----
-
-## System Overview
-
-### Purpose
-
-This system transforms raw UFC fight statistics into high-quality machine learning features for predicting fight outcomes. It implements:
-
-- **Bayesian smoothing** to handle small sample sizes
-- **Time-decayed averages** to weight recent performance more heavily
-- **Opponent-adjusted performance** to account for strength of schedule
-- **Temporal validation** to prevent data leakage
-- **Automated parameter optimization** for smoothing and decay rates
-
-### Key Components
-
-1. **Data Ingestion** (`CoreFeatureStore`): Scrapes UFC Stats, loads into PostgreSQL
-2. **Feature Engineering** (`main.py` + 45+ calculators): Transforms raw stats into 1000+ derived features
-3. **Parameter Optimization** (`tuning/`): Optimizes tau (smoothing) and decay half-life values
-4. **Training Data** (`CreateTrainingData` + `CleanTrainingData`): Builds model-ready datasets
-5. **Configuration** (`config/`): Centralized parameters and decay rates
-
-### Technology Stack
-
-- **Database:** PostgreSQL (features schema)
-- **Language:** Python 3.10-3.12
-- **Key Libraries:** SQLAlchemy, pandas, numpy, scipy
-- **Optimization:** Time-series cross-validation with Beta-Binomial/Negative Binomial likelihood
-
----
-
-## High-Level Architecture
-
-```
-┌─────────────────┐
-│  UFCStats.com   │  Raw fight data (scraper: libs/feature_store/core.py)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ fight_stats_fe  │  Raw stats table (round 1 + totals)
-└────────┬────────┘
-         │ Lines 591-626: Basic derived features
-         │ (ko, win, decision, sub_land, age, days_since_last_fight, etc.)
-         │
-         ▼
-┌─────────────────┐
-│fight_stats_     │  Copy of fight_stats_fe
-│   derived       │  Lines 627-628: copy_to_derived(conn)
-└────────┬────────┘
-         │
-         │ Lines 630-645: PARAMETER OPTIMIZATION (if needed)
-         │ ├─ Check if config/optimized_parameters.json exists
-         │ ├─ If missing: Run comprehensive_likelihood_tuner.py (30-60 min)
-         │ └─ If exists: Load optimized tau values (<1 sec)
-         │
-         ▼
-┌─────────────────┐
-│   SMOOTHING     │  Bayesian shrinkage to handle small samples
-│  (Lines 647-657)│  ├─ BetaBinomialCalculator: Binary outcomes (win, ko, decision)
-│                 │  └─ PoissonGammaCalculator: Count data (sig_str_land, td_land)
-└────────┬────────┘
-         │ Lines 658: Rename smoothed_columns → Replace raw with smoothed
-         │
-         ▼
-┌─────────────────┐
-│  RATE/RATIO     │  Derived statistics
-│  FEATURES       │  Lines 660-676:
-│  (Lines 660-676)│  ├─ TotalCalculator: Cumulative sums
-│                 │  ├─ AccuracyCalculator: landed / attempted
-│                 │  ├─ DefenseCalculator: 1 - opponent_accuracy
-│                 │  ├─ PerMinCalculator: stat / fight_minutes
-│                 │  ├─ RatioCalculator: stat / total_fights
-│                 │  └─ PressureCalculator: rd1_stat / total_stat
-│                 │  └─ Delete _raw columns (line 668)
-└────────┬────────┘
-         │ Lines 679-680: Populate 45 feature-specific tables
-         │
-         ▼
-┌─────────────────┐
-│ Feature Tables  │  One table per stat category (body, head, td, ctrl, etc.)
-│ (45 tables)     │  Lines 684-685: PerCalculator (ko_per_sig_str_land, etc.)
-└────────┬────────┘
-         │ Lines 687-688: OpponentCalculator (what opponents achieved)
-         │ **CRITICAL:** Must run BEFORE historical aggregations
-         │
-         ▼
-┌─────────────────┐
-│  PRIORS &       │  Weightclass baselines for Bayesian models
-│  BASELINES      │  Lines 695-710:
-│  (Lines 695-710)│  ├─ WeightclassMeanCalculator: WC averages
-│                 │  ├─ WeightclassMadCalculator: WC variability (MAD)
-│                 │  ├─ FirstTimeMadCalculator: First-fighter MADs
-│                 │  └─ MinimumMadCalculator: MAD floors (prevent /0)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  HISTORICAL     │  Aggregations across fighter history
-│  AGGREGATIONS   │  Lines 719-760:
-│  (Lines 719-760)│  ├─ MedianAbsoluteDeviationCalculator: _mad (variability)
-│                 │  ├─ AverageCalculator: _avg (simple mean)
-│                 │  ├─ TimedecAvgCalculator: _dec_avg (time-weighted mean)
-│                 │  │   └─ Uses decay half-life from config/decay.py
-│                 │  │   └─ Runtime output: data/comprehensive_tuning/optimized_decay.json
-│                 │  ├─ MinimumMadCalculator: Minimum MAD for adjperf
-│                 │  └─ AdjustedPerformanceCalculator: _adjperf, _dec_adjperf
-│                 │      └─ Opponent-adjusted z-scores with reliability weighting
-└────────┬────────┘
-         │ Lines 772-786: Calculate odds features (optional BFO refresh)
-         │
-         ▼
-┌─────────────────┐
-│  FINAL TABLES   │  Feature tables with all layers (_avg, _dec_avg, _adjperf)
-└────────┬────────┘
-         │ Lines 795-825: CreateTrainingData (pattern filtering + merging)
-         │
-         ▼
-┌─────────────────┐
-│prediction_data  │  Wide-format DataFrame (fight_id, f1_*, f2_*, all features)
-│    .csv         │  Used for inference (upcoming fights)
-└────────┬────────┘
-         │ Lines 838-848: CleanTrainingData (shifting + diffing + balancing)
-         │
-         ▼
-┌─────────────────┐
-│training_data    │  Model-ready DataFrame (feature_diffs, target, balanced)
-│    .csv         │  Fed into XGBoost/LightGBM for training
-└─────────────────┘
+```text
+one row = one fighter in one completed fight
+primary key = (fight_id, fighter_id)
+fight_id joins the two fighter rows for the bout
+event_id joins the bout to its event date
 ```
 
----
+Most analytics queries start in the `features` schema. The important schemas are:
 
-## Data Ingestion & Schema
+- `features`: authoritative feature store. It contains raw scraped stats,
+  derived stats, mapping tables, feature-family tables, and odds features.
+- `model_data`: finalized model-ready outputs when a run materializes them in
+  the database.
+- `public`: infrastructure or ad hoc tables only.
 
-### Data Source
+The normal public update after the first Hugging Face DB import is:
 
-**Source:** UFCStats.com (official UFC statistics)
-**Scraper:** `libs/feature_store/core.py` → `CoreFeatureStore`
-**Entry Point:** `main.py` lines 548-589
+```bash
+uv run mma-rebuild-db --scrape --reset-db --odds-features
+```
 
-### Core Tables
+That command incrementally refreshes the raw UFCStats CSVs, recreates generated
+feature schemas from those CSVs, recalculates `features.odds` from the imported
+`ODDS_DATABASE_URL`, and writes finalized CSVs. Use `--odds` only when you
+explicitly want to refresh live BestFightOdds data before calculating odds
+features.
 
-#### `features.fight_stats_fe`
-**Purpose:** Raw scraped fight statistics
-**Created:** Lines 551-595 in `main.py`
-**Key Columns:**
-- `fight_id`, `fighter_id`, `event_id` (primary keys)
-- **Round 1 stats:** `kd_rd1`, `sig_str_land_rd1`, `sig_str_att_rd1`, `td_land_rd1`, `td_att_rd1`, `sub_att_rd1`, `rev_rd1`, `ctrl_rd1`
-- **Strike locations (round 1):** `head_land_rd1`, `head_att_rd1`, `body_land_rd1`, `body_att_rd1`, `leg_land_rd1`, `leg_att_rd1`, `distance_land_rd1`, `distance_att_rd1`, `clinch_land_rd1`, `clinch_att_rd1`, `ground_land_rd1`, `ground_att_rd1`
-- **Total stats (aggregated):** Same as round 1 without `_rd1` suffix
-- **Metadata:** `result`, `method`, `time_format`, `weightclass`, `fighter_dob`, `fighter_name`
+## Raw Data
 
-#### `features.fight_stats_derived`
-**Purpose:** Enhanced version with smoothed stats + derived features
-**Created:** Line 628 (`copy_to_derived(conn)`)
-**Additions:**
-- Smoothed stats: `win_smooth`, `ko_smooth`, `sig_str_land_smooth`, etc.
-- Derived features: `time_sec`, `age`, `days_since_last_fight`, `reach`, `ape`, `ufcage`
-- After line 658: Smoothed columns replace raw (`rename_smoothed_columns()`)
-- After line 668: Raw columns deleted (`delete_raw_columns()`)
+The repo tracks current seed UFCStats files:
 
-#### Mapping Tables
-- **`features.fighter_mapping`**: `fighter_id` ↔ `fighter_name`, `fighter_dob`
-- **`features.event_mapping`**: `event_id` ↔ `event_date`
-- **`features.fight_mapping`**: `fight_id`, `fighter1_id`, `fighter2_id`, `event_id`, `weightclass`
+- `data/raw/ufcstats/competitions.csv`
+- `data/raw/ufcstats/individuals.csv`
 
-#### Feature-Specific Tables (45 tables)
-**Created:** Lines 679-680 (`populate_feature_tables()`)
-**Examples:**
-- `features.age` – Age-related features
-- `features.body` – Body strike features
-- `features.head` – Head strike features
-- `features.td` – Takedown features
-- `features.ctrl` – Control time features
-- `features.odds` – Betting odds
+`competitions.csv` has one row per completed fight. It includes result,
+fighter names/URLs, weight class, method, end round, end time, time format,
+referee, event metadata, and per-round stats for both fighters.
 
-**Purpose:** Isolate features by category for layered calculations (`_avg`, `_dec_avg`, `_adjperf`)
+`individuals.csv` has one row per fighter profile. It includes name, nickname,
+UFCStats URL, date of birth, weight, reach, height, and stance.
 
----
+The scraper is incremental by default. It skips fighter URLs and event URLs
+already present in the tracked CSVs, merges new rows, and preserves existing
+rows. Use `uv run mma-scrape-ufcstats --force-full` only when you intentionally
+want a destructive raw-CSV rebuild.
+
+## Core Tables
+
+### `features.fighter_mapping`
+
+One row per fighter known to the scraper.
+
+Key columns:
+
+- `fighter_id`: internal integer identifier.
+- `fighter_url`: UFCStats fighter URL, unique.
+- `fighter_name`, `fighter_nickname`, `fighter_stance`.
+- `fighter_weight`: UFCStats profile weight string.
+- `fighter_dob`: date of birth when available.
+- `fighter_height`, `fighter_reach`: inches, with missing values left null at
+  this mapping layer.
+
+### `features.event_mapping`
+
+One row per UFCStats event.
+
+Key columns:
+
+- `event_id`: internal integer identifier.
+- `event_url`: UFCStats event URL, unique.
+- `event_date`: event date.
+- `event_location`: event location text.
+
+### `features.fight_mapping`
+
+One row per fight.
+
+Key columns:
+
+- `fight_id`: internal integer identifier.
+- `event_id`: joins to `features.event_mapping`.
+- `fighter1_id`, `fighter2_id`: the two fighter rows for the bout.
+- `weightclass`, `weightclass_encoded`.
+- `method`, `details`.
+- `end_round`, `end_time`, `time_format`.
+- `result`: `1` means `fighter1_id` won, `0` means `fighter2_id` won. Draws,
+  no contests, and other non-binary outcomes are not treated as wins by the
+  outcome calculators.
+
+### `features.fight_stats_core`
+
+The normalized scrape output. It has one row per fighter per fight and stores
+round-by-round count columns from UFCStats, such as `sig_str_land_rd1`,
+`sig_str_att_rd1`, `td_land_rd3`, `ctrl_rd2`, `distance_att_rd5`, and so on.
+
+This table is close to raw UFCStats semantics and is mainly an ingestion
+checkpoint.
+
+### `features.fight_stats_fe`
+
+The first engineered table. It begins as a copy of `fight_stats_core`, then the
+base calculators add totals, outcomes, time, and static attributes.
+
+Use this table when you need to inspect raw-ish fight values before smoothing
+and higher-order layers.
+
+### `features.fight_stats_derived`
+
+The main derived staging table. It receives selected fields from
+`fight_stats_fe`, applies smoothing, and builds first-order derived columns such
+as `_total`, `_acc`, `_def`, `_per_min`, `_ratio`, and `_pressure`.
+
+After smoothing, the original observed count columns are temporarily renamed to
+`_raw`, the smoothed columns take the original names, and `_raw` columns are
+dropped after accuracy/defense calculations no longer need them. As a result,
+plain columns such as `sig_str_land` in `fight_stats_derived` are smoothed
+values, not the untouched scrape counts.
+
+## Feature-Family Tables
+
+After `fight_stats_derived` is prepared, the pipeline splits it into smaller
+feature-family tables. Each table keeps the same grain and primary key:
+`fight_id`, `fighter_id`, `event_id`.
+
+Common feature-family tables include:
+
+| Table | Meaning |
+| --- | --- |
+| `features.sig_str` and `features.sig_str_rd1` | Significant strikes, attempts, accuracy, defense, rates, ratios |
+| `features.strikes` and `features.strikes_rd1` | Total strikes |
+| `features.head`, `features.body`, `features.leg` | Significant strikes by target |
+| `features.distance`, `features.clinch`, `features.ground` | Significant strikes by position/range |
+| `features.td` and `features.td_rd1` | Takedowns landed/attempted and related rates |
+| `features.sub` and `features.sub_rd1` | Submission attempts and submission-win indicators |
+| `features.ctrl` and `features.ctrl_rd1` | Control time in seconds and derived control rates |
+| `features.rev` and `features.rev_rd1` | Reversals |
+| `features.kd` and `features.kd_rd1` | Knockdowns |
+| `features.ko`, `features.decision`, `features.win` | Outcome indicators and finish-derived features |
+| `features.time_sec` and `features.time_sec_rd1` | Fight duration features |
+| `features.age`, `features.reach`, `features.ape`, `features.ufcage` | Static or pre-fight biographical features |
+| `features.days_since_last_fight` | Layoff feature |
+| `features.odds` | Matched BestFightOdds prices and implied probabilities |
+
+Some generated databases may also contain auxiliary prior tables such as
+`features.sig_str_wc_mean`, `features.sig_str_wc_mad`,
+`features.sig_str_minimum_mad`, or first-time-fighter statistic tables. These
+are support tables for adjusted performance and are usually not the first place
+to query for analytics.
+
+Discover available feature tables:
+
+```sql
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'features'
+  AND table_type = 'BASE TABLE'
+ORDER BY table_name;
+```
+
+Discover columns inside one feature family:
+
+```sql
+SELECT column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'features'
+  AND table_name = 'sig_str'
+ORDER BY ordinal_position;
+```
+
+## Base Stat Glossary
+
+The scraper and feature store use compact stat names. Most are available in
+total-fight form and, for many stats, first-round form with `_rd1`.
+
+| Base stat | What it means |
+| --- | --- |
+| `kd` | Knockdowns scored by the fighter |
+| `sig_str_land`, `sig_str_att` | Significant strikes landed and attempted |
+| `strikes_land`, `strikes_att` | Total strikes landed and attempted |
+| `head_land`, `head_att` | Significant strikes to the head |
+| `body_land`, `body_att` | Significant strikes to the body |
+| `leg_land`, `leg_att` | Significant strikes to the legs |
+| `distance_land`, `distance_att` | Significant strikes at distance |
+| `clinch_land`, `clinch_att` | Significant strikes in the clinch |
+| `ground_land`, `ground_att` | Significant strikes on the ground |
+| `td_land`, `td_att` | Takedowns landed and attempted |
+| `sub_att` | Submission attempts |
+| `rev` | Reversals |
+| `ctrl` | Control time, stored in seconds |
+| `time_sec` | Fight duration in seconds |
+| `win` | `1` for the winning fighter, `0` otherwise |
+| `ko` | `1` for the fighter who won by KO/TKO, `0` otherwise |
+| `decision` | `1` for the fighter who won by decision, `0` otherwise |
+| `sub_land` | `1` for the fighter who won by submission, `0` otherwise |
+| `age` | Fighter age in years at the event date |
+| `days_since_last_fight` | Days since that fighter's previous UFCStats fight |
+| `reach` | Reach in inches, imputed by weight-class average when missing |
+| `height` | Height in inches in `fight_stats_fe`; imputed by weight-class average when missing |
+| `ape` | Reach divided by height |
+| `ufcage` | Years since the fighter's first UFCStats fight |
+
+Round suffixes identify round-specific values:
+
+- `_rd1` is first-round value. Example: `sig_str_land_rd1`.
+- Some outcome calculators create round-specific outcome columns such as
+  `ko_rd1` or `win_rd3`.
+- The public modeling pipeline primarily carries first-round stat families into
+  `fight_stats_derived`; full round 2-5 columns stay closer to the raw/core
+  tables.
+
+Outcome features are fighter-row indicators. If a fight ends by KO, only the
+winner's row has `ko = 1`; the losing row has `ko = 0`.
 
 ## Feature Engineering Pipeline
 
-### Execution Flow (main.py lines 598-770)
+The pipeline is intentionally layered. Later suffixes often depend on earlier
+suffixes, so column names encode the calculation path.
 
-The pipeline executes calculators in strict order to satisfy dependencies:
-
-```python
-# 1. Basic Derived Features (Lines 598-626)
-TimeSecCalculator(context).run()              # time_sec, time_sec_rd1
-KOCalculator(context).run()                   # ko, ko_rd1
-DecisionCalculator(context).run()             # decision
-SubmissionslandCalculator(context).run()      # sub_land, sub_land_rd1
-WinCalculator(context).run()                  # win, win_rd1
-FullFightStatsCalculator(context).run()       # Aggregate round stats
-AgeCalculator(context).run()                  # age (at fight date)
-DaysSinceLastFightCalculator(context).run()   # days_since_last_fight
-ReachCalculator(context).run()                # reach
-HeightCalculator(context).run()               # height
-ApeCalculator(context).run()                  # ape (reach - height)
-UfcAgeCalculator(context).run()               # ufcage (years in UFC)
-
-# 2. Copy to Derived Table (Line 628)
-copy_to_derived(conn)  # fight_stats_fe → fight_stats_derived
-
-# 3. Parameter Optimization Check (Lines 630-645)
-optimized_params_path = Path('config/optimized_parameters.json')
-if not optimized_params_path.exists():
-    # Run tau optimization (30-60 minutes)
-    from tuning.comprehensive_likelihood_tuner import main as run_tau_optimizer
-    run_tau_optimizer()
-else:
-    # Use existing optimized parameters (<1 second)
-    param_loader = get_default_parameter_loader()
-
-# 4. Smoothing (Lines 647-657)
-BetaBinomialCalculator(conn, param_loader).run()   # win, ko, decision, sub_land, ctrl
-PoissonGammaCalculator(conn, param_loader).run()   # sig_str_land, td_land, kd, rev, etc.
-
-# 5. Rename Smoothed Columns (Line 658)
-rename_smoothed_columns(conn)  # _smooth → original name, original → _raw
-
-# 6. Rate & Ratio Features (Lines 660-676)
-TotalCalculator(conn).run()       # _total (cumulative sums)
-AccuracyCalculator(conn).run()    # _acc (landed / attempted)
-DefenseCalculator(conn).run()     # _def (1 - opponent_acc)
-delete_raw_columns(conn)          # Delete _raw columns
-PerMinCalculator(conn).run()      # _per_min (stat / minutes)
-RatioCalculator(conn).run()       # _ratio (stat / total_fights)
-PressureCalculator(conn).run()    # _pressure (rd1 / total)
-
-# 7. Populate Feature Tables (Lines 679-680)
-feature_groups = create_feature_specific_tables(conn)
-populate_feature_tables(conn, feature_groups)
-
-# 8. Per Features (Lines 684-685)
-PerCalculator(conn).run()  # ko_per_sig_str_land, td_per_sig_str_att, etc.
-
-# 9. Opponent Stats (Lines 687-688)
-OpponentCalculator(conn).run()  # _opp (what opponents achieved)
-
-# 10. Prior Distributions (Lines 695-710)
-WeightclassMeanCalculator(conn).run()         # _wc_mean
-WeightclassMadCalculator(conn).run()          # _wc_mad
-FirstTimeMadCalculator(conn).run()            # First-fighter MADs
-MinimumMadCalculator(conn, decay=False).run() # _minimum_mad
-
-# 11. Historical Aggregations (Lines 719-760)
-MedianAbsoluteDeviationCalculator(conn).run()  # _mad
-AverageCalculator(conn).run()                  # _avg
-TimedecAvgCalculator(conn, decay_rate_years).run()  # _dec_avg
-MinimumMadCalculator(conn, decay=False).run()       # Minimum MAD for adjperf
-
-# 12. Adjusted Performance (Lines 743-760)
-AdjustedPerformanceCalculator(conn, decay=False).run()  # _adjperf
-AdjustedPerformanceCalculator(conn, decay=True).run()   # _dec_adjperf
-TimedecAvgCalculator(conn, decay_rate_years, include_patterns={'_adjperf'}).run()  # _adjperf_dec_avg
-AverageCalculator(conn, include_patterns={'_adjperf', '_per_'}).run()  # _adjperf_avg
-
-# 13. Odds Data (Lines 772-786)
-BFOScraper(conn).scrape_all_fighters()
-OddsCalculator(conn).run()
-
-# 14. Training Data Creation (Lines 795-866)
-CreateTrainingData(conn, include_patterns, exclude_patterns).create_training_data()
-CleanTrainingData(df, include_patterns, exclude_patterns).clean_training_data()
+```text
+raw CSVs
+  -> features.fight_stats_core
+  -> features.fight_stats_fe
+  -> base derived stats
+  -> features.fight_stats_derived
+  -> smoothing
+  -> totals, accuracy, defense, per-minute rates, ratios
+  -> feature-family tables
+  -> custom per features
+  -> opponent values
+  -> weight-class priors and MAD floors
+  -> rolling averages and time-decayed averages
+  -> adjusted performance
+  -> prediction_data.csv and training_data.csv
 ```
 
----
+The most important rule: if you are doing predictive analytics, be explicit
+about time. Feature-family tables are row-level historical artifacts for
+completed fights. The final training CSV shifts non-static fighter stats by one
+fight before modeling. If you query raw feature-family tables directly for a
+pre-fight question, filter or shift so the current fight does not leak into the
+answer.
 
-## Calculator Execution Order & Dependencies
+## Layer Reference
 
-### Why Order Matters
+### Smoothing: `_smooth` becomes the plain column
 
-**THE ORDER IS CRITICAL.** Each calculator depends on previous ones. Running out of order causes:
-- **Missing columns** → SQL errors
-- **Data leakage** → Invalid features
-- **Incorrect calculations** → Wrong statistics
+Two Bayesian smoothing calculators run on `fight_stats_derived` before most
+rate features are created.
 
-### Critical Ordering Rules
+Beta-Binomial smoothing handles binary or bounded outcome-style stats:
 
-1. **Smoothing BEFORE rate features**: `BetaBinomialCalculator` and `PoissonGammaCalculator` MUST run before `AccuracyCalculator`, `DefenseCalculator`, `PerMinCalculator`, `RatioCalculator`
-   - **Why:** Accuracy = smoothed(landed) / smoothed(attempted), NOT smoothed(landed / attempted)
-   - **Impact:** Preserves Bayesian conjugate prior structure
+- `win`, `win_rd1`
+- `ko`, `ko_rd1`
+- `decision`
+- `sub_land`, `sub_land_rd1`
+- `ctrl`, `ctrl_rd1`
 
-2. **OpponentCalculator BEFORE historical aggregations**: `OpponentCalculator` MUST run before `AverageCalculator`, `TimedecAvgCalculator`, `MedianAbsoluteDeviationCalculator`
-   - **Why:** Creates new `_opp` columns that need to be aggregated
-   - **Impact:** Without this, `sig_str_land_opp_avg` won't exist for opponent strength calculations
+For a binary stat, the posterior mean is:
 
-3. **Priors BEFORE adjusted performance**: `WeightclassMeanCalculator`, `WeightclassMadCalculator`, `MinimumMadCalculator` MUST run before `AdjustedPerformanceCalculator`
-   - **Why:** Adjperf uses weightclass priors for shrinkage
-   - **Impact:** Missing priors → NaN adjperf values
+```text
+p_smoothed = (prior_rate * tau + observed_successes) / (tau + attempts)
+```
 
-4. **Historical aggregations BEFORE adjusted performance aggregations**: `AverageCalculator`, `TimedecAvgCalculator` on base stats MUST run before running them on `_adjperf` columns
-   - **Why:** Can't aggregate what doesn't exist yet
-   - **Impact:** Missing `_adjperf_dec_avg` columns
+Attempts depend on the stat. A win or KO has one opportunity per fight;
+`sub_land` uses `sub_att`; control time is modeled against fight duration.
+Control output is converted back to smoothed seconds.
 
----
+Poisson-Gamma smoothing handles count stats:
 
-## Data Leakage Prevention
+- `_land` and `_att` striking/takedown/submission count columns
+- `kd`
+- `rev`
 
-**DATA LEAKAGE = Using information from the future to predict the past**
+For a count stat:
 
-This system has **7 CRITICAL ANTI-LEAKAGE MEASURES**:
+```text
+prior_rate = historical count / exposure minutes
+posterior_rate = (prior_rate * tau + observed_count) / (tau + exposure_minutes)
+smoothed_count = exposure_minutes * posterior_rate
+```
 
-### 1. Time-Decayed Averages: Strict Past-Only Filter
+Round-one stats use capped round-one exposure; total stats use full fight
+duration. Priors are weight-class aware with global fallback parameters loaded
+from `config/optimized_parameters.json`.
 
-**Location:** `libs/feature_store/calculators/time_dec_avg_calc.py`
+Implementation detail: the database first writes `<stat>_smooth`, then renames
+the original observed column to `<stat>_raw`, renames `<stat>_smooth` to
+`<stat>`, and eventually deletes `_raw`. So a later column like
+`sig_str_land_per_min` is based on smoothed `sig_str_land`.
 
-**The Problem:**
-If we include the current fight in `_dec_avg` calculations, we leak the outcome into the predictor.
+### Totals: `_total`
 
-**The Solution:**
+`TotalCalculator` computes cumulative career totals per fighter:
+
+```text
+<stat>_total =
+  SUM(<stat>) OVER (
+    PARTITION BY fighter_id
+    ORDER BY event_date, fight_id
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  )
+```
+
+Example: `td_land_total` is the fighter's cumulative takedowns landed through
+that row. In the feature tables this includes the current completed fight; the
+training cleaner shifts dynamic totals to previous-fight values before model
+training.
+
+### Accuracy: `_acc`
+
+`AccuracyCalculator` creates smoothed landed-over-attempted rates for `_land`
+and `_att` pairs:
+
+```text
+<family>_acc = (prior_accuracy * tau + land_raw) / (tau + att_raw)
+```
+
+Examples:
+
+- `sig_str_acc`
+- `head_acc`
+- `td_acc`
+- `distance_rd1_acc`
+
+Accuracy uses the temporary `_raw` landed/attempted columns so it can smooth the
+ratio directly from observed attempts while still benefiting from weight-class
+priors. Values are clipped to `[0, 1]`. If attempts are zero, the calculator
+falls back to a weight-class or global prior rate.
+
+### Defense: `_def`
+
+`DefenseCalculator` copies the opponent's accuracy into the fighter row under a
+defensive suffix:
+
+```text
+fighter.<family>_def = opponent.<family>_acc
+```
+
+Despite the name, this is best read as "opponent landing accuracy against this
+fighter in this fight." Lower values are better defensive outcomes. For example,
+if a fighter's opponent landed 35 percent of attempted significant strikes, the
+fighter's `sig_str_def` is `0.35`.
+
+This convention is important when writing analytics. To ask "who limited
+opponents to low head-strike accuracy," sort `head_def` ascending, not
+descending.
+
+### Per-Minute Rates: `_per_min`
+
+`PerMinCalculator` divides count-like stats by fight duration in minutes:
+
+```text
+<stat>_per_min = <stat> / (time_sec / 60.0)
+<stat>_rd1_per_min = <stat>_rd1 / (time_sec_rd1 / 60.0)
+```
+
+The code's canonical suffix is `_per_min`. If you are thinking in per-second
+terms, convert manually with `<stat>_per_min / 60.0`; the current feature store
+does not generate a separate `_per_sec` suffix.
+
+Examples:
+
+- `sig_str_land_per_min`
+- `td_att_per_min`
+- `kd_rd1_per_min`
+- `ctrl_per_min`
+
+### Within-Fight Shares: `_ratio`
+
+`RatioCalculator` compares a fighter's value to the opponent's value in the
+same fight:
+
+```text
+<stat>_ratio = fighter_stat / (fighter_stat + opponent_stat)
+```
+
+This produces a bounded fight-share feature. A value near `1.0` means the
+fighter accounted for almost all of that stat in the fight; a value near `0.0`
+means the opponent did. When both values are zero, the Python fallback uses
+`0.5`; the SQL template fallback uses `0`. Check your generated database if
+zero-zero treatment matters for a query.
+
+Examples:
+
+- `sig_str_land_ratio`
+- `td_land_ratio`
+- `kd_ratio`
+- `win_ratio`
+
+### First-Round Pressure: `_pressure`
+
+`PressureCalculator` currently creates one pressure feature:
+
+```text
+sig_str_land_pressure = sig_str_land_rd1 / sig_str_land
+```
+
+It answers: "what share of this fighter's significant-strike output came in
+round 1?" If total significant strikes are zero, the value is `0`.
+
+### Custom Per Features: `_per_`
+
+`PerCalculator` creates domain-specific ratios that do not fit the generic
+`_per_min` or `_ratio` patterns. These are stored in the most relevant
+feature-family table.
+
+Examples:
+
+| Feature | Formula |
+| --- | --- |
+| `ko_per_sig_str_land` | `ko / sig_str_land` |
+| `sig_str_per_str_att` | `sig_str_land / strikes_att` |
+| `distance_per_sig_str_land` | `distance_land / sig_str_land` |
+| `clinch_per_sig_str_land` | `clinch_land / sig_str_land` |
+| `ground_per_sig_str_land` | `ground_land / sig_str_land` |
+| `head_per_sig_str_land` | `head_land / sig_str_land` |
+| `body_leg_per_sig_str_land` | `(body_land + leg_land) / sig_str_land` |
+| `td_per_sig_str_att` | `td_att / sig_str_att` |
+| `td_land_per_ctrl` | `td_land / ctrl` |
+| `ground_land_per_ctrl` | `ground_land / ctrl` |
+| `ground_land_per_td_land` | `ground_land / td_land` |
+| `sub_att_per_ctrl` | `sub_att / ctrl` |
+| `rev_per_ctrlopp` | `rev / opponent_ctrl` |
+| `ko_sub_per_win` | `(ko + sub_land) / win` |
+| `ko_sub_rd1_per_win` | `(ko_rd1 + sub_land_rd1) / win` |
+| `sub_per_all_ctrl` | `sub_att / (fighter_ctrl + opponent_ctrl)` |
+
+Zero denominators become `0.0`.
+
+### Opponent Values: `_opp`
+
+`OpponentCalculator` joins each fighter row to the other fighter row in the same
+fight and copies selected columns:
+
+```text
+<stat>_opp = opponent.<stat>
+```
+
+Examples:
+
+- `sig_str_land_opp`
+- `td_att_per_min_opp`
+- `head_acc_opp`
+- `ko_opp`
+
+Use `_opp` when you want the opponent's realized performance in that fight.
+Use adjusted performance layers when you want to compare a fighter's realized
+performance against what that opponent historically tends to allow.
+
+### Weight-Class Priors: `_wc_mean`, `_wc_mad`, `_minimum_mad`
+
+Several support tables store robust weight-class baselines:
+
+- `features.<table>_wc_mean`: mean value by weight class.
+- `features.<table>_wc_mad`: median absolute deviation by weight class.
+- `features.<table>_minimum_mad`: small positive MAD floor by weight class.
+
+The mean and MAD prior tables are computed from a historical calibration window
+beginning at `2014-01-01` and ending at `2023-01-01`, with a minimum sample
+size per weight class. The MAD floor is a low percentile of existing rolling
+MAD values and prevents adjusted performance from exploding when a denominator
+is too small.
+
+These support tables are most useful for understanding how `_adjperf` is
+shrunk. For ordinary analytics, query the main feature-family tables first.
+
+### Rolling Averages: `_avg`
+
+`AverageCalculator` computes fighter-level rolling means:
+
+```text
+<stat>_avg =
+  AVG(<stat>) OVER (
+    PARTITION BY fighter_id
+    ORDER BY event_date, fight_id
+    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+  )
+```
+
+Examples:
+
+- `sig_str_land_avg`
+- `td_acc_avg`
+- `ko_per_sig_str_land_avg`
+- `sig_str_land_adjperf_avg`
+
+In feature-family tables, `_avg` includes the current completed fight. In the
+final win/loss training CSV, dynamic columns are shifted to previous-fight
+values and receive `_prev` before differences are calculated.
+
+### Time-Decayed Averages: `_dec_avg`
+
+`TimedecAvgCalculator` computes exponentially weighted fighter history:
+
+```text
+weight = exp(-ln(2) * years_since_fight / half_life_years)
+<stat>_dec_avg = sum(stat * weight) / sum(weight)
+```
+
+The half-life comes from `config/decay.py`: environment override first, then
+`data/comprehensive_tuning/optimized_decay.json`, then the default. A
+three-year half-life means a fight three years old receives half the weight of
+a fight at the current event date.
+
+Examples:
+
+- `sig_str_land_dec_avg`
+- `td_land_per_min_dec_avg`
+- `head_def_dec_avg`
+- `distance_acc_dec_adjperf_dec_avg`
+
+Like `_avg`, the feature-table implementation is rolling through the current
+completed fight. Treat `_dec_avg` as a post-fight historical feature unless you
+are using the cleaned training output, the inference builder, or a custom
+past-only query.
+
+### Median Absolute Deviation: `_mad`
+
+`MedianAbsoluteDeviationCalculator` measures a fighter's rolling variability:
+
+```text
+median = median(fighter history for stat)
+<stat>_mad = median(abs(value - median))
+```
+
+For a fighter's first fight, the calculator falls back to precomputed
+weight-class first-time MAD statistics when available. MAD is more robust than
+standard deviation for sparse and outlier-heavy fight stats.
+
+### Adjusted Performance: `_adjperf`
+
+Adjusted performance asks:
+
+```text
+How much better or worse was this fighter's observed stat than what this
+opponent historically allows, after shrinking sparse opponent history toward
+weight-class priors?
+```
+
+For each eligible stat, `AdjustedPerformanceCalculator(decay=False)` creates:
+
+```text
+<stat>_adjperf
+```
+
+The simplified formula is:
+
+```text
+n = opponent-history sample size
+w_mean = n / (n + K_mean)
+w_mad = n / (n + K_mad)
+
+mu_shrunk =
+  w_mean * opponent_allowed_mean
+  + (1 - w_mean) * weightclass_mean
+
+mad_shrunk =
+  max(
+    w_mad * opponent_allowed_mad
+    + (1 - w_mad) * weightclass_mad,
+    mad_floor
+  )
+
+adjperf = clip((observed - mu_shrunk) / mad_shrunk, -7, 7)
+```
+
+The default shrinkage parameters are `K_mean = 4.0` and `K_mad = 4.0`.
+
+The opponent history is not "the opponent's own stats." It is what previous
+opponents achieved against that opponent. For example, for
+`sig_str_land_per_min_adjperf`, the expected value is based on how many
+significant strikes per minute previous fighters landed against today's
+opponent, with sparse history shrunk toward the opponent's weight-class
+baseline.
+
+Eligible adjusted-performance inputs include:
+
+- Accuracy, defense, ratio, pressure, and per-minute features.
+- Custom `_per_` domain features.
+- `win`, `decision`, and `time_sec`.
+- Selected finishing/grappling ratios.
+
+Totals are excluded from adjusted performance to avoid compounding volume,
+career length, and opponent adjustment into a single unstable scale.
+
+Interpretation:
+
+- Positive `_adjperf`: the fighter exceeded expectation against that opponent.
+- Negative `_adjperf`: the fighter underperformed relative to expectation.
+- Values are robust z-score-like units clipped to `[-7, 7]`.
+
+### Time-Decayed Adjusted Performance: `_dec_adjperf`
+
+`AdjustedPerformanceCalculator(decay=True)` creates:
+
+```text
+<stat>_dec_adjperf
+```
+
+It uses the same adjusted-performance formula, but opponent history uses
+time-decayed weights and a Kish effective sample size:
+
+```text
+n_effective = (sum(weights) ^ 2) / sum(weights ^ 2)
+```
+
+This gives recent fights more influence while still shrinking heavily when the
+opponent has little effective history.
+
+### Adjusted-Performance Aggregates
+
+After `_adjperf` and `_dec_adjperf` are created, the pipeline runs historical
+aggregation again on adjusted-performance columns:
+
+- `<stat>_adjperf_avg`
+- `<stat>_adjperf_dec_avg`
+- `<stat>_dec_adjperf_avg`
+- `<stat>_dec_adjperf_dec_avg`
+
+Long names are normal. Read them from left to right:
+
+```text
+distance_acc_dec_adjperf_dec_avg
+```
+
+means:
+
+1. Start with distance-striking accuracy.
+2. Compare the fight value to a time-decayed opponent-allowed expectation.
+3. Convert it to adjusted performance.
+4. Take the fighter's time-decayed average of that adjusted-performance score.
+
+### Odds Features
+
+`features.odds` is populated from the imported BestFightOdds database, not from
+UFCStats. It has the same `(fight_id, fighter_id, event_id)` grain.
+
+Important columns:
+
+- `opening_odds`, `closing_odds`: American odds.
+- `ip_opening_odds`, `ip_closing_odds`: implied probabilities from American
+  odds.
+- `vigless_ip_opening_odds`, `vigless_ip_closing_odds`: no-vig normalized
+  implied probabilities across the two fighters.
+- `sevenday_opening_odds`, `sevenday_ip_opening_odds`,
+  `sevenday_vigless_ip_opening_odds`: odds closest to seven days before close.
+
+Odds are enabled by default in prediction jobs, but they are not model inputs in
+the dashboard path. They are used for market probability, expected value, and
+pick-edge reporting.
+
+## Reading Feature Names
+
+Feature names compose suffixes. A few examples:
+
+| Feature | How to read it |
+| --- | --- |
+| `head_acc` | Smoothed head significant-strike accuracy in this fight |
+| `head_acc_opp` | The opponent's `head_acc` in this fight |
+| `head_acc_avg` | Fighter's rolling average of `head_acc` through this completed fight |
+| `head_acc_dec_avg` | Fighter's time-decayed average of `head_acc` through this completed fight |
+| `head_acc_adjperf` | How far `head_acc` exceeded what this opponent usually allows |
+| `head_acc_dec_adjperf` | Same, but opponent history is time-decayed |
+| `head_acc_dec_adjperf_dec_avg` | Fighter's time-decayed average of time-decayed adjusted performance |
+| `td_land_per_ctrl_avg` | Rolling average of takedowns landed per control second |
+| `sig_str_land_ratio_dec_adjperf_dec_avg` | Time-decayed average of adjusted within-fight significant-strike share |
+| `sig_str_land_dec_avg_diff` | Fighter1 minus fighter2 for the selected historical feature in final training data |
+
+Useful suffixes:
+
+| Suffix | Meaning |
+| --- | --- |
+| `_rd1` | First-round value |
+| `_smooth` | Temporary smoothed column before it is renamed to the base name |
+| `_raw` | Temporary observed column kept briefly for accuracy calculations |
+| `_total` | Cumulative fighter total through the row |
+| `_acc` | Landed divided by attempted, with Bayesian smoothing |
+| `_def` | Opponent accuracy against the fighter |
+| `_per_min` | Rate per fight minute; derived from `time_sec` |
+| `_ratio` | Fighter share of fighter-plus-opponent value in the same fight |
+| `_pressure` | First-round share of total significant-strike output |
+| `_per_` | Domain-specific custom ratio |
+| `_opp` | Opponent's value in the same fight |
+| `_wc_mean` | Weight-class mean prior in support tables |
+| `_wc_mad` | Weight-class MAD prior in support tables |
+| `_minimum_mad` | Weight-class MAD floor support table |
+| `_mad` | Rolling median absolute deviation |
+| `_avg` | Rolling average through the row |
+| `_dec_avg` | Time-decayed rolling average through the row |
+| `_adjperf` | Opponent-adjusted performance score |
+| `_dec_adjperf` | Time-decayed opponent-adjusted performance score |
+| `_prev` | Previous-fight shifted feature in cleaned training data |
+| `_diff` | Fighter1 value minus fighter2 value in finalized model data |
+
+## Training And Prediction Outputs
+
+`CreateTrainingData` builds a wide, fighter-row dataframe by joining
+feature-family tables back to `fight_stats_derived`. This intermediate output is
+written as:
+
+- `data/prediction_data.csv`
+
+Despite the name, this file is a reusable feature matrix for inference and
+upcoming-fight construction. It keeps both fighter rows and feature columns.
+
+`CleanTrainingData` then prepares model training data:
+
+1. Splits static features from dynamic fight stats.
+2. Shifts dynamic features by one fight within each fighter history.
+3. Rejoins fighter1 and fighter2 onto one row per fight.
+4. Creates fighter1 absolute columns and fighter1-minus-fighter2 `_diff`
+   columns.
+5. Creates `y_true` from fighter1's result.
+
+The main finalized outputs are:
+
+- `data/training_data.csv`: win/loss model training data.
+- `data/training_data_dec.csv`: decision/no-decision model training data.
+
+Static features are not shifted because they are known pre-fight: `age`,
+`days_since_last_fight`, `reach`, `height`, `ufcage`, `odds`, and
+`weightclass_encoded`.
+
+A valid starter model directory such as `ag-20260304_110750-win-extreme`
+usually includes `feats.txt`. Single models also need `scaler.pkl`; walk-forward
+ensembles scale internally.
+
+## Query Patterns
+
+Join feature-family tables to fighter and event metadata:
+
 ```sql
--- CRITICAL FILTER (time_dec_avg_calc.py line ~121)
-WHERE past.event_date < current.event_date  -- STRICT inequality
+SELECT
+  em.event_date,
+  fm.weightclass,
+  fmap.fighter_name,
+  s.sig_str_land_per_min,
+  s.sig_str_land_per_min_dec_avg,
+  s.sig_str_land_per_min_dec_adjperf
+FROM features.sig_str s
+JOIN features.event_mapping em ON em.event_id = s.event_id
+JOIN features.fight_mapping fm ON fm.fight_id = s.fight_id
+JOIN features.fighter_mapping fmap ON fmap.fighter_id = s.fighter_id
+ORDER BY em.event_date DESC, s.fight_id DESC
+LIMIT 50;
 ```
 
-**Example:**
-```
-Fighter A's fights:
-├─ 2020-01-15: 50 strikes landed
-├─ 2021-06-10: 75 strikes landed
-└─ 2022-09-20: 100 strikes landed  ← CURRENT FIGHT
+Compare both fighters in one fight:
 
-For 2022-09-20 prediction:
-✓ CORRECT: Use only 2020-01-15 and 2021-06-10 (past < current)
-✗ WRONG: Include 2022-09-20 (current fight)
-
-Result: sig_str_land_dec_avg calculated from 2020 & 2021 only
-```
-
----
-
-### 2. Adjusted Performance: Historical Opponent Stats Only
-
-**Location:** `libs/feature_store/calculators/adj_perf_calc.py`
-
-**The Problem:**
-Adjperf compares "what you did" vs "what opponents usually allow". If we include the current fight's opponent data, we leak information.
-
-**The Solution:**
 ```sql
--- Step 1: Get opponent's HISTORICAL allowed stats (adj_perf_calc.py line ~280)
-WITH opponent_history AS (
-    SELECT opp_stats
-    FROM past_fights
-    WHERE opponent_id = current_opponent_id
-      AND event_date < current_event_date  -- STRICT past only
-)
-
--- Step 2: Calculate expected performance
-expected = reliability_weighted_average(opponent_history)
-
--- Step 3: Compare to observed
-adjperf = (observed - expected) / MAD
+SELECT
+  em.event_date,
+  f1.fighter_name AS fighter1_name,
+  f2.fighter_name AS fighter2_name,
+  s1.sig_str_land_per_min_dec_avg AS f1_sig_str_pm,
+  s2.sig_str_land_per_min_dec_avg AS f2_sig_str_pm,
+  s1.sig_str_land_per_min_dec_avg - s2.sig_str_land_per_min_dec_avg AS diff
+FROM features.fight_mapping fm
+JOIN features.event_mapping em ON em.event_id = fm.event_id
+JOIN features.fighter_mapping f1 ON f1.fighter_id = fm.fighter1_id
+JOIN features.fighter_mapping f2 ON f2.fighter_id = fm.fighter2_id
+JOIN features.sig_str s1
+  ON s1.fight_id = fm.fight_id
+ AND s1.fighter_id = fm.fighter1_id
+JOIN features.sig_str s2
+  ON s2.fight_id = fm.fight_id
+ AND s2.fighter_id = fm.fighter2_id
+ORDER BY em.event_date DESC
+LIMIT 25;
 ```
 
----
+Find fighters who recently suppressed opponent head accuracy:
 
-### 3. Training Data: Temporal Shifting
-
-**Location:** `libs/feature_store/clean_training_data.py`
-
-**The Problem:**
-If we use Fight T's stats to predict Fight T's outcome, we leak the outcome.
-
-**The Solution (Lines 150-180):**
-```python
-# Identify dynamic vs static features
-static_columns = []  # age, reach, odds, _dec_avg (already past-only)
-stat_columns = []    # All dynamic stats that need shifting
-
-# CRITICAL: Shift dynamic stats by 1 fight
-for col in stat_columns:
-    if 'fighter1' in col:
-        stats_df[col] = stats_df.groupby('fighter1_id')[col].shift(1)
-    elif 'fighter2' in col:
-        stats_df[col] = stats_df.groupby('fighter2_id')[col].shift(1)
+```sql
+SELECT
+  fmap.fighter_name,
+  COUNT(*) AS fights,
+  AVG(h.head_def) AS avg_opponent_head_accuracy
+FROM features.head h
+JOIN features.event_mapping em ON em.event_id = h.event_id
+JOIN features.fighter_mapping fmap ON fmap.fighter_id = h.fighter_id
+WHERE em.event_date >= DATE '2023-01-01'
+GROUP BY fmap.fighter_name
+HAVING COUNT(*) >= 3
+ORDER BY avg_opponent_head_accuracy ASC
+LIMIT 20;
 ```
 
-**Example:**
-```
-Fighter A's fight history:
-├─ Fight 100 (2020-01): 50 strikes, 1 KO
-├─ Fight 200 (2021-06): 75 strikes, 0 KO
-└─ Fight 300 (2022-09): 100 strikes, 1 KO
+Find positive adjusted performance outliers for ground striking:
 
-Training data WITHOUT shifting:
-Row for Fight 300: sig_str_land=100, ko=1, target=win
-                  ↑ LEAKAGE! We're using Fight 300's stats to predict Fight 300
-
-Training data WITH shifting:
-Row for Fight 300: sig_str_land_prev=75, ko_prev=0, target=win
-                  ↑ CORRECT! We're using Fight 200's stats to predict Fight 300
-```
-
-**Why NOT Shift Static Features:**
-- `age`, `reach`, `odds` are known PRE-FIGHT → No leakage
-- `_dec_avg` features are calculated with `event_date < current_date` → Already exclude current fight → No leakage
-
----
-
-### 4. Parameter Optimization: Time-Series Cross-Validation
-
-**Location:** `tuning/comprehensive_likelihood_tuner.py`
-
-**The Problem:**
-If we optimize parameters (tau, decay half-life) using random cross-validation, we mix past and future data.
-
-**The Solution (Lines 586-650):**
-```python
-from sklearn.model_selection import TimeSeriesSplit
-
-# Time-series CV with gap
-cv_configs = [
-    TimeSeriesSplit(n_splits=3, gap=30),   # 30-fight gap prevents correlation
-    TimeSeriesSplit(n_splits=3, gap=45),   # Different gap for stability
-    TimeSeriesSplit(n_splits=4, gap=30),   # Different splits for robustness
-]
-
-# For each CV fold:
-# ├─ Training: 2014-2023 (fixed)
-# ├─ Gap: 30-45 fights (excluded)
-# └─ Validation: 2024-2026 (future only)
+```sql
+SELECT
+  em.event_date,
+  fmap.fighter_name,
+  g.ground_land_per_min_dec_adjperf,
+  g.ground_land_per_min,
+  g.ground_land_per_min_opp
+FROM features.ground g
+JOIN features.event_mapping em ON em.event_id = g.event_id
+JOIN features.fighter_mapping fmap ON fmap.fighter_id = g.fighter_id
+WHERE g.ground_land_per_min_dec_adjperf IS NOT NULL
+ORDER BY g.ground_land_per_min_dec_adjperf DESC
+LIMIT 25;
 ```
 
----
+Inspect model-facing finalized CSVs through dashboard analytics fallback table
+names when Postgres is unavailable:
 
-### 5. Decay Optimization: Strict Train/Val Split
+- `training_data` for `data/training_data.csv`.
+- `training_data_dec` for `data/training_data_dec.csv`.
+- `prediction_data` for `data/prediction_data.csv`.
 
-**Location:** `tuning/decay_rate_optimizer.py`
+For Postgres analytics, prefer sources in this order:
 
-**The Problem:**
-If we use the same data for both computing statistics AND evaluating decay rates, we overfit.
+1. Finalized model tables or CSVs for model-facing analytics.
+2. Feature-specific tables for understanding a feature family.
+3. `features.fight_stats_derived` for row-level engineered features.
+4. `features.fight_stats_fe` only when investigating raw scrape quality.
 
-**The Solution (Lines 88-120):**
-```python
-class DecayRateOptimizer:
-    def __init__(
-        self,
-        train_start: str = '2014-01-01',
-        train_end: str = '2024-01-02',    # HARD CUT
-        val_start: str = '2024-01-02',    # No overlap
-        val_end: str = '2026-01-01'
-    ):
-        # Statistics computed on 2014-2024
-        # Parameters evaluated on 2024-2026
-        # ZERO overlap
-```
+## Analytics Safety
 
----
+Dashboard analytics are read-only by design. Only a single `SELECT` or `WITH`
+query is allowed. Mutation keywords such as `insert`, `update`, `delete`,
+`drop`, `create`, `alter`, `copy`, `truncate`, and `vacuum` are rejected. The
+Postgres analytics path also runs inside a database-enforced read-only
+transaction with a statement timeout, and CSV fallback analytics use SQLite
+query-only mode.
 
-## Configuration System
+To avoid future leakage in your own analytics:
 
-### Overview
-
-**Location:** `config/` directory
-**Purpose:** Centralized configuration for decay rates, tau parameters, and optimization settings
-
-### Files
-
-#### `config/decay.py`
-**Purpose:** Time decay configuration for exponential weighting
-
-**Key Function:**
-```python
-def get_decay_half_life_years() -> float:
-    """
-    Get time decay half-life in years.
-
-    Priority:
-    1. Environment variable DECAY_HALF_LIFE_YEARS (highest)
-    2. Optimized runtime output from data/comprehensive_tuning/optimized_decay.json
-    3. Default: 2.0 years (lowest)
-    """
-```
-
-**Usage:**
-```python
-from config.decay import DECAY_HALF_LIFE_YEARS, DECAY_RATE
-
-# In calculators:
-decay_rate = DECAY_RATE  # ln(2) / half_life
-weight = EXP(-decay_rate * days_diff / 365.25)
-```
-
-**Optimization:**
-```bash
-# Run decay optimization (finds optimal half-life)
-uv run python tuning/decay_rate_optimizer.py
-
-# Output: data/comprehensive_tuning/optimized_decay.json (ignored by git)
-{
-  "decay_half_life_years": 3.0,
-  "nll": 3234.12,
-  "improvement_pct": 1.16,
-  "optimization_metadata": {
-    "training_period": "2014-01-01 to 2024-01-01",
-    "evaluation_period": "2024-01-02 to 2026-01-01"
-  }
-}
-```
-
----
-
-#### `config/optimized_parameters.json` (AUTO-GENERATED)
-**Purpose:** Optimized tau values for Bayesian smoothing
-
-**Generated By:** `tuning/comprehensive_likelihood_tuner.py` (lines 630-645 in main.py)
-
-**Structure:**
-```json
-{
-  "metadata": {
-    "training_period": "2014-01-01 to 2024-01-01",
-    "n_stats_tuned": 49,
-    "optimized_at": "2026-01-01T12:00:00"
-  },
-  "beta_binomial": {
-    "global": {
-      "ko": 7.29,
-      "win": 43.11,
-      "decision": 60.0,
-      "sub_land": 9.0,
-      "ctrl": 2.0
-    },
-    "per_weightclass": {
-      "featherweight": {
-        "sub_land": 3.0
-      }
-    }
-  },
-  "poisson_gamma": {
-    "global": {
-      "sig_str": 0.98,
-      "head": 0.98,
-      "kd": 20.0,
-      "td": 7.5
-    }
-  }
-}
-```
-
-**Lifecycle:**
-1. **First run:** `main.py` detects file missing → Runs optimization (30-60 min) → Saves file
-2. **Subsequent runs:** Loads file (<1 sec)
-3. **Re-optimization:** Delete file or `FORCE_REOPTIMIZE=1 uv run python main.py`
-
----
-
-## Parameter Optimization
-
-### Tau (Smoothing) Optimization
-
-**Script:** `tuning/comprehensive_likelihood_tuner.py`
-**Runtime:** 10-30 minutes
-**Output:** `config/optimized_parameters.json`
-
-**What It Does:**
-Finds optimal tau values for:
-1. **Beta-Binomial smoothing** (binary outcomes: ko, win, decision, sub_land, ctrl)
-2. **Poisson-Gamma smoothing** (count data: sig_str_land, td_land, kd, rev)
-3. **Accuracy smoothing** (ratios: sig_str_acc, td_acc, etc.)
-
-**Methodology:**
-```
-For each stat:
-1. Load raw data from fight_stats_fe (2014-2024)
-2. Time-series CV split (3 folds, gap=30 fights)
-3. Grid search tau values (25-30 candidates)
-4. Compute negative log-likelihood (NLL) on validation
-5. Select tau with lowest NLL
-6. Test stability across CV configs
-7. Compare per-weightclass vs global
-8. Accept per-weightclass only if:
-   ├─ Improvement ≥ 0.5%
-   ├─ Stable across CV (variation < 20%)
-   └─ Not on boundary of search range
-```
-
----
-
-### Decay Half-Life Optimization
-
-**Script:** `tuning/decay_rate_optimizer.py`
-**Runtime:** 2-4 hours
-**Output:** `data/comprehensive_tuning/optimized_decay.json` (ignored by git)
-
-**What It Does:**
-Finds optimal time decay half-life for `_dec_avg` features.
-
-**Methodology:**
-```
-1. Load fight data (2014-2024 train, 2024-2026 eval)
-2. Extract base stats from vSeven_testing2 feature list (25 stats)
-3. For each decay half-life candidate [2.0, 2.2, 2.4, 2.6, 2.8, 3.0]:
-   a. Apply exponential decay weights in Python:
-      weight = EXP(-ln(2) * days_diff / (half_life * 365.25))
-   b. Calculate decayed averages for all stats
-   c. Compute Mean Squared Error (MSE) on evaluation set
-4. Select half-life with lowest MSE
-```
-
----
-
-## Training Data Creation
-
-### CreateTrainingData (`libs/feature_store/create_training_data.py`)
-
-**Purpose:** Build wide-format DataFrame with all features for both fighters
-
-**Input:**
-- Feature-specific tables (body, head, td, ctrl, age, odds, etc.)
-- Fight mapping (fighter1_id, fighter2_id, event_id)
-
-**Process (Lines 795-830 in main.py):**
-```python
-ctd = CreateTrainingData(
-    conn,
-    include_patterns={'dec_avg', 'age', 'reach', 'ufcage', 'odds',
-                     'days_since_last_fight', 'time_sec', 'weightclass_encoded'},
-    exclude_patterns=set(),
-    required_features=set()
-)
-training_df = ctd.create_training_data()
-```
-
-**Output:** `data/prediction_data.csv` (for inference)
-
----
-
-### CleanTrainingData (`libs/feature_store/clean_training_data.py`)
-
-**Purpose:** Transform fight-level data into model-ready format
-
-**Steps:**
-
-1. **Split Static vs Dynamic Features**
-2. **Shift Dynamic Features** (prevent data leakage)
-3. **Create Differences** (f1 - f2)
-4. **Balance Fighters** (prevent model bias)
-5. **Create Target Variable**
-
-**Output:** `data/training_data.csv`
-
----
-
-## Critical Design Decisions
-
-### 1. Smoothing Before Feature Engineering
-
-**Decision:** Apply Beta-Binomial and Poisson-Gamma smoothing BEFORE calculating accuracy, defense, per-minute rates
-
-**Rationale:**
-- Preserves Bayesian conjugate prior
-- Mathematically principled
-- Better calibration (predictions match outcomes)
-
----
-
-### 2. Time-Decayed Average Half-Life: 3.0 Years
-
-**Decision:** Use 3.0 year half-life (optimized from 2.0 year default)
-
-**Evidence:** generated optimization output at `data/comprehensive_tuning/optimized_decay.json` (not tracked)
-```json
-{
-  "decay_half_life_years": 3.0,
-  "nll": 3234.12,
-  "baseline_nll": 3272.23,
-  "improvement_pct": 1.16
-}
-```
-
-**Impact:**
-- Recent fights weighted heavily (12-month = 82% weight)
-- Older fights still contribute (36-month = 50% weight)
-- Better for established veterans with long histories
-
----
-
-### 3. Train/Val Temporal Split (2014-2024 train, 2024-2026 eval)
-
-**Decision:** Hard temporal split, no cross-validation for final evaluation
-
-**Rationale:**
-- User insight: "We're finding optimal scalar parameters, not training a complex model"
-- No overfitting risk with simple scalars (tau=7.5, decay=3.0)
-- Real test is when XGBoost model (using these features) predicts future fights
-- Simpler = faster = easier to understand
-
-**Impact:**
-- 2-4 hour optimization (vs 10-20 hours with CV)
-- Clear interpretation (performance on unseen future data)
-- Matches production scenario (always predicting future)
-
----
+- For descriptive analytics over completed fights, feature-family tables are
+  appropriate.
+- For predictive analytics, use `training_data.csv`, `prediction_data.csv`, or
+  explicitly restrict aggregates to rows before the fight's `event_date`.
+- Remember that `_avg`, `_dec_avg`, `_total`, and `_mad` in feature-family
+  tables are rolling-through-current by implementation.
+- Odds are known only when market data exists. Treat missing odds as missing
+  market data, not as a neutral price.
 
 ## Manual Development Setup
 
-Most users should use the repository bootstrap scripts from the Quick Start:
-`setup.ps1` on Windows or `./setup.sh` on macOS/Linux. This section is retained
-as a low-level development reference for contributors who explicitly want to
-restore Hugging Face artifacts by hand, point at their own PostgreSQL instance,
-or run the CLI entrypoints outside Docker.
+For installation and first-time use, prefer the Quick Start above. Most users should use the repository bootstrap scripts
+from the Quick Start: `setup.ps1` on Windows or `./setup.sh` on macOS/Linux. This section is retained as a
+low-level development reference for contributors who explicitly want to restore
+Hugging Face artifacts by hand, point at their own PostgreSQL instance, or run
+CLI entrypoints outside Docker.
 
 ### Prerequisites
 
-- **Python 3.10-3.12** (Python 3.12.4 recommended)
-- PostgreSQL database
-- **uv package manager**
-- Optional GPU for faster model training
+- Python 3.10-3.12. Python 3.12.4 is recommended.
+- PostgreSQL database.
+- Docker, if using the public release stack.
+- `uv` package manager.
+- Optional GPU for faster model training.
 
 ### Manual Installation Without Bootstrap Scripts
 
-1. **Clone and install:**
+1. Clone and install:
+
    ```bash
    git clone <repository-url>
    cd mma-ai
@@ -1014,15 +1126,17 @@ or run the CLI entrypoints outside Docker.
    uv sync
    ```
 
-2. **Configure local environment:**
+2. Configure local environment:
+
    ```bash
    cp .env.example .env
-   # The example URLs match Docker Compose's localhost Postgres defaults.
-   # Edit them if your PostgreSQL setup uses different credentials, host, or DB names.
    ```
 
-3. **Restore shared database artifacts (fast path):**
-   Download the Hugging Face dataset artifacts:
+   The example URLs match Docker Compose's localhost Postgres defaults. Edit
+   them if your PostgreSQL setup uses different credentials, host, or database
+   names.
+
+3. Restore shared database artifacts:
 
    ```bash
    git lfs install
@@ -1068,7 +1182,7 @@ or run the CLI entrypoints outside Docker.
      artifacts\mma-ai-dataset\dumps\odds.postgres-custom
    ```
 
-   Copy convenience CSVs and extract the pretrained win model:
+4. Copy convenience CSVs and extract the pretrained win model:
 
    ```bash
    mkdir -p data AutogluonModels
@@ -1089,6 +1203,7 @@ or run the CLI entrypoints outside Docker.
    ```
 
    With those copied, you can run predictions immediately:
+
    ```bash
    uv run python predict.py \
      --model-path AutogluonModels/ag-20260304_110750-win-extreme \
@@ -1097,37 +1212,55 @@ or run the CLI entrypoints outside Docker.
      --no-shap
    ```
 
-4. **Scrape UFCStats from this repo (incremental raw CSV update):**
+5. Scrape UFCStats from this repo:
+
    ```bash
    uv run python -m scripts.scrape_ufcstats
    ```
 
-5. **Recreate the database schemas and training CSVs from the CSVs:**
+6. Recreate generated schemas and finalized CSVs:
+
    ```bash
    uv run python main.py --reset-db
    ```
 
-   You can combine the incremental scrape and database recreation in one command:
+   You can combine incremental scrape, schema recreation, and odds feature
+   recalculation:
+
    ```bash
-   uv run python main.py --scrape --reset-db
+   uv run python main.py --scrape --reset-db --odds-features
    ```
 
-6. **Train a model:**
+7. Train a model:
+
    ```bash
    uv run python -m libs.modeling.train --model-type win
    ```
 
-7. **Run predictions:**
+8. Run predictions:
+
    ```bash
    uv run python predict.py --model-type win --no-shap
    ```
 
-### Configuration
+Generated raw scrape CSVs default to `data/raw/ufcstats/`. Training outputs
+default to `data/`. You can override paths with `MMA_AI_UFCSTATS_DIR`,
+`MMA_AI_DATA_DIR`, `MMA_AI_MODELS_DIR`, and `MMA_AI_PICKS_DIR`.
+
+## Configuration
 
 Root `.env` example:
+
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/mma-ai
 ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds
+MMA_AI_COMPOSE_DATABASE_URL=
+MMA_AI_COMPOSE_ODDS_DATABASE_URL=
+MMA_AI_POSTGRES_PORT=5432
+MMA_AI_WEB_PORT=8000
+MMA_AI_DATA_DIR=data
+MMA_AI_MODELS_DIR=AutogluonModels
+MMA_AI_UFCSTATS_DIR=data/raw/ufcstats
 THE_ODDS_API_KEY=
 LLM_PROVIDER=
 LLM_MODEL=
@@ -1145,97 +1278,75 @@ GOOGLE_API_KEY=
 GEMINI_API_KEY=
 ```
 
-Generated raw scrape CSVs default to `data/raw/ufcstats/`. Training outputs default to `data/`. You can override paths with `MMA_AI_UFCSTATS_DIR`, `MMA_AI_DATA_DIR`, `MMA_AI_MODELS_DIR`, and `MMA_AI_PICKS_DIR`.
+## Troubleshooting
 
----
+### Database not found
 
-## Troubleshooting & FAQ
-
-### Common Issues
-
-#### Issue: "Database not found"
-```
+```text
 psycopg2.OperationalError: database "mma-ai" does not exist
 ```
 
-**Solution:**
+Create the database or rerun setup:
+
 ```bash
 createdb -U postgres mma-ai
 ```
 
----
+### Setup incomplete
 
-#### Issue: "optimized_parameters.json not found"
+If the dashboard reports setup incomplete, use `/api/readiness` or the top-bar
+readiness details to identify whether the missing piece is database tables,
+processed CSVs, or model artifacts. For Docker installs, check:
 
-**Expected Behavior:** First run will trigger optimization (30-60 minutes)
-
-**To Force Re-Optimization:**
 ```bash
-FORCE_REOPTIMIZE=1 uv run python main.py
+docker compose logs --tail 120 web db
 ```
 
----
+### Optimized parameters missing
 
-### FAQ
+First full feature rebuilds can generate or load smoothing parameters. To force
+re-optimization:
 
-**Q: Why do some features have `_prev` suffix?**
-A: Shifted features. `f1_prev_sig_str_land` means Fighter 1's `sig_str_land` from their previous fight (T-1), preventing data leakage.
+```bash
+FORCE_REOPTIMIZE=1 uv run python main.py --reset-db
+```
 
-**Q: What's the difference between `_avg` and `_dec_avg`?**
-A: `_avg` = simple mean, `_dec_avg` = time-weighted mean with exponential decay (3.0yr half-life).
+### Feature appears to include current fight
 
-**Q: How do I add a new feature?**
-A:
-1. Create calculator in `libs/feature_store/calculators/`
-2. Inherit from `BaseCalculator`
-3. Implement `calculate_for_table()` or `run()`
-4. Add to pipeline in `main.py` (respect execution order!)
-5. Rebuild database: `uv run python main.py --reset-db`
-
----
+Many feature-family table columns are post-fight rolling values. That is useful
+for descriptive analytics, but predictive analytics should use the cleaned
+training data, the inference builder, or an explicit past-only query.
 
 ## Quick Reference
 
-### Key Commands
-
 ```bash
-# Scrape raw UFCStats data
-uv run python -m scripts.scrape_ufcstats
+# First-time public setup
+powershell -ExecutionPolicy Bypass -File .\setup.ps1
+./setup.sh
 
-# Rebuild feature database and CSVs
-uv run python main.py --reset-db
+# Start already bootstrapped stack
+docker compose up --build db web
 
-# Scrape, reset, and rebuild in one command
-uv run python main.py --scrape --reset-db
+# Local app
+uv run mma-web
 
-# Train a win model
-uv run python -m libs.modeling.train --model-type win
+# Incremental public data update
+uv run mma-rebuild-db --scrape --reset-db --odds-features
 
-# Predict next event with latest win model
-uv run python predict.py --model-type win --no-shap
+# Scrape raw UFCStats data only
+uv run mma-scrape-ufcstats
 
-# Optimize tau parameters (30-60 minutes)
-uv run python tuning/comprehensive_likelihood_tuner.py
+# Train through CLI
+uv run mma-train
 
-# Optimize decay half-life (2-4 hours)
-uv run python tuning/decay_rate_optimizer.py
+# Predict
+uv run mma-predict --help
 
-# Override decay rate temporarily
-DECAY_HALF_LIFE_YEARS=2.5 uv run python main.py
+# Evaluate
+uv run mma-evaluate --write-report --format text
 
-# Force re-optimize parameters
-FORCE_REOPTIMIZE=1 uv run python main.py
+# Release checks
+uv run pytest
+uv run mma-docker-smoke
+uv run mma-release-audit
 ```
-
----
-
-## Document History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2025-11-22 | Initial comprehensive documentation |
-| 2.0 | 2026-01-01 | Updated with tau & decay optimization details, data leakage prevention, configuration system |
-
----
-
-**For questions, issues, or contributions:** File an issue at the repository or contact the data science team.
