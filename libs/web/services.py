@@ -67,6 +67,26 @@ def _count_csv_rows(path: Path) -> int | None:
         return sum(1 for _row in reader)
 
 
+def _csv_has_data_row(path: Path) -> int | None:
+    """Return 1 when a CSV has at least one data row without scanning it."""
+    if not path.exists():
+        return None
+    try:
+        with path.open("r", newline="", encoding="utf-8", errors="replace") as handle:
+            reader = csv.reader(handle)
+            try:
+                next(reader)
+            except StopIteration:
+                return 0
+            try:
+                next(reader)
+            except StopIteration:
+                return 0
+    except (OSError, csv.Error):
+        return None
+    return 1
+
+
 def _read_csv_header(path: Path) -> tuple[set[str] | None, str | None]:
     if not path.exists():
         return None, None
@@ -185,8 +205,15 @@ def get_data_status() -> dict[str, Any]:
 
 def get_readiness_status() -> dict[str, Any]:
     """Return whether the dashboard has the artifacts needed for first use."""
-    status = get_data_status()
     checks: dict[str, dict[str, Any]] = {}
+    raw_dir = raw_ufcstats_dir()
+    readiness_csvs = {
+        ("raw_csvs", "competitions"): raw_dir / "competitions.csv",
+        ("raw_csvs", "individuals"): raw_dir / "individuals.csv",
+        ("model_csvs", "prediction_data"): data_file("prediction_data.csv"),
+        ("model_csvs", "training_data"): data_file("training_data.csv"),
+        ("model_csvs", "training_data_dec"): data_file("training_data_dec.csv"),
+    }
 
     for group, key in (
         ("raw_csvs", "competitions"),
@@ -195,7 +222,11 @@ def get_readiness_status() -> dict[str, Any]:
         ("model_csvs", "training_data"),
         ("model_csvs", "training_data_dec"),
     ):
-        entry = status[group][key]
+        path = readiness_csvs[(group, key)]
+        entry = {
+            "path": str(path),
+            "rows": _csv_has_data_row(path),
+        }
         checks[f"{key}_csv"] = _csv_readiness_check(
             entry,
             READINESS_CSV_REQUIRED_COLUMNS[(group, key)],

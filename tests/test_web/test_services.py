@@ -95,7 +95,23 @@ def test_get_analytics_status_reports_llm_configuration_without_secrets(monkeypa
 
 
 def test_get_analytics_status_reports_sql_only_mode_when_unconfigured(monkeypatch):
-    for key in ("LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "OPENAI_API_KEY", "LLM_BASE_URL"):
+    for key in (
+        "LLM_PROVIDER",
+        "LLM_MODEL",
+        "LLM_API_KEY",
+        "LLM_BASE_URL",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "XAI_API_KEY",
+        "GROK_API_KEY",
+        "OPENROUTER_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "MISTRAL_API_KEY",
+        "TOGETHER_API_KEY",
+        "PERPLEXITY_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+    ):
         monkeypatch.delenv(key, raising=False)
 
     status = get_analytics_status()
@@ -183,6 +199,36 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
         ("postgresql://postgres@localhost:5432/mma-ai", ["features.fight_mapping"]),
         ("postgresql://postgres@localhost:5432/odds", ["bestfightodds.bfo"]),
     ]
+
+
+def test_get_readiness_status_does_not_full_scan_large_csvs(monkeypatch, tmp_path):
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    models_dir = tmp_path / "AutogluonModels"
+    monkeypatch.setenv("MMA_AI_UFCSTATS_DIR", str(raw_dir))
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
+
+    write_csv(raw_dir / "competitions.csv", [{"event_url": "event-1"}, {"event_url": "event-2"}])
+    write_csv(raw_dir / "individuals.csv", [{"url": "fighter-1"}, {"url": "fighter-2"}])
+    write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+    write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
+    write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
+    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model.mkdir(parents=True)
+    (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
+    (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
+    monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": True, "url": url})
+
+    def fail_full_count(_path):
+        raise AssertionError("readiness should not full-scan CSV rows")
+
+    monkeypatch.setattr("libs.web.services._count_csv_rows", fail_full_count)
+
+    readiness = get_readiness_status()
+
+    assert readiness["ready"] is True
+    assert readiness["checks"]["prediction_data_csv"]["rows"] == 1
 
 
 def test_get_readiness_status_reports_missing_prerequisites(monkeypatch, tmp_path):

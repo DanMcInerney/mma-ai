@@ -45,6 +45,18 @@ dashboard at `http://localhost:8000`, or the alternate port printed by setup.
 The dashboard top bar mirrors this state with a `Ready` or `Setup incomplete`
 badge.
 
+For deployed-stack verification, run the readiness smoke check against the
+actual dashboard URL:
+
+```bash
+uv run mma-docker-smoke --deployed-url http://localhost:8000
+```
+
+Use the alternate web port printed by setup when port 8000 is unavailable. This
+check fails if `/api/readiness` is incomplete or if `/api/predict/models` cannot
+discover a compatible `win` model, so it catches the same conditions that block
+the Predict tab.
+
 ## Release Surface
 
 - Data tab: refresh UFCStats CSVs, rebuild PostgreSQL feature tables, write
@@ -140,6 +152,7 @@ uv run mma-release-audit
 docker compose config --quiet
 docker compose build web
 uv run mma-docker-smoke
+uv run mma-docker-smoke --deployed-url http://localhost:8000
 ```
 
 When Chrome is available, run the real-browser Predict tab e2e before release:
@@ -148,9 +161,11 @@ When Chrome is available, run the real-browser Predict tab e2e before release:
 MMA_AI_RUN_BROWSER_E2E=1 uv run pytest tests/e2e/test_predict_tab_next_event.py::test_predict_tab_browser_predicts_next_ufc_event -q
 ```
 
-The Docker smoke command starts the built web image, checks `/api/health`, fetches
-the dashboard HTML, `/vendor/plotly.min.js`, and `/static/icons.js` from inside
-the container, then verifies the runtime image does not include test tooling.
+The default Docker smoke command starts the built web image, checks
+`/api/health`, fetches the dashboard HTML, `/vendor/plotly.min.js`, and
+`/static/icons.js` from inside the container, then verifies the runtime image
+does not include test tooling. The deployed URL mode checks the running Compose
+stack's health, readiness, and `win` model discovery.
 
 Security and hygiene scans:
 

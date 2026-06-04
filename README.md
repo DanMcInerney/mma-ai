@@ -109,6 +109,17 @@ If you already bootstrapped artifacts and only want to start the app:
 docker compose up --build db web
 ```
 
+After the stack is deployed, run the deployed readiness smoke check against the
+actual dashboard URL:
+
+```bash
+uv run mma-docker-smoke --deployed-url http://localhost:8000
+```
+
+If setup chose another web port, use that URL instead. This check verifies
+`/api/health`, requires `/api/readiness` to be ready, and confirms at least one
+compatible `win` model is discoverable before prediction.
+
 The Compose stack starts PostgreSQL 18.1 and initializes both the main `mma-ai`
 database and the auxiliary `odds` database used by odds-related workflows. The
 setup scripts restore the Hugging Face dumps into those databases. The web
@@ -224,6 +235,7 @@ docker compose up --build
 docker compose build web
 uv run mma-docker-smoke
 uv run mma-release-audit
+uv run mma-docker-smoke --deployed-url http://localhost:8000
 ```
 
 Optional real-browser Predict tab e2e, useful before release when Chrome is
@@ -245,7 +257,12 @@ fork a separate feature or prediction implementation.
 - `AGENTS.md` and `CLAUDE.md`: agent guidance for safe analytics, training,
   prediction, feature semantics, and test expectations.
 - `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
-  and the FastAPI dashboard.
+  and the FastAPI dashboard. After building the web image, `uv run
+  mma-docker-smoke` runs the container, checks `/api/health`, verifies the
+  dashboard HTML plus local Plotly/icon assets are served, and confirms the
+  runtime image does not include test tooling. After deploying a bootstrapped
+  Compose stack, `uv run mma-docker-smoke --deployed-url http://localhost:8000`
+  checks readiness and `win` model discovery against the running dashboard.
 - `libs/web`: FastAPI app, background jobs, web service adapters, analytics,
   evaluation summaries, and static UI.
 - `libs/scraping/ufcstats.py`: in-repo UFCStats scraper adapter.
