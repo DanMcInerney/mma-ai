@@ -1,59 +1,122 @@
 # MMA AI Agent Guide
 
-This repository combines the historical UFCStats scraper from `UFCScraper` with
-the feature store, training, and prediction code from `mma-ai-db`. The intended
-release artifact is a Dockerized app with a small web dashboard for data refresh,
-analytics, and fight prediction. Model training remains available through CLI
-scripts for advanced users, but it is not part of the dashboard.
+This file is the root instruction surface for coding agents working in this
+repository. Keep it high-signal and repo-specific. The detailed human-facing
+reference lives in `README.md`; use this file for rules that should change how
+an agent edits, tests, or reasons about the code.
 
-## Current App Surface
+## Project Snapshot
 
-- Web app entry point: `libs.web.app:app`
-- First-time setup: `setup.ps1` on Windows or `./setup.sh` on macOS/Linux. The
-  scripts download Hugging Face artifacts, restore both Docker Postgres
-  databases, copy processed CSVs, extract the starter model, optionally
-  configure `LLM_PROVIDER`/`LLM_MODEL` plus provider API keys, and start the
-  dashboard.
-- Local web command: `uv run mma-web`
-- Docker command: `docker compose up --build`
-- Docker Postgres 18.1 initializes both `mma-ai` and `odds`; keep
-  `docker/postgres-init/01-create-odds.sql` mounted in Compose while
-  `ODDS_DATABASE_URL` points at the `odds` database.
-- Browser charts use the local `/vendor/plotly.min.js` route backed by the
-  installed Python `plotly` package, so chart rendering does not depend on the
-  public Plotly CDN.
-- Dashboard icons use `libs/web/static/icons.js`, a local `window.lucide`
-  compatibility shim for the icons used in the UI; do not reintroduce CDN icon
-  dependencies.
-- Dashboard tabs:
-  - Data tab: scrape raw UFCStats CSVs, rebuild PostgreSQL feature tables,
-    recalculate odds features from the imported Hugging Face `odds` database,
-    create finalized CSVs, and run read-only analytics. Live BestFightOdds
-    refresh is opt-in, not part of the default dashboard update.
-  - Predict tab: choose a model, automatically load upcoming events from
-    Wikipedia into an event-name dropdown, run event prediction, and validate
-    manual fighter matchups. Odds are enabled by default but are not model
-    inputs; they only calculate market probability, expected value, and pick
-    edge. Manual matchup prediction does not expose per-fighter odds controls
-    in the dashboard. The advanced Flaresolverr proxy toggle is only for cases
-    where BestFightOdds blocks normal odds scraping.
+MMA AI is a public, Dockerized UFC analytics and prediction app. It combines the
+historical UFCStats scraper from `UFCScraper` with the PostgreSQL feature store,
+training, and prediction pipeline from `mma-ai-db`.
 
-LLM setup choices are OpenAI, Codex/OpenAI-compatible, Anthropic, Google Gemini,
-xAI Grok, OpenRouter, DeepSeek, Mistral, Together AI, Perplexity Sonar, local
-OpenAI-compatible servers, and custom OpenAI-compatible endpoints. LLMs are
-used by Data-tab analytics.
+The release surface is:
 
-Heavy workflows are intentionally lazy. Importing the web app must not import
-AutoGluon, start Scrapy, connect to Postgres, or call external APIs.
-Background jobs capture stdout, stderr, command lines, tracebacks, and script
-output in `data/logs/jobs` and expose full logs at `/api/jobs/{job_id}/log`.
+- A FastAPI dashboard for data refresh, read-only analytics, and prediction.
+- CLI training and evaluation for advanced users.
+- Docker Postgres 18.1 with two databases: `mma-ai` and `odds`.
+
+Do not add dashboard training controls or a training navigation surface.
+Training remains a CLI workflow.
+
+## Repository Map
+
+- `libs.web.app:app`: web app entry point.
+- `libs/web`: FastAPI routes, services, jobs, analytics, evaluation summaries,
+  path safety, and static UI.
+- `libs/web/static`: dashboard frontend. Charts load from `/vendor/plotly.min.js`
+  and icons load from `libs/web/static/icons.js` through a local Lucide shim.
+  Do not add public CDN dependencies for Plotly or icons.
+- `libs/scraping/ufcstats.py`: in-repo UFCStats scraper adapter.
+- `libs/feature_store`: PostgreSQL schema, calculators, feature table assembly,
+  training-data creation, and inference feature builders.
+- `libs/modeling`: training, walk-forward utilities, evaluation, calibration,
+  profit reporting, and portable artifacts.
+- `scripts`: CLI adapters and release/dev utilities.
+- `data/raw/ufcstats`: tracked seed `competitions.csv` and `individuals.csv`.
+- `docker/postgres-init/01-create-odds.sql`: creates the auxiliary `odds`
+  database used by `ODDS_DATABASE_URL`.
+
+Generated finalized CSVs, model artifacts, prediction outputs, logs, screenshots,
+and database dumps stay out of git.
+
+## Commands
+
+Use `uv` as the Python command runner.
+
+- First-time setup: `setup.ps1` on Windows or `./setup.sh` on macOS/Linux.
+- Local web app: `uv run mma-web`.
+- Docker app: `docker compose up --build`.
+- Scrape raw UFCStats CSVs: `uv run mma-scrape-ufcstats`.
+- Rebuild generated schemas and finalized CSVs: `uv run mma-rebuild-db --reset-db`.
+- Normal public data update after initial Hugging Face import:
+  `uv run mma-rebuild-db --scrape --reset-db --odds-features`.
+- Train model from CLI: `uv run mma-train`.
+- Evaluate model artifacts: `uv run mma-evaluate --write-report --format text`.
+- Predict from CLI: `uv run mma-predict`.
+- Release audit: `uv run mma-release-audit`.
+- Docker smoke: `uv run mma-docker-smoke`.
+
+For tests, prefer the narrowest relevant command first. Common examples:
+
+- Web/API/docs: `uv run pytest tests/test_web -q`.
+- Release docs only: `uv run pytest tests/test_web/test_release_docs.py -q`.
+- Feature calculators: `uv run pytest tests/tests_layer1 tests/tests_layer2 tests/tests_layer3 -q`.
+- Inference: `uv run pytest tests/test_inference -q`.
+- Full suite: `uv run pytest`.
+
+## Runtime Rules
+
+- Importing the web app must be light and side-effect free. Do not import
+  AutoGluon, start Scrapy, connect to Postgres, call Wikipedia, call LLMs, or
+  hit external APIs at import time.
+- Long-running Data and Predict actions must run as background jobs. Preserve
+  stdout, stderr, subprocess command lines, tracebacks, and script output in
+  `data/logs/jobs`; full logs are exposed at `/api/jobs/{job_id}/log`.
+- Dashboard jobs are serialized. Do not add concurrent writers for model/data
+  artifacts without explicit design work.
+- Docker Compose must keep Postgres at `postgres:18.1` and mount
+  `docker/postgres-init/01-create-odds.sql` so the `odds` database exists.
+- The setup scripts download from the Hugging Face dataset, verify checksums,
+  restore both database dumps, copy processed CSVs, extract the starter
+  `ag-20260304_110750-win-extreme` model, optionally write LLM configuration,
+  and start the dashboard.
+
+## Dashboard Surface
+
+Data tab:
+
+- Incrementally scrape `competitions.csv` and `individuals.csv`.
+- Rebuild the PostgreSQL feature store.
+- Recalculate odds features from the imported Hugging Face `odds` database.
+- Write `prediction_data.csv`, `training_data.csv`, and
+  `training_data_dec.csv`.
+- Run read-only analytics. Live BestFightOdds refresh is opt-in and not part of
+  the default dashboard update.
+
+Predict tab:
+
+- Select a model from `MMA_AI_MODELS_DIR`, defaulting to `AutogluonModels`.
+- Load upcoming events from Wikipedia into an event-name dropdown.
+- Predict events and manual fighter matchups through the same `predict.py` and
+  `InferenceDataBuilder` path.
+- Odds are enabled by default but are not model inputs. They calculate market
+  probability, expected value, and pick edge only.
+- Manual matchup odds controls are not exposed in the dashboard.
+- The advanced Flaresolverr proxy toggle is only for BestFightOdds blocking
+  normal odds scraping.
+
+LLM-assisted analytics use `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
+optional `LLM_BASE_URL`. Supported setup choices include OpenAI,
+Codex/OpenAI-compatible, Anthropic Claude, Google Gemini, xAI Grok, OpenRouter,
+DeepSeek, Mistral, Together AI, Perplexity Sonar, local OpenAI-compatible
+servers, and custom OpenAI-compatible endpoints.
 
 ## Data Pipeline
 
 Raw UFCStats data lives in `MMA_AI_UFCSTATS_DIR`, defaulting to
-`data/raw/ufcstats`. The release repo intentionally tracks the seed
-`competitions.csv` and `individuals.csv` files in that directory; generated
-model CSVs, models, logs, and DB dumps remain ignored.
+`data/raw/ufcstats`.
 
 - `competitions.csv`: one row per completed fight with event metadata, fighter
   URLs, result, method, round, time, time format, referee, details, and round
@@ -61,30 +124,26 @@ model CSVs, models, logs, and DB dumps remain ignored.
 - `individuals.csv`: fighter profile data with name, nickname, URL, date of
   birth, weight, reach, height, and stance.
 
-The in-repo scraper adapter is `libs/scraping/ufcstats.py`. It preserves the
-standalone UFCScraper field order and incremental merge behavior, and is
-exposed through `scripts/scrape_ufcstats.py` and the dashboard Data tab. Default
-scrapes skip fighter URLs and event URLs already present in the CSVs, then merge
-new rows; `--force-full` is the explicit destructive raw-CSV rebuild path.
+The UFCStats scraper is incremental by default. It skips fighter URLs and event
+URLs already present in the CSVs, then merges new rows. `--force-full` is the
+explicit destructive raw-CSV rebuild path.
 
 `main.py --reset-db` recreates generated schemas and finalized CSVs from the raw
-CSVs. The normal public update path after the initial Hugging Face DB import is
-`uv run mma-rebuild-db --scrape --reset-db --odds-features`, which recalculates
-`features.odds` from the configured imported `ODDS_DATABASE_URL` without
-scraping BestFightOdds. Use `--odds` only when you explicitly want to refresh
-live BestFightOdds data before calculating odds features. Its normal outputs
-are:
+CSVs. Use `--odds-features` to recalculate `features.odds` from the imported
+`ODDS_DATABASE_URL` without scraping BestFightOdds. Use `--odds` only when live
+BestFightOdds refresh is explicitly requested.
 
-- `data/prediction_data.csv`: side-by-side fighter feature rows used for
-  inference and upcoming-fight feature construction.
+Normal generated outputs:
+
+- `data/prediction_data.csv`: feature rows used for inference and
+  upcoming-fight construction.
 - `data/training_data.csv`: finalized win/loss model training data.
-- `data/training_data_dec.csv`: finalized decision/no-decision model training
-  data.
+- `data/training_data_dec.csv`: finalized decision/no-decision training data.
 
-## Database Schemas And Tables
+## Database And Feature Semantics
 
-PostgreSQL is the authoritative feature store. The default URL is controlled by
-`DATABASE_URL`.
+PostgreSQL is the authoritative feature store. `DATABASE_URL` controls the main
+database and `ODDS_DATABASE_URL` controls the imported odds database.
 
 Primary schemas:
 
@@ -92,156 +151,139 @@ Primary schemas:
 - `model_data`: finalized model-ready outputs when present.
 - `public`: infrastructure or ad hoc tables only.
 
-Core `features` tables:
+Core tables:
 
-- `features.fight_stats_fe`: raw fight rows loaded from UFCStats with round 1 columns,
-  total-fight columns, result metadata, fighter IDs, and event IDs.
-- `features.fight_stats_derived`: enhanced copy of `features.fight_stats_fe` after base
-  calculators add derived fields and smoothing replaces sparse raw values.
-- `features.fighter_mapping`: fighter ID, normalized fighter name, and date of birth.
-- `features.event_mapping`: event ID and event date.
-- `features.fight_mapping`: fight ID, both fighter IDs, event ID, and weight class.
+- `features.fight_stats_fe`: raw-ish UFCStats rows after base calculators add
+  fight duration, totals, outcomes, and static attributes.
+- `features.fight_stats_derived`: selected copy of `fight_stats_fe` where
+  smoothing and first-order derived layers are built.
+- `features.fighter_mapping`: fighter ID, name, DOB, stance, reach, height.
+- `features.event_mapping`: event ID, date, and location.
+- `features.fight_mapping`: fight ID, both fighter IDs, event ID, weight class,
+  method, end time, and result.
 
-Feature-specific tables are created from the derived table and then layered with
-historical calculations. Common examples include `age`, `reach`, `height`,
-`ufc_age`, `days_since_last_fight`, `sig_str`, `strikes`, `td`, `sub_att`,
-`ctrl`, `head`, `body`, `leg`, `distance`, `clinch`, `ground`, `ko`, `decision`,
-`win`, `odds`, and style or opponent-adjusted variants.
+Feature-family tables are split from `fight_stats_derived`. Common families are
+`age`, `reach`, `ape`, `ufcage`, `days_since_last_fight`, `sig_str`, `strikes`,
+`td`, `sub`, `ctrl`, `head`, `body`, `leg`, `distance`, `clinch`, `ground`,
+`ko`, `decision`, `win`, `time_sec`, and `odds`.
 
-## Feature Naming Guide
-
-The system uses suffixes to describe feature meaning:
+Feature suffixes:
 
 - `_rd1`: first-round value.
-- `_smooth`: Bayesian-smoothed value before raw replacement.
-- `_total`: cumulative total.
-- `_acc`: landed divided by attempted.
-- `_def`: defensive rate against opponent attempts.
-- `_per_min`: rate per fight minute.
-- `_ratio` or `_per`: normalized rate or conversion metric.
-- `_avg`: historical simple average.
-- `_dec_avg`: time-decayed historical average.
-- `_mad`: median absolute deviation.
-- `_sdev`: standard deviation.
-- `_opp_*`: opponent historical performance.
-- `_adjperf`: opponent-adjusted performance.
-- `_dec_adjperf`: time-decayed opponent-adjusted performance.
-- `_diff`: fighter1 minus fighter2, used by model training and inference.
+- `_smooth`: temporary Bayesian-smoothed value before replacement.
+- `_raw`: temporary observed value used during accuracy smoothing.
+- `_total`: cumulative fighter total through the completed row.
+- `_acc`: landed divided by attempted, with Bayesian smoothing.
+- `_def`: opponent accuracy against the fighter; lower is better defense.
+- `_per_min`: rate per fight minute, using `time_sec / 60`.
+- `_ratio`: fighter share of fighter-plus-opponent value in the same fight.
+- `_per_`: custom domain ratio such as `td_land_per_ctrl`.
+- `_opp`: opponent value in the same fight.
+- `_avg`: rolling average through the completed row.
+- `_dec_avg`: time-decayed rolling average through the completed row.
+- `_mad`: rolling median absolute deviation.
+- `_adjperf`: opponent-adjusted performance score.
+- `_dec_adjperf`: time-decayed opponent-adjusted performance score.
+- `_prev`: previous-fight shifted value in cleaned training data.
+- `_diff`: fighter1 minus fighter2 in finalized model data.
 
-Static or metadata fields that frequently matter:
-
-- `fighter_name`, `fighter1_name`, `fighter2_name`
-- `event_date`, `fight_id`, `event_id`
-- `weightclass` and `weightclass_encoded`
-- `age`, `reach`, `height`, `ape`, `ufcage`
-- `odds`, implied market probability, and expected value fields
+Important leakage note: feature-family tables are post-fight artifacts for
+completed fights. `_avg`, `_dec_avg`, `_total`, and `_mad` include the current
+completed row. Predictive model data shifts non-static features by one fight
+before creating `_diff` columns.
 
 ## CLI Training Defaults
 
-`uv run mma-train` uses `libs/modeling/train.py` defaults:
+`uv run mma-train` should match `libs/modeling/train.py` unless the user asks
+otherwise:
 
 - target: `win`
 - preset: `extreme`
-- time limit: `3000` seconds
+- time limit: `3000`
 - split strategy: `timeseries_split`
 - walk-forward windows: `4`
 - walk-forward initial year: `2021`
 - start date: `2014-01-01`
 - minimum prior fights: `2`
 - normalization: `robust`
-- recency weights: enabled
-- recency decay: `0.15`
-- feature importance: enabled
-- refit full: enabled
-- refit all data: disabled
-- default model families: `TABICL`, `MITRA`, `TABM`, `GBM_PREP`, `CAT`, `GBM`, `REALTABPFN-V2`
-- custom feature list/include/exclude/required feature filters: unset by default
+- recency weights enabled with decay `0.15`
+- feature importance enabled
+- refit full enabled
+- refit all data disabled
+- default families: `TABICL`, `MITRA`, `TABM`, `GBM_PREP`, `CAT`, `GBM`,
+  `REALTABPFN-V2`
+- custom feature list/include/exclude/required filters unset by default
 
-Do not reintroduce dashboard training controls by default. Users who want to train new
-models can use the CLI and evaluation scripts directly.
+## Prediction Rules
 
-## Prediction Workflow
+Upcoming event prediction is driven by `libs/wikipedia_scraper.py`,
+`libs/upcoming_fights.py`, `predict.py`, and
+`libs/feature_store/inference/*`.
 
-Upcoming event prediction is driven by:
+- A valid model directory usually includes `feats.txt`; single models also need
+  `scaler.pkl`, while walk-forward ensembles scale internally.
+- Advanced prediction CSV path overrides must stay under `MMA_AI_DATA_DIR`.
+- Prediction output directory overrides must stay under `MMA_AI_DATA_DIR`.
+- Event predictions write under `data/predictions/latest` by default, including
+  `fight_predictions.csv` on success.
+- Manual matchups use `predict.py --fighter1 ... --fighter2 ...` and optional
+  `--fight-date`; the dashboard date input must be valid `YYYY-MM-DD`.
+- Web-triggered prediction jobs must pass `--no-manual-odds` when fetching BFO
+  odds so jobs never block waiting for terminal input.
+- When event odds are missing, accept API/UI American odds through the
+  `manual_odds` mapping and pass them to `predict.py --manual-odds-json`.
+- Do not create a separate feature formula for manual matchups.
 
-- `libs/wikipedia_scraper.py`
-- `libs/upcoming_fights.py`
-- `predict.py`
-- `libs/feature_store/inference/*`
+## Analytics Rules
 
-The dashboard can list model directories from `MMA_AI_MODELS_DIR`, defaulting to
-`AutogluonModels`. A valid model directory usually includes `feats.txt`; single
-models also need `scaler.pkl`, while walk-forward ensembles scale internally.
-The collapsed advanced prediction controls can override the finalized
-`prediction_data.csv` and `training_data.csv` paths; server-side path validation
-must keep those files under `MMA_AI_DATA_DIR`. Prediction output directory
-overrides are also allowed, but only under `MMA_AI_DATA_DIR`.
+Analytics must be read-only:
 
-Event predictions write artifacts under `data/predictions/latest` by default,
-including `fight_predictions.csv` when prediction succeeds. The UI should render
-AI probability, market probability, AI odds, and positive EV status in a compact
-result graphic.
+- Execute only one `SELECT` or `WITH` query.
+- Reject mutation keywords such as `insert`, `update`, `delete`, `drop`,
+  `create`, `alter`, `copy`, `truncate`, and `vacuum`.
+- The dashboard wraps Postgres analytics in a database-enforced read-only
+  transaction with a statement timeout.
+- CSV fallback analytics load finalized CSVs into SQLite query-only mode.
 
-Manual fighter matchup prediction uses the same `predict.py` pipeline as event
-prediction. The CLI accepts `--fighter1`, `--fighter2`, optional `--fight-date`,
-and optional `--fighter1-odds` / `--fighter2-odds`; this skips Wikipedia event
-lookup while still routing through `InferenceDataBuilder`, model feature
-filtering, scaling, visualization, CSV output, and positive-EV calculation.
-The dashboard exposes the fight date as a `YYYY-MM-DD` date input, defaults it
-to today's date, and must validate it before starting a background job. The
-dashboard should not expose manual matchup odds inputs.
-Web-triggered prediction jobs must pass `--no-manual-odds` when fetching BFO
-odds so background jobs never block waiting for terminal input. Do not create a
-separate feature formula for manual matchups; that would drift from the
-production event path.
-When event odds are missing, accept user-provided American odds through the
-dashboard/API `manual_odds` mapping and pass it to `predict.py` with
-`--manual-odds-json`. The local CLI may still use the interactive
-`get_manual_fighter_odds()` prompts.
-
-## Analytics Guidance For AI Agents
-
-Analytics queries must be read-only. Only run a single `SELECT` or `WITH` query.
-Reject mutation keywords such as `insert`, `update`, `delete`, `drop`, `create`,
-`alter`, `copy`, `truncate`, or `vacuum`.
-The dashboard also wraps Postgres analytics in a database-enforced read-only
-transaction with a statement timeout, and CSV fallback analytics use SQLite
-query-only mode after loading the finalized CSVs.
-
-Prefer these sources in order:
+Prefer analytics sources in this order:
 
 1. Finalized model tables or CSVs for model-facing analytics.
 2. Feature-specific tables for understanding a feature family.
 3. `fight_stats_derived` for row-level engineered features.
 4. `fight_stats_fe` only when investigating raw scrape quality.
 
-When Postgres is unavailable, the dashboard analytics helper exposes finalized
-CSVs through in-memory read-only table names:
+When Postgres is unavailable, analytics can query finalized CSV fallbacks as
+read-only tables: `training_data`, `training_data_dec`, and `prediction_data`.
 
-- `training_data` for `data/training_data.csv`.
-- `training_data_dec` for `data/training_data_dec.csv`.
-- `prediction_data` for `data/prediction_data.csv`.
-
-Good analytics tasks:
-
-- Compare feature drift by year or event.
-- Find sparse feature families and first-time-fighter sensitivity.
-- Inspect calibration or confidence buckets from prediction outputs.
-- Compare AI probability to market probability and EV.
-- Summarize top positive and negative feature differences for a matchup.
-
-Avoid leaking future data. Any historical aggregate used for a fight must be
-based only on rows before that fight's `event_date`.
+Avoid future leakage. Any historical aggregate used for a fight must be based
+only on rows before that fight's `event_date`, unless the task is explicitly
+descriptive analytics over completed fights.
 
 ## Testing Expectations
 
-Add tests with every behavior change. For the web layer:
+Add tests with every behavior change.
 
-- App import should be light and side-effect free.
-- API tests should not run scrapers, train models, or call external services.
+- Web app import and API tests must not run scrapers, train models, import
+  AutoGluon, connect to Postgres, call Wikipedia, call LLMs, or contact external
+  services.
 - Service tests should use temporary `MMA_AI_*` paths.
-- Analytics tests should cover SQL guardrails.
+- Analytics tests should cover SQL guardrails and fallback query-only mode.
 - Prediction integration tests should monkeypatch heavy functions unless
-  explicitly marked as slow.
-- Evaluation tests should use fixture model directories with saved artifact
-  files rather than training real AutoGluon models.
+  explicitly marked slow.
+- Evaluation tests should use fixture model directories with saved artifacts
+  rather than training real AutoGluon models.
+- Release docs and setup changes should keep
+  `tests/test_web/test_release_docs.py` and `uv run mma-release-audit` passing.
+
+## Change Discipline
+
+- Keep dashboard behavior aligned with the Data tab and Predict tab described
+  above.
+- Keep path validation strict around `MMA_AI_DATA_DIR`.
+- Do not commit secrets, generated data, models, DB dumps, logs, screenshots, or
+  local `.env` files.
+- If you change public setup, Docker, dashboard assets, or artifact restore
+  behavior, update `README.md`, `docs/RELEASE_READINESS.md`, and
+  `docs/HUGGINGFACE_DATASET.md` as needed.
+- If you change feature semantics, update `README.md` and tests so analytics
+  agents can craft correct queries.
