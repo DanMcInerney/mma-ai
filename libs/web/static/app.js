@@ -15,9 +15,24 @@ async function api(path, options = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(body.detail || response.statusText);
+    throw new Error(apiErrorMessage(body.detail) || apiErrorMessage(body.error) || response.statusText);
   }
   return response.json();
+}
+
+function apiErrorMessage(detail) {
+  if (!detail) return "";
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => apiErrorMessage(item))
+      .filter(Boolean)
+      .join("; ");
+  }
+  if (typeof detail === "object") {
+    return detail.msg || detail.message || detail.error || JSON.stringify(detail);
+  }
+  return String(detail);
 }
 
 function renderJson(target, value) {
@@ -124,6 +139,19 @@ function renderAnalyticsReport(result) {
 function renderAnalyticsError(message) {
   qs("#analytics-output").innerHTML = `<div class="analytics-error">${escapeHtml(message)}</div>`;
   renderPlotlyCharts("#analytics-chart", []);
+}
+
+function renderAnalyticsLoading() {
+  qs("#analytics-output").innerHTML = `<div class="muted">Asking analytics...</div>`;
+  renderPlotlyCharts("#analytics-chart", []);
+}
+
+function setAnalyticsBusy(isBusy) {
+  const button = qs("#run-analytics");
+  if (!button) return;
+  button.disabled = Boolean(isBusy);
+  const label = button.querySelector("span");
+  if (label) label.textContent = isBusy ? "Asking" : "Ask";
 }
 
 function escapeHtml(value) {
@@ -702,11 +730,18 @@ function wireData() {
     }
   });
   qs("#run-analytics").addEventListener("click", async () => {
+    const question = qs("#analytics-question").value.trim();
+    if (question.length < 3) {
+      renderAnalyticsError("Enter an analytics question with at least 3 characters.");
+      return;
+    }
+    setAnalyticsBusy(true);
+    renderAnalyticsLoading();
     try {
       const result = await api("/api/data/analytics", {
         method: "POST",
         body: JSON.stringify({
-          question: qs("#analytics-question").value,
+          question,
           sql: qs("#analytics-sql").value || null,
           max_rows: Number(qs("#analytics-max-rows").value || 100),
         }),
@@ -714,6 +749,8 @@ function wireData() {
       renderAnalyticsReport(result);
     } catch (error) {
       renderAnalyticsError(error.message);
+    } finally {
+      setAnalyticsBusy(false);
     }
   });
 }

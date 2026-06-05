@@ -245,24 +245,98 @@ def _generate_openai_compatible(prompt: dict[str, Any] | str, config: LlmConfig,
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
 
-    response = requests.post(
-        f"{base_url}/chat/completions",
-        headers=headers,
-        json=payload,
-        timeout=config.timeout_seconds,
-    )
+    response = _post_openai_compatible(base_url, headers, payload, config)
     if getattr(response, "status_code", 0) >= 400 and json_mode and config.provider in {"local", "custom"}:
         # Some local OpenAI-compatible servers do not implement response_format.
         payload.pop("response_format", None)
-        response = requests.post(
+        response = _post_openai_compatible(base_url, headers, payload, config)
+    _raise_for_llm_status(response, config.provider)
+    data = _response_json(response, config.provider)
+    provider_error = _llm_error_message(data)
+    if provider_error:
+        raise RuntimeError(f"LLM {config.provider} returned an error: {provider_error}")
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError) as exc:
+        summary = _llm_response_summary(data)
+        detail = f": {summary}" if summary else ""
+        raise RuntimeError(f"LLM {config.provider} response did not include chat completion content{detail}") from exc
+    if not isinstance(content, str):
+        raise RuntimeError(f"LLM {config.provider} response content was not text.")
+    return content
+
+
+def _post_openai_compatible(
+    base_url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+    config: LlmConfig,
+) -> requests.Response:
+    try:
+        return requests.post(
             f"{base_url}/chat/completions",
             headers=headers,
             json=payload,
             timeout=config.timeout_seconds,
         )
-    response.raise_for_status()
-    data = response.json()
-    return data["choices"][0]["message"]["content"]
+    except requests.RequestException as exc:
+        raise RuntimeError(f"LLM {config.provider} request failed: {exc}") from exc
+
+
+def _raise_for_llm_status(response: requests.Response, provider: str) -> None:
+    try:
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        detail = _llm_error_message_from_response(response)
+        suffix = f": {detail}" if detail else ""
+        raise RuntimeError(f"LLM {provider} request failed{suffix}") from exc
+
+
+def _response_json(response: requests.Response, provider: str) -> dict[str, Any]:
+    try:
+        data = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"LLM {provider} returned invalid JSON.") from exc
+    if not isinstance(data, dict):
+        raise RuntimeError(f"LLM {provider} returned an unexpected response shape.")
+    return data
+
+
+def _llm_error_message_from_response(response: requests.Response) -> str | None:
+    try:
+        return _llm_error_message(response.json())
+    except ValueError:
+        text = getattr(response, "text", "")
+        return _truncate_message(text) if text else None
+
+
+def _llm_error_message(data: Any) -> str | None:
+    if not isinstance(data, dict):
+        return None
+    error = data.get("error")
+    if isinstance(error, dict):
+        return _truncate_message(error.get("message") or error.get("code") or json.dumps(error, default=str))
+    if error:
+        return _truncate_message(str(error))
+    message = data.get("message")
+    if message:
+        return _truncate_message(str(message))
+    return None
+
+
+def _llm_response_summary(data: dict[str, Any]) -> str:
+    error = _llm_error_message(data)
+    if error:
+        return error
+    keys = ", ".join(sorted(str(key) for key in data.keys()))
+    return f"response keys: {keys}" if keys else "empty JSON object"
+
+
+def _truncate_message(value: str, limit: int = 500) -> str:
+    text = " ".join(str(value).split())
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 1]}..."
 
 
 def _generate_anthropic(prompt: dict[str, Any] | str, config: LlmConfig, *, json_mode: bool) -> str:

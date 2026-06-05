@@ -11,8 +11,8 @@ def test_prediction_card_renderer_exposes_value_and_market_context():
 
     assert 'src="/vendor/plotly.min.js"' in html
     assert 'src="/static/icons.js' in html
-    assert 'src="/static/app.js?v=analytics-python-20260601"' in html
-    assert 'href="/static/styles.css?v=analytics-python-20260601"' in html
+    assert 'src="/static/app.js?v=analytics-ask-20260605"' in html
+    assert 'href="/static/styles.css?v=analytics-ask-20260605"' in html
     assert "cdn.plot.ly" not in html
     assert "unpkg.com" not in html
     assert "Pick" in app_js
@@ -58,6 +58,7 @@ def test_local_icon_bundle_covers_dashboard_icons():
 def test_primary_workflow_buttons_render_api_errors_in_place():
     app_js = (STATIC_DIR / "app.js").read_text(encoding="utf-8")
 
+    assert "function apiErrorMessage(detail)" in app_js
     assert app_js.count("catch (error)") >= 7
     assert 'renderJson("#data-output", error.message)' in app_js
     assert 'renderJson("#events-output", error.message)' in app_js
@@ -258,6 +259,8 @@ def test_analytics_options_expose_bounded_row_limit():
     assert "Analytics agent system prompt copied." in app_js
     assert "max_rows: Number(qs(\"#analytics-max-rows\").value || 100)" in app_js
     assert "function renderAnalyticsReport(result)" in app_js
+    assert "function renderAnalyticsLoading()" in app_js
+    assert "function setAnalyticsBusy(isBusy)" in app_js
     assert "function renderPlotlyCharts(target, charts)" in app_js
     assert "normalizeAnalyticsCharts(result)" in app_js
     assert "function renderPlotlyChart(target, chart)" not in app_js
@@ -267,6 +270,10 @@ def test_analytics_options_expose_bounded_row_limit():
     assert "Plotly.purge(element)" in app_js
     assert "renderAnalyticsReport(result)" in app_js
     assert "renderAnalyticsError(error.message)" in app_js
+    assert "Enter an analytics question with at least 3 characters." in app_js
+    assert "setAnalyticsBusy(true)" in app_js
+    assert "renderAnalyticsLoading()" in app_js
+    assert "setAnalyticsBusy(false)" in app_js
     assert 'id="analytics-output" class="result analytics-report"' in html
     assert 'id="analytics-chart" class="chart analytics-chart-grid"' in html
     assert ".analytics-status.ready" in styles
