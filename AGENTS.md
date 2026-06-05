@@ -34,6 +34,8 @@ Training remains a CLI workflow.
 - `libs/modeling`: training, walk-forward utilities, evaluation, calibration,
   profit reporting, and portable artifacts.
 - `scripts`: CLI adapters and release/dev utilities.
+- `docs/ANALYTICS_SCHEMA.md`: plain-English analytics schema reference for
+  feature meanings, leakage status, odds units, and query patterns.
 - `data/raw/ufcstats`: tracked seed `competitions.csv` and `individuals.csv`.
 - `docker/postgres-init/01-create-odds.sql`: creates the auxiliary `odds`
   database used by `ODDS_DATABASE_URL`.
@@ -101,8 +103,10 @@ Predict tab:
 - Load upcoming events from Wikipedia into an event-name dropdown.
 - Predict events and manual fighter matchups through the same `predict.py` and
   `InferenceDataBuilder` path.
-- Odds are enabled by default but are not model inputs. They calculate market
-  probability, expected value, and pick edge only.
+- Prediction-time live/manual odds are enabled by default but are used for
+  market probability, expected value, and pick edge reporting. Historical odds
+  columns may exist in generated CSVs and model artifacts; inspect `feats.txt`
+  before claiming whether a specific model used odds.
 - Manual matchup odds controls are not exposed in the dashboard.
 - The advanced Flaresolverr proxy toggle is only for BestFightOdds blocking
   normal odds scraping.
@@ -166,6 +170,11 @@ Feature-family tables are split from `fight_stats_derived`. Common families are
 `age`, `reach`, `ape`, `ufcage`, `days_since_last_fight`, `sig_str`, `strikes`,
 `td`, `sub`, `ctrl`, `head`, `body`, `leg`, `distance`, `clinch`, `ground`,
 `ko`, `decision`, `win`, `time_sec`, and `odds`.
+
+For complex analytics, consult `docs/ANALYTICS_SCHEMA.md` before writing queries.
+It documents plain-English feature meanings, known-before-fight vs post-fight
+status, and the difference between historical decimal odds in `features.odds`
+and live/manual American odds used during prediction.
 
 Feature suffixes:
 
@@ -285,5 +294,6 @@ Add tests with every behavior change.
 - If you change public setup, Docker, dashboard assets, or artifact restore
   behavior, update `README.md`, `docs/RELEASE_READINESS.md`, and
   `docs/HUGGINGFACE_DATASET.md` as needed.
-- If you change feature semantics, update `README.md` and tests so analytics
-  agents can craft correct queries.
+- If you change feature semantics, update `README.md`,
+  `docs/ANALYTICS_SCHEMA.md`, and tests so analytics agents can craft correct
+  queries.

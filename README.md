@@ -18,7 +18,8 @@ users.
 5. [Feature Engineering Pipeline](#feature-engineering-pipeline)
 6. [Layer Reference](#layer-reference)
 7. [Query Patterns](#query-patterns)
-8. [Manual Development Setup](#manual-development-setup)
+8. [Analytics Schema Reference](#analytics-schema-reference)
+9. [Manual Development Setup](#manual-development-setup)
 
 ## Quick Start
 
@@ -200,13 +201,14 @@ uv run mma-release-audit
   the dashboard is currently in SQL-only analytics mode.
 - Predict: choose a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, or run a
-  manual fighter-vs-fighter matchup. Odds are enabled by default but are used
-  only for market probability, expected value, and pick edge, not as model
-  inputs. Event prediction accepts manual fighter odds in the dashboard so web
-  jobs never need to block on terminal prompts. Manual matchup prediction
-  defaults the fight date to today and does not expose per-fighter odds
-  controls. Use the advanced Flaresolverr proxy toggle only when BestFightOdds
-  is blocking normal odds scraping.
+  manual fighter-vs-fighter matchup. Prediction-time live/manual odds are
+  enabled by default for market probability, expected value, and pick-edge
+  reporting, rather than being passed into the predictor. Event prediction
+  accepts manual fighter odds in the dashboard so web jobs never need to block
+  on terminal prompts. Manual matchup prediction defaults the fight date to
+  today and does not expose per-fighter odds controls. Use the advanced
+  Flaresolverr proxy toggle only when BestFightOdds is blocking normal odds
+  scraping.
 
 Each long-running Data or Predict job streams stdout/stderr into a debug log
 under `data/logs/jobs` and exposes it through the dashboard and
@@ -254,8 +256,10 @@ fork a separate feature or prediction implementation.
 
 ## Project Files
 
-- `AGENTS.md` and `CLAUDE.md`: agent guidance for safe analytics, training,
-  prediction, feature semantics, and test expectations.
+- `AGENTS.md` and `CLAUDE.md`: compact agent guidance for safe analytics,
+  training, prediction, feature semantics, and test expectations.
+- `docs/ANALYTICS_SCHEMA.md`: deeper plain-English analytics schema reference
+  for feature meanings, odds units, leakage status, and query patterns.
 - `Dockerfile` and `docker-compose.yml`: public release runtime with Postgres
   and the FastAPI dashboard. After building the web image, `uv run
   mma-docker-smoke` runs the container, checks `/api/health`, verifies the
@@ -916,17 +920,19 @@ UFCStats. It has the same `(fight_id, fighter_id, event_id)` grain.
 
 Important columns:
 
-- `opening_odds`, `closing_odds`: American odds.
-- `ip_opening_odds`, `ip_closing_odds`: implied probabilities from American
-  odds.
+- `opening_odds`, `closing_odds`: decimal odds from BestFightOdds.
+- `ip_opening_odds`, `ip_closing_odds`: implied probabilities from decimal
+  odds, computed as `1 / decimal_odds`.
 - `vigless_ip_opening_odds`, `vigless_ip_closing_odds`: no-vig normalized
   implied probabilities across the two fighters.
 - `sevenday_opening_odds`, `sevenday_ip_opening_odds`,
   `sevenday_vigless_ip_opening_odds`: odds closest to seven days before close.
 
-Odds are enabled by default in prediction jobs, but they are not model inputs in
-the dashboard path. They are used for market probability, expected value, and
-pick-edge reporting.
+Prediction-time live or manual odds use American odds in the UI/CLI and are used
+for market probability, expected value, and pick-edge reporting. Historical odds
+columns can still appear in generated CSVs, profit analysis, and model feature
+lists depending on the artifact. Inspect a model's `feats.txt` before claiming
+whether odds were or were not model inputs.
 
 ## Reading Feature Names
 
@@ -997,8 +1003,8 @@ The main finalized outputs are:
 - `data/training_data_dec.csv`: decision/no-decision model training data.
 
 Static features are not shifted because they are known pre-fight: `age`,
-`days_since_last_fight`, `reach`, `height`, `ufcage`, `odds`, and
-`weightclass_encoded`.
+`days_since_last_fight`, `reach`, `height`, `ufcage`, historical odds fields
+when included, and `weightclass_encoded`.
 
 A valid starter model directory such as `ag-20260304_110750-win-extreme`
 usually includes `feats.txt`. Single models also need `scaler.pkl`; walk-forward
@@ -1095,6 +1101,14 @@ For Postgres analytics, prefer sources in this order:
 2. Feature-specific tables for understanding a feature family.
 3. `features.fight_stats_derived` for row-level engineered features.
 4. `features.fight_stats_fe` only when investigating raw scrape quality.
+
+## Analytics Schema Reference
+
+For deeper analytics work, see `docs/ANALYTICS_SCHEMA.md`. It documents the
+fighter-fight grain, table families, feature suffixes, plain-English
+interpretations such as `_adjperf`, historical-vs-predictive leakage rules,
+`ODDS_DATABASE_URL` / `bestfightodds.bfo`, and the decimal-vs-American odds
+boundary.
 
 ## Analytics Safety
 

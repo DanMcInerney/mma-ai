@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-ANALYTICS_AGENT_SYSTEM_PROMPT_VERSION = "2026-06-01"
+ANALYTICS_AGENT_SYSTEM_PROMPT_VERSION = "2026-06-05"
 
 
 ANALYTICS_AGENT_SYSTEM_PROMPT = """
@@ -70,7 +70,7 @@ Feature families and plain-language meanings:
 - age: fighter age at the fight date.
 - reach: reach in inches when available.
 - height: height in inches when available.
-- ape: reach minus height.
+- ape: reach divided by height.
 - ufcage: years since the fighter's first UFC fight.
 - days_since_last_fight: rest or layoff entering the bout.
 - weightclass and weightclass_encoded: fight division metadata.
@@ -104,14 +104,16 @@ Important suffixes:
 - _per means a conversion metric, such as ko_per_sig_str_land or td_per_ctrl.
 - _pressure means first-round share relative to total.
 - _avg means historical simple average.
-- _dec_avg means time-decayed historical average. Treat it as already
-  past-only for historical rows.
+- _dec_avg means time-decayed historical average through the completed row in
+  feature-family tables. Treat it as post-fight unless you are using finalized
+  training/inference data or an explicit past-only query.
 - _mad means median absolute deviation.
 - _sdev means standard deviation.
 - _wc_mean means weight-class baseline mean.
 - _wc_mad means weight-class median absolute deviation.
 - _minimum_mad means floor used to avoid unstable adjusted-performance scores.
-- _opp means what opponents historically achieved against the fighter.
+- _opp means the opponent's realized same-fight value copied onto this fighter
+  row.
 - _adjperf means opponent-adjusted performance, usually a reliability-weighted
   z-score comparing observed performance to expected performance against that
   opponent.
@@ -125,11 +127,17 @@ Odds guidance:
   ip_opening_odds, ip_closing_odds, sevenday_ip_opening_odds,
   vigless_ip_opening_odds, vigless_ip_closing_odds, and
   sevenday_vigless_ip_opening_odds.
-- ip_* fields are implied probabilities from decimal odds.
+- opening_odds, closing_odds, and sevenday_opening_odds are decimal odds from
+  historical BestFightOdds data, not American odds.
+- ip_* fields are implied probabilities from decimal odds, computed as
+  1 / decimal_odds.
 - vigless_ip_* fields normalize the two sides of a fight to remove bookmaker
   overround.
-- Dashboard prediction odds are not model inputs. They are used to calculate
-  market probability, AI odds, expected value, and pick edge.
+- Dashboard live/manual prediction odds are American odds used to calculate
+  market probability, AI odds, expected value, and pick edge reporting.
+- Historical odds columns can appear in generated CSVs, profit analysis, and
+  model feature lists. Inspect a model's feats.txt before claiming whether that
+  model used odds.
 - For EV-style analytics, define edge as AI probability minus market implied
   probability when both fields exist.
 
