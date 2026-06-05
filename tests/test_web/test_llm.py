@@ -169,3 +169,48 @@ def test_local_openai_compatible_json_mode_retries_without_response_format(monke
     assert calls[0]["json"]["response_format"] == {"type": "json_object"}
     assert "response_format" not in calls[1]["json"]
     assert "Authorization" not in calls[1]["headers"]
+
+
+def test_openai_compatible_provider_error_body_raises_runtime_error(monkeypatch):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("LLM_MODEL", "unit-test-model")
+    monkeypatch.setenv("LLM_API_KEY", "unit-test-key")
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"error": {"message": "No endpoints found for unit-test-model"}}
+
+    def fake_post(url, headers, json, timeout):
+        return FakeResponse()
+
+    monkeypatch.setattr("libs.web.llm.requests.post", fake_post)
+
+    with pytest.raises(RuntimeError, match="No endpoints found for unit-test-model"):
+        llm_generate_text({"task": "json please"}, json_mode=True)
+
+
+def test_openai_compatible_missing_choices_raises_runtime_error(monkeypatch):
+    clear_llm_env(monkeypatch)
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("LLM_MODEL", "unit-test-model")
+    monkeypatch.setenv("LLM_API_KEY", "unit-test-key")
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"id": "chatcmpl-test", "object": "chat.completion"}
+
+    monkeypatch.setattr("libs.web.llm.requests.post", lambda *args, **kwargs: FakeResponse())
+
+    with pytest.raises(RuntimeError, match="response did not include chat completion content"):
+        llm_generate_text({"task": "json please"}, json_mode=True)
