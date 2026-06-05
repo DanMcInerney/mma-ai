@@ -39,7 +39,24 @@ logs/
 
 # Environment variables
 .env
+.env.*
 .env.local
+!.env.example
+!tests/.env.example
+.envrc
+.npmrc
+.pypirc
+.netrc
+
+# Secret/key material
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdbx
+*.ovpn
+credentials.json
+secrets.json
 
 # Jupyter Notebook
 .ipynb_checkpoints

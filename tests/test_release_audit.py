@@ -50,10 +50,16 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
     issues = find_forbidden_artifacts(
         [
             ".env",
+            ".env.production",
+            ".envrc",
+            ".npmrc",
             ".webapp.out.log",
             "data/raw/ufcstats/competitions.csv",
             "data/raw/ufcstats/individuals.csv",
             "data/prediction_data.csv",
+            "secrets/service-account.pem",
+            "models/model.pkl",
+            ".venv/pyvenv.cfg",
             "AutoGluonModels/ag-test/predictor.pkl",
             "AutogluonModels/ag-test/predictor.pkl",
             ".cursor/rules/project-description.mdc",
@@ -63,8 +69,14 @@ def test_release_audit_allows_only_seed_raw_csvs_from_data():
 
     assert [issue.path for issue in issues] == [
         ".env",
+        ".env.production",
+        ".envrc",
+        ".npmrc",
         ".webapp.out.log",
         "data/prediction_data.csv",
+        "secrets/service-account.pem",
+        "models/model.pkl",
+        ".venv/pyvenv.cfg",
         "AutoGluonModels/ag-test/predictor.pkl",
         "AutogluonModels/ag-test/predictor.pkl",
         ".cursor/rules/project-description.mdc",

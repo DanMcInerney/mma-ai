@@ -50,16 +50,65 @@ REQUIRED_TRACKED_FILES = {
     "uv.lock",
     *SEED_DATA_PATHS,
 }
-FORBIDDEN_PREFIXES = (".cursor/", "AutoGluonModels/", "AutogluonModels/", "artifacts/", "pics/", "data/predictions/")
-FORBIDDEN_EXACT_FILES = {".env", ".env.local"}
-FORBIDDEN_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".ipynb", ".log")
+FORBIDDEN_PREFIXES = (
+    ".cursor/",
+    ".venv/",
+    "venv/",
+    "env/",
+    "ENV/",
+    "AutoGluonModels/",
+    "AutogluonModels/",
+    "artifacts/",
+    "build/",
+    "dist/",
+    "mma_ai.egg-info/",
+    "pics/",
+    "data/predictions/",
+)
+FORBIDDEN_EXACT_FILES = {".env", ".env.local", ".envrc", ".netrc", ".npmrc", ".pypirc"}
+FORBIDDEN_SUFFIXES = (
+    ".7z",
+    ".bak",
+    ".backup",
+    ".db",
+    ".dump",
+    ".gif",
+    ".gz",
+    ".ipynb",
+    ".joblib",
+    ".jpg",
+    ".jpeg",
+    ".kdbx",
+    ".key",
+    ".log",
+    ".ovpn",
+    ".p12",
+    ".pem",
+    ".pfx",
+    ".pkl",
+    ".png",
+    ".rar",
+    ".sqlite",
+    ".sqlite3",
+    ".tar",
+    ".zip",
+)
 ASCII_RUNTIME_LOG_FILES = {"predict.py"}
 MIN_SEED_ROWS = 1000
 MIN_SEED_COLUMNS = 6
 REQUIRED_DOCKERIGNORE_LINES = {
     ".env",
+    ".env.*",
     ".env.local",
+    ".envrc",
+    ".netrc",
+    ".npmrc",
+    ".pypirc",
+    "*.key",
     "*.log",
+    "*.p12",
+    "*.pem",
+    "*.pfx",
     "*.csv",
     "*.html",
     "logs",
@@ -139,10 +188,14 @@ def find_forbidden_artifacts(paths: Iterable[str]) -> list[AuditIssue]:
     issues: list[AuditIssue] = []
     for path in paths:
         normalized = path.replace("\\", "/")
+        filename = Path(normalized).name
+        lower_filename = filename.lower()
         if normalized in SEED_DATA_PATHS:
             continue
         if (
             normalized in FORBIDDEN_EXACT_FILES
+            or filename in FORBIDDEN_EXACT_FILES
+            or (lower_filename.startswith(".env.") and lower_filename != ".env.example")
             or normalized in GENERATED_DATA_FILES
             or normalized.startswith(FORBIDDEN_PREFIXES)
             or normalized.lower().endswith(FORBIDDEN_SUFFIXES)

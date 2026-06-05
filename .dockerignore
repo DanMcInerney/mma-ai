@@ -1,7 +1,16 @@
 .git
 .cursor
 .env
+.env.*
 .env.local
+.envrc
+.npmrc
+.pypirc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
 .webapp*.log
 .pytest_cache
 tests
