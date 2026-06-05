@@ -150,7 +150,7 @@ def test_predict_model_dropdown_filters_with_selected_target():
     assert '<label class="span-two">Model <select id="predict-model"></select></label>' in html
     assert '<input id="predict-odds" type="checkbox" /> Odds' in html
     assert '<label><input id="predict-shap" type="checkbox" /> Include SHAP</label>' in html
-    assert "Odds are not a feature in the model; they solely exist to calculate the Expected Value of each prediction." in html
+    assert "These live prediction odds are not passed into the model; they solely exist to calculate the Expected Value of each prediction." in html
     assert "Creates per-feature reasoning for why a fighter was picked" in html
     assert html.index("Advanced Prediction Knobs") < html.index('id="predict-model-type"')
     assert 'id="predict-flaresolverr"' in html
@@ -224,7 +224,7 @@ def test_predict_tab_auto_loads_upcoming_event_dropdown_with_odds_context():
     assert 'id="predict-event"' in html
     assert 'id="event-preview"' in html
     assert "Loading upcoming events..." in html
-    assert "Odds are not included in the model" in html
+    assert "These live event odds are not passed into the model" in html
     assert "async function loadUpcomingEvents()" in app_js
     assert "function renderUpcomingEventsError(message)" in app_js
     assert "async function loadUpcomingEventsWithStatus()" in app_js

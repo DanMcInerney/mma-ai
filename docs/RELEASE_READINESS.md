@@ -62,10 +62,11 @@ badge.
 - Predict tab: list models, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict a selected event, run manual
   fighter matchups, and show book odds, AI odds, positive EV status, and pick
-  edge in compact result cards. Odds are enabled by default but are not model
-  inputs; event prediction can ingest manual American odds through the
-  dashboard/API instead of waiting on terminal input. Manual matchup prediction
-  defaults the fight date to today and does not expose per-fighter odds controls.
+  edge in compact result cards. Prediction-time live/manual odds are enabled by
+  default but are used for reporting rather than passed into the predictor;
+  event prediction can ingest manual American odds through the dashboard/API
+  instead of waiting on terminal input. Manual matchup prediction defaults the
+  fight date to today and does not expose per-fighter odds controls.
   The advanced Flaresolverr proxy toggle is only for BestFightOdds blocking
   normal odds scraping.
 - Job logs: Data and Predict jobs stream and persist stdout, stderr,

@@ -139,10 +139,12 @@ def test_analytics_system_prompt_endpoint_returns_copyable_prompt():
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["version"] == "2026-06-01"
+    assert payload["version"] == "2026-06-05"
     assert "MMA AI Data Tab analytics agent" in payload["system_prompt"]
     assert "_adjperf" in payload["system_prompt"]
     assert "features.odds" in payload["system_prompt"]
+    assert "decimal odds" in payload["system_prompt"]
+    assert "Treat it as post-fight" in payload["system_prompt"]
 
 
 def test_data_refresh_endpoint_starts_background_job(monkeypatch):

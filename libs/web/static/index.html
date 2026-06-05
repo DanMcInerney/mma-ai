@@ -80,7 +80,7 @@
             <label class="span-two">Model <select id="predict-model"></select></label>
             <div class="checkbox-field">
               <label><input id="predict-odds" type="checkbox" /> Odds</label>
-              <p class="field-note">Odds are not a feature in the model; they solely exist to calculate the Expected Value of each prediction.</p>
+              <p class="field-note">These live prediction odds are not passed into the model; they solely exist to calculate the Expected Value of each prediction.</p>
             </div>
             <div class="checkbox-field">
               <label><input id="predict-shap" type="checkbox" /> Include SHAP</label>
@@ -130,7 +130,7 @@
             <div id="event-preview" class="event-preview">Upcoming events load automatically.</div>
             <details>
               <summary>Manual Event Odds</summary>
-              <p class="field-note">Odds are not included in the model. They are only used to calculate market-implied probability and expected value.</p>
+              <p class="field-note">These live event odds are not passed into the model. They are only used to calculate market-implied probability and expected value.</p>
               <textarea id="event-manual-odds" rows="5" placeholder="fighter name=-150&#10;other fighter=+200"></textarea>
             </details>
             <button id="run-event-predict" class="primary wide" disabled><i data-lucide="badge-dollar-sign"></i><span>Predict Event</span></button>

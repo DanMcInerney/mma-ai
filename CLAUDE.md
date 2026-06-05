@@ -32,11 +32,13 @@ and Predict dashboard. Training remains a CLI workflow, not a dashboard tab.
   update.
 - Predict: select a model, automatically load upcoming UFC events from
   Wikipedia into an event-name dropdown, predict the selected event, and run
-  manual fighter matchups through the same inference path. Odds are enabled by
-  default but only calculate EV, market probability, and pick edge; they are not
-  model inputs. Manual matchup per-fighter odds controls are not exposed in the
-  dashboard. The advanced Flaresolverr proxy toggle is only for BestFightOdds
-  blocking normal odds scraping.
+  manual fighter matchups through the same inference path. Prediction-time
+  live/manual odds are enabled by default but only calculate EV, market
+  probability, and pick edge reporting. Historical odds columns can exist in
+  generated CSVs and model artifacts; inspect `feats.txt` before claiming
+  whether a specific model used odds. Manual matchup per-fighter odds controls
+  are not exposed in the dashboard. The advanced Flaresolverr proxy toggle is
+  only for BestFightOdds blocking normal odds scraping.
 
 LLM-assisted analytics use `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and
 optional `LLM_BASE_URL` first. The setup scripts can configure OpenAI,
@@ -118,6 +120,11 @@ Feature suffixes:
 - `_opp_*`: opponent features.
 - `_adjperf`, `_dec_adjperf`: opponent-adjusted performance.
 - `_diff`: fighter1 minus fighter2 for model input.
+
+For deeper analytics, consult `docs/ANALYTICS_SCHEMA.md` before writing
+nontrivial queries. It documents feature-family meanings, leakage status,
+`_adjperf` interpretation, and the difference between historical decimal odds
+in `features.odds` and live/manual American odds used during prediction.
 
 ## Training Defaults
 

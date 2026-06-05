@@ -77,7 +77,7 @@ def test_data_tab_analytics_prompt_copy_smoke(monkeypatch, tmp_path):
     prompt_response = client.get("/api/data/analytics/system-prompt")
     assert prompt_response.status_code == 200
     prompt_payload = prompt_response.json()
-    assert prompt_payload["version"] == "2026-06-01"
+    assert prompt_payload["version"] == "2026-06-05"
     assert "MMA AI Data Tab analytics agent" in prompt_payload["system_prompt"]
     assert "_adjperf" in prompt_payload["system_prompt"]
     assert "features.odds" in prompt_payload["system_prompt"]
