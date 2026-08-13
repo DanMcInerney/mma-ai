@@ -34,6 +34,12 @@ class WikiTableScraper:
 
     def get_table(self):
         table = self.soup.find('table', self.id)
+        if table is None and 'id' in self.id:
+            # Wikipedia moved section ids off tables onto headings;
+            # find the heading with this id and take the next table after it
+            anchor = self.soup.find(id=self.id['id'])
+            if anchor is not None:
+                table = anchor.find_next('table')
         return table
 
     def get_table_by_id(self):
@@ -43,7 +49,13 @@ class WikiTableScraper:
     def get_table_links(self, column):
         links = []
         for tag in self.table.select(f"td:nth-of-type({column}) a"):
-            links.append(self.base_url + tag['href'])
+            href = tag['href']
+            if href.startswith('//'):
+                # protocol-relative link
+                href = self.base_url.split('://', 1)[0] + ':' + href
+            elif href.startswith('/'):
+                href = self.base_url + href
+            links.append(href)
         return links
 
     def get_table_column(self, column):
