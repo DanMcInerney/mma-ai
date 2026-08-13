@@ -24,7 +24,12 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from autogluon.tabular import TabularPredictor
-from libs.modeling.train import TrainingConfig, FeatureSelector
+from libs.modeling.train import (
+    FeatureSelector,
+    TrainingConfig,
+    build_training_fit_kwargs,
+    training_runtime_preflight,
+)
 from libs.modeling.data_preparation import DataPreparation
 from libs.modeling.data_utils import (
     apply_robust_normalization, 
@@ -50,9 +55,6 @@ class WalkForwardConfig:
     save_fold_models: bool = False
     output_dir: str = 'walk_forward_results'
     
-    def __post_init__(self):
-        os.makedirs(self.output_dir, exist_ok=True)
-
 class WalkForwardValidator:
     """
     Executes walk-forward validation using expanding or rolling window strategy.
@@ -66,6 +68,8 @@ class WalkForwardValidator:
         
     def run(self) -> pd.DataFrame:
         """Execute the full walk-forward validation pipeline."""
+        training_runtime_preflight()
+        os.makedirs(self.config.output_dir, exist_ok=True)
         logger.info("Starting Walk-Forward Validation")
         
         # 1. Load and Preprocess Full Dataset
@@ -243,15 +247,10 @@ class WalkForwardValidator:
         train_data['y_true'] = y_train
         
         # 4. Train
-        fit_kwargs = {
-            'train_data': train_data,
-            'presets': self.config.base_config.preset,
-            'time_limit': self.config.base_config.time_limit,
-            'ag_args_fit': {'shuffle': False} 
-        }
-        
-        if self.config.base_config.included_model_types:
-            fit_kwargs['included_model_types'] = self.config.base_config.included_model_types
+        fit_kwargs = build_training_fit_kwargs(
+            self.config.base_config,
+            train_data=train_data,
+        )
             
         predictor.fit(**fit_kwargs)
         

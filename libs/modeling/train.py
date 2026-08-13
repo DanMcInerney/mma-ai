@@ -7,12 +7,16 @@ either fight outcomes (win/loss) or fight methods (decision/no decision).
 import os
 import sys
 import argparse
+import importlib
+import importlib.metadata as importlib_metadata
 import numpy as np
 import json
 import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional, Tuple, Dict
+
+from packaging.version import Version
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
@@ -27,12 +31,106 @@ from libs.modeling.portable_artifacts import load_joblib_artifact, load_tabular_
 from libs.paths import data_file
 
 
+AUTOGUON_VERSION = "1.6.1"
+STOCK_PRESETS = ("noncommercial", "extreme")
+AUTOGUON_DISTRIBUTIONS = (
+    "autogluon-common",
+    "autogluon-core",
+    "autogluon-features",
+    "autogluon-tabular",
+)
+FOUNDATION_MODULES = ("tabpfn", "tabicl", "tabdpt", "pytabkit", "synthefy_nori")
+
+
+def training_runtime_preflight() -> Dict[str, object]:
+    """Fail closed unless the exact AutoGluon and single-GPU runtime is usable."""
+    for distribution in AUTOGUON_DISTRIBUTIONS:
+        try:
+            installed_version = importlib_metadata.version(distribution)
+        except importlib_metadata.PackageNotFoundError as exc:
+            raise RuntimeError(f"Required distribution {distribution} is not installed") from exc
+        if installed_version != AUTOGUON_VERSION:
+            raise RuntimeError(
+                f"AutoGluon runtime must be exactly {AUTOGUON_VERSION}; "
+                f"{distribution} is {installed_version}"
+            )
+
+    for module_name in FOUNDATION_MODULES:
+        try:
+            importlib.import_module(module_name)
+        except Exception as exc:
+            raise RuntimeError(f"Required foundation package import failed: {module_name}") from exc
+
+    try:
+        torch = importlib.import_module("torch")
+    except Exception as exc:
+        raise RuntimeError("Required CUDA PyTorch import failed") from exc
+
+    torch_version = Version(torch.__version__)
+    if not (Version("2.10") <= torch_version < Version("2.14")):
+        raise RuntimeError(f"PyTorch must be >=2.10,<2.14; found {torch.__version__}")
+    if torch_version.is_prerelease or torch_version.is_devrelease:
+        raise RuntimeError(f"PyTorch must be a stable release; found {torch.__version__}")
+    torch_cuda_version = torch.version.cuda
+    if not torch_cuda_version or not str(torch_cuda_version).startswith("13."):
+        raise RuntimeError(f"PyTorch must be an official CUDA 13 build; found CUDA {torch_cuda_version}")
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is unavailable")
+
+    device_count = torch.cuda.device_count()
+    if device_count != 1:
+        raise RuntimeError(f"Training requires exactly one visible CUDA device; found {device_count}")
+
+    device_name = torch.cuda.get_device_name(0)
+    if "NVIDIA" not in device_name.upper():
+        raise RuntimeError(f"Training requires an NVIDIA CUDA device; found {device_name}")
+
+    compute_capability = torch.cuda.get_device_capability(0)
+    try:
+        tensor_result = (torch.tensor([2.0], device="cuda") * 3).item()
+    except Exception as exc:
+        raise RuntimeError("CUDA tensor operation failed") from exc
+    if tensor_result != 6.0:
+        raise RuntimeError(f"CUDA tensor operation returned {tensor_result}, expected 6.0")
+
+    return {
+        "autogluon_version": AUTOGUON_VERSION,
+        "torch_version": torch.__version__,
+        "torch_cuda_version": str(torch_cuda_version),
+        "cuda_available": True,
+        "device_count": device_count,
+        "device_name": device_name,
+        "compute_capability": f"{compute_capability[0]}.{compute_capability[1]}",
+        "tensor_result": tensor_result,
+    }
+
+
+def build_training_fit_kwargs(
+    config: "TrainingConfig",
+    *,
+    train_data: pd.DataFrame,
+    tuning_data: Optional[pd.DataFrame] = None,
+) -> Dict[str, object]:
+    """Build the shared stock-preset fit contract for every production path."""
+    fit_kwargs: Dict[str, object] = {
+        "train_data": train_data,
+        "presets": config.preset,
+        "time_limit": config.time_limit,
+        "num_gpus": 1,
+        "raise_on_model_failure": True,
+    }
+    if tuning_data is not None:
+        fit_kwargs["tuning_data"] = tuning_data
+        fit_kwargs["use_bag_holdout"] = True
+    return fit_kwargs
+
+
 @dataclass
 class TrainingConfig:
     """Configuration for model training."""
     
     model_type: str  # 'win' or 'decision'
-    preset: str  # 'extreme' or 'best'
+    preset: str = "extreme"  # stock 'noncommercial' or 'extreme'
     time_limit: int = 1500  # seconds
     
     # Data split configuration
@@ -60,8 +158,8 @@ class TrainingConfig:
     # Feature importance
     calculate_importance: bool = False
     
-    # Model type configuration
-    included_model_types: Optional[List[str]] = None  # Model types to include (e.g., ['TABPFNV2', 'TABM', 'TABICL', 'GBM', 'XGB', 'CAT', 'MITRA'])
+    # Compatibility seam only; stock presets reject non-empty model allow-lists.
+    included_model_types: Optional[List[str]] = None
     
     # Split strategy: 'standard', 'timeseries_split', or 'walkforward'
     split_strategy: str = 'standard'  # Data splitting strategy
@@ -82,8 +180,14 @@ class TrainingConfig:
         if self.model_type not in ['win', 'decision']:
             raise ValueError(f"model_type must be 'win' or 'decision', got '{self.model_type}'")
         
-        if self.preset not in ['extreme', 'best']:
-            raise ValueError(f"preset must be 'extreme' or 'best', got '{self.preset}'")
+        if self.preset not in STOCK_PRESETS:
+            raise ValueError(f"preset must be 'noncommercial' or 'extreme', got '{self.preset}'")
+
+        if self.included_model_types:
+            raise ValueError(
+                "included_model_types is unsupported for stock presets; "
+                "select 'extreme' or 'noncommercial' without a model allow-list"
+            )
         
         if self.split_strategy not in ['standard', 'timeseries_split', 'walkforward']:
             raise ValueError(f"split_strategy must be 'standard', 'timeseries_split', or 'walkforward', got '{self.split_strategy}'")
@@ -837,7 +941,7 @@ class EvaluationManager:
             f.write(f"Use Recency Weights: {config.use_recency_weights}\n")
             f.write(f"Decay Rate: {config.decay_rate}\n")
             f.write(f"Calculate Importance: {config.calculate_importance}\n")
-            f.write(f"Included Model Types: {config.included_model_types}\n")
+            f.write(f"Model Portfolio: Stock {config.preset} preset (no allow-list override)\n")
             f.write(f"Include Split Dec: {config.include_split_dec}\n")
             f.write(f"dec_avg rate: {config.decay_rate}\n")
     
@@ -1167,25 +1271,6 @@ class TimeseriesSplitTrainer:
         
         return train_data, tune_data
     
-    def _create_fit_kwargs(self) -> Dict:
-        """Create fit_kwargs for AutoGluon predictor."""
-        # Map 'extreme' to 'extreme_quality' for AutoGluon
-        preset = 'extreme_quality' if self.config.preset == 'extreme' else self.config.preset
-        
-        fit_kwargs = {
-            'presets': preset,
-            'time_limit': self.config.time_limit,
-            'num_bag_folds': 0,  # Disables bagging/CV folds
-            'num_stack_levels': 0,  # Disables stacking
-            'auto_stack': False,  # Overrides preset's auto_stack=True
-            'dynamic_stacking': False,  # Disables dynamic stacking validation splits
-        }
-        
-        if self.config.included_model_types:
-            fit_kwargs['included_model_types'] = self.config.included_model_types
-        
-        return fit_kwargs
-    
     def _handle_refit_full(
         self,
         predictor: TabularPredictor,
@@ -1236,6 +1321,7 @@ class TimeseriesSplitTrainer:
         Returns:
             Trained TabularPredictor instance
         """
+        training_runtime_preflight()
         print(f"\n=== Time-Series Split Training ===")
         print("Time-series split mode enabled — using time-respecting train/tune split...")
         print(f"Preset: {self.config.preset}")
@@ -1274,9 +1360,11 @@ class TimeseriesSplitTrainer:
         )
         
         # Train model
-        fit_kwargs = self._create_fit_kwargs()
-        fit_kwargs['train_data'] = train_data
-        fit_kwargs['tuning_data'] = tune_data
+        fit_kwargs = build_training_fit_kwargs(
+            self.config,
+            train_data=train_data,
+            tuning_data=tune_data,
+        )
         
         print(f"\n--- Training Model ---")
         predictor.fit(**fit_kwargs)
@@ -1368,6 +1456,7 @@ class RefitAllTrainer:
         print(f"{'='*70}")
         
         # Create refit directory
+        training_runtime_preflight()
         refit_dir = f"{self.original_model_dir}_refit_all"
         if os.path.exists(refit_dir):
             import shutil
@@ -1425,9 +1514,11 @@ class RefitAllTrainer:
         )
         
         # Train model
-        fit_kwargs = trainer._create_fit_kwargs()
-        fit_kwargs['train_data'] = train_data
-        fit_kwargs['tuning_data'] = tune_data
+        fit_kwargs = build_training_fit_kwargs(
+            self.config,
+            train_data=train_data,
+            tuning_data=tune_data,
+        )
         
         print(f"\n--- Training Refit Model ---")
         refit_predictor.fit(**fit_kwargs)
@@ -1752,20 +1843,11 @@ class WalkForwardTrainer:
             weight_evaluation=False
         )
         
-        # Train with 'extreme' preset, no bagging, 2 stacking layers, no shuffling
-        fit_kwargs = {
-            'train_data': train_data,
-            'tuning_data': val_data,
-            'presets': 'extreme_quality',  # Corrected to full preset name; use 'extreme' if that's a custom alias
-            'time_limit': self.config.time_limit,
-            'num_bag_folds': 0,  # Disables bagging/CV folds
-            'num_stack_levels': 0,  # Disables stacking
-            'auto_stack': False,  # Overrides preset's auto_stack=True
-            'dynamic_stacking': False,  # Disables dynamic stacking validation splits
-        }
-        
-        if self.config.included_model_types:
-            fit_kwargs['included_model_types'] = self.config.included_model_types
+        fit_kwargs = build_training_fit_kwargs(
+            self.config,
+            train_data=train_data,
+            tuning_data=val_data,
+        )
         
         print(f"\n--- Training Window {window_idx + 1} Model ---")
         predictor.fit(**fit_kwargs)
@@ -2075,7 +2157,7 @@ class WalkForwardTrainer:
                 'normalize': self.config.normalize,
                 'use_recency_weights': self.config.use_recency_weights,
                 'decay_rate': self.config.decay_rate,
-                'included_model_types': self.config.included_model_types
+                'model_portfolio': f"stock:{self.config.preset}"
             },
             'window_results': self.window_results,
             'aggregate_metrics': {
@@ -2182,7 +2264,7 @@ class WalkForwardTrainer:
             f.write(f"Use Recency Weights: {self.config.use_recency_weights}\n")
             f.write(f"Decay Rate: {self.config.decay_rate}\n")
             f.write(f"Calculate Importance: {self.config.calculate_importance}\n")
-            f.write(f"Included Model Types: {self.config.included_model_types}\n")
+            f.write(f"Model Portfolio: Stock {self.config.preset} preset (no allow-list override)\n")
             f.write(f"Include Split Dec: {self.config.include_split_dec}\n")
             f.write(f"dec_avg rate: {self.config.decay_rate}\n")
             f.write(f"Walk-Forward Windows: {self.config.walkforward_n_windows}\n")
@@ -2315,6 +2397,8 @@ class WalkForwardTrainer:
         Returns:
             EnsemblePredictor that averages predictions from all window models + final model
         """
+        training_runtime_preflight()
+
         # Create model directory
         self.model_dir = FileManager.create_model_directory(
             self.config.model_type,
@@ -2719,41 +2803,7 @@ class ModelTrainer:
         print(f"Time limit: {self.config.time_limit}s")
         
         train_data = pd.concat([X_train, y_train], axis=1)
-        test_data = pd.concat([X_test, y_test], axis=1)
-        
-        if self.config.preset == 'extreme':
-            fit_kwargs = {
-                'train_data': train_data,
-                'presets': 'extreme',
-                'time_limit': self.config.time_limit,
-                'ag_args_fit': {'shuffle': False}
-            }
-            if self.config.included_model_types:
-                fit_kwargs['included_model_types'] = self.config.included_model_types
-            
-            predictor.fit(**fit_kwargs)
-        
-        elif self.config.preset == 'best':
-            excluded_model_types = ['KNN']
-            predictor.fit(
-                train_data=train_data,
-                #tuning_data=test_data,  # Use test set for tuning
-                presets='best',
-                excluded_model_types=excluded_model_types,
-                time_limit=self.config.time_limit,
-                use_bag_holdout=True,
-                ag_args_fit={
-                    'stopping_metric': 'log_loss',
-                    'num_gpus': 1,
-                    'shuffle': False
-                },
-                ag_args_ensemble={
-                    'use_orig_features': False,
-                    'max_base_models': 15,
-                    'max_base_models_per_type': 3,
-                    'fold_fitting_strategy': 'sequential_local'
-                }
-            )
+        predictor.fit(**build_training_fit_kwargs(self.config, train_data=train_data))
         
         return predictor
     
@@ -2789,6 +2839,8 @@ class ModelTrainer:
         Returns:
             Refitted TabularPredictor instance
         """
+        training_runtime_preflight()
+
         # Ensure this is only called for timeseries_split
         if self.config.split_strategy != 'timeseries_split':
             raise ValueError(
@@ -2933,21 +2985,11 @@ class ModelTrainer:
                 weight_evaluation=False
             )
             
-            # Train with same settings
-            # CRITICAL: No shuffling, bagging, or stacking to preserve temporal order
-            fit_kwargs = {
-                'train_data': train_data,
-                'tuning_data': tune_data,
-                'presets': 'extreme_quality',  # Corrected to full preset name; use 'extreme' if that's a custom alias
-                'time_limit': self.config.time_limit,
-                'num_bag_folds': 0,  # Disables bagging/CV folds
-                'num_stack_levels': 0,  # Disables stacking
-                'auto_stack': False,  # Overrides preset's auto_stack=True
-                'dynamic_stacking': False,  # Disables dynamic stacking validation splits
-            }
-            
-            if self.config.included_model_types:
-                fit_kwargs['included_model_types'] = self.config.included_model_types
+            fit_kwargs = build_training_fit_kwargs(
+                self.config,
+                train_data=train_data,
+                tuning_data=tune_data,
+            )
             
             print(f"\n--- Training Refit Model ---")
             refit_predictor.fit(**fit_kwargs)
@@ -3038,7 +3080,7 @@ class ModelTrainer:
                 f.write(f"Use Recency Weights: {self.config.use_recency_weights}\n")
                 f.write(f"Decay Rate: {self.config.decay_rate}\n")
                 f.write(f"Calculate Importance: {self.config.calculate_importance}\n")
-                f.write(f"Included Model Types: {self.config.included_model_types}\n")
+                f.write(f"Model Portfolio: Stock {self.config.preset} preset (no allow-list override)\n")
                 f.write(f"Include Split Dec: {self.config.include_split_dec}\n")
                 f.write(f"dec_avg rate: {self.config.decay_rate}\n")
             
@@ -3076,20 +3118,7 @@ class ModelTrainer:
                 weight_evaluation=False
             )
             
-            # Train on all data (no tuning_data for normal mode refit)
-            fit_kwargs = {
-                'train_data': combined_data,
-                'presets': self.config.preset,
-                'time_limit': self.config.time_limit,
-                'time_limit': self.config.time_limit,
-                'num_bag_folds': 0,  # Disables bagging/CV folds
-                'num_stack_levels': 0,  # Disables stacking
-                'auto_stack': False,  # Overrides preset's auto_stack=True
-                'dynamic_stacking': False,  # Disables dynamic stacking validation splits
-            }
-            
-            if self.config.included_model_types:
-                fit_kwargs['included_model_types'] = self.config.included_model_types
+            fit_kwargs = build_training_fit_kwargs(self.config, train_data=combined_data)
             
             print(f"\n--- Training Refit Model on All Data ---")
             refit_predictor.fit(**fit_kwargs)
@@ -3351,6 +3380,8 @@ class ModelTrainer:
         Returns:
             Trained TabularPredictor or EnsemblePredictor instance
         """
+        training_runtime_preflight()
+
         # Route to walk-forward trainer if enabled
         if self.config.split_strategy == 'walkforward':
             walkforward_trainer = WalkForwardTrainer(self.config)
@@ -3597,7 +3628,7 @@ def main(model_type='win', time_limit=None, preset=None, split_strategy=None, re
         include_split_dec = True
     config = TrainingConfig(
         model_type=model_type,  # 'win' or 'decision'
-        preset=preset or 'extreme',  # 'extreme' or 'best'
+        preset=preset or 'extreme',
         time_limit=time_limit or 3000,
         #test_size="2025-01-01",  # None, or set to date string like "2025-06-01"
         test_size=None,  # None, or set to date string like "2025-06-01"
@@ -3616,8 +3647,6 @@ def main(model_type='win', time_limit=None, preset=None, split_strategy=None, re
         calculate_importance=True,  # Set to True to calculate feature importance
         refit_all=False, # this only applies to timeseries_split. Walkforward already uses refit_all internally.
         refit_full=True if refit_full is None else refit_full, # this only applies to timeseries_split. Walkforward already uses refit_full internally.
-        included_model_types=['TABICL', 'MITRA', 'TABM', 'GBM_PREP', 'CAT', 'GBM', 'REALTABPFN-V2'] # all models from hyperparameters (TABDPT excluded due to PyTorch Nightly attention kernel compatibility)
-        #included_model_types=['GBM', 'XGB', 'CAT'] # fast for importance testing
     )
     
     # Print configuration before training
@@ -3658,11 +3687,8 @@ def main(model_type='win', time_limit=None, preset=None, split_strategy=None, re
         print(f"  Decay Rate:         {config.decay_rate}")
     print(f"\nFeature Importance:")
     print(f"  Calculate:         {config.calculate_importance}")
-    print(f"\nModel Types:")
-    if config.included_model_types:
-        print(f"  Included:           {', '.join(config.included_model_types)}")
-    else:
-        print(f"  Included:           All (default for preset)")
+    print(f"\nModel Portfolio:")
+    print(f"  Selection:          Stock {config.preset} preset (no allow-list override)")
     print("=" * 70 + "\n")
     
     # Train model
@@ -3677,7 +3703,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train an MMA prediction model from data/training_data*.csv.")
     parser.add_argument("--model-type", choices=["win", "decision"], default="win")
     parser.add_argument("--time-limit", type=int, default=None, help="AutoGluon training time limit in seconds.")
-    parser.add_argument("--preset", choices=["extreme", "best"], default=None)
+    parser.add_argument("--preset", choices=list(STOCK_PRESETS), default=None)
     parser.add_argument("--split-strategy", choices=["standard", "timeseries_split", "walkforward"], default=None)
     parser.add_argument("--no-refit-full", action="store_true", help="Disable AutoGluon refit_full after validation.")
     return parser.parse_args()
