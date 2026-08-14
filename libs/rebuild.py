@@ -1,6 +1,10 @@
 """Failure-safety boundaries for destructive rebuilds."""
 
 from contextlib import contextmanager
+import os
+from pathlib import Path
+import shutil
+import tempfile
 
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
@@ -11,6 +15,15 @@ GENERATED_SCHEMA_BACKUPS = (
     ("features", "features_rebuild_backup"),
     ("model_data", "model_data_rebuild_backup"),
 )
+GENERATED_CSV_NAMES = (
+    "prediction_data.csv",
+    "training_data.csv",
+    "training_data_dec.csv",
+)
+
+
+class CsvRestoreError(RuntimeError):
+    """Publication failed and automated restoration could not finish."""
 
 
 def require_safe_database_target(database_url, *, allow_nonstandard=False):
@@ -72,3 +85,59 @@ def schema_rebuild(engine):
         with engine.begin() as connection:
             for _, backup in moved_schemas:
                 connection.execute(text(f'DROP SCHEMA IF EXISTS "{backup}" CASCADE'))
+
+
+def _publish_staged_csvs(staging_dir, output_dir, backup_dir, replace_file):
+    backed_up = set()
+    published = set()
+    try:
+        for name in GENERATED_CSV_NAMES:
+            destination = output_dir / name
+            if destination.exists():
+                replace_file(destination, backup_dir / name)
+                backed_up.add(name)
+
+        for name in GENERATED_CSV_NAMES:
+            replace_file(staging_dir / name, output_dir / name)
+            published.add(name)
+    except BaseException:
+        try:
+            for name in published - backed_up:
+                destination = output_dir / name
+                if destination.exists():
+                    destination.unlink()
+            for name in backed_up:
+                replace_file(backup_dir / name, output_dir / name)
+        except BaseException as restore_error:
+            raise CsvRestoreError(
+                f"CSV restoration failed; recoverable files remain in {backup_dir}"
+            ) from restore_error
+        raise
+
+
+@contextmanager
+def staged_csv_publication(output_dir, *, replace_file=os.replace):
+    """Stage and atomically publish the complete generated CSV output set."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    working_dir = Path(tempfile.mkdtemp(prefix=".mma-ai-rebuild-", dir=output_dir))
+    staging_dir = working_dir / "staged"
+    backup_dir = working_dir / "backups"
+    staging_dir.mkdir()
+    backup_dir.mkdir()
+    preserve_working_files = False
+
+    try:
+        yield staging_dir
+        missing = [name for name in GENERATED_CSV_NAMES if not (staging_dir / name).is_file()]
+        if missing:
+            raise FileNotFoundError(
+                "Staged rebuild is missing required CSV outputs: " + ", ".join(missing)
+            )
+        _publish_staged_csvs(staging_dir, output_dir, backup_dir, replace_file)
+    except CsvRestoreError:
+        preserve_working_files = True
+        raise
+    finally:
+        if not preserve_working_files:
+            shutil.rmtree(working_dir, ignore_errors=True)

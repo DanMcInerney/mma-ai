@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import pytest
 
 import main as rebuild
@@ -113,3 +116,69 @@ def test_schema_prepare_refuses_stale_backup():
             pass
 
     assert engine.schemas == initial_schemas
+
+
+CSV_NAMES = ("prediction_data.csv", "training_data.csv", "training_data_dec.csv")
+
+
+def write_csv_set(directory, prefix):
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in CSV_NAMES:
+        (directory / name).write_bytes(f"{prefix}:{name}".encode())
+
+
+def read_csv_set(directory):
+    return {name: (directory / name).read_bytes() for name in CSV_NAMES}
+
+
+def test_csv_publication_requires_all_three_staged_outputs(tmp_path):
+    output_dir = tmp_path / "data"
+    write_csv_set(output_dir, "old")
+    before = read_csv_set(output_dir)
+
+    with pytest.raises(FileNotFoundError, match="training_data_dec.csv"):
+        with rebuild_safety.staged_csv_publication(output_dir) as staging_dir:
+            (staging_dir / "prediction_data.csv").write_bytes(b"new prediction")
+            (staging_dir / "training_data.csv").write_bytes(b"new training")
+
+    assert read_csv_set(output_dir) == before
+
+
+def test_csv_publication_replaces_the_complete_output_set(tmp_path):
+    output_dir = tmp_path / "data"
+    write_csv_set(output_dir, "old")
+
+    with rebuild_safety.staged_csv_publication(output_dir) as staging_dir:
+        assert staging_dir.parent.parent == output_dir
+        write_csv_set(staging_dir, "new")
+
+    assert read_csv_set(output_dir) == {
+        name: f"new:{name}".encode() for name in CSV_NAMES
+    }
+
+
+def test_csv_publication_failure_restores_every_prior_byte(tmp_path):
+    output_dir = tmp_path / "data"
+    write_csv_set(output_dir, "old")
+    before = read_csv_set(output_dir)
+    staging_path = None
+
+    def fail_during_second_publish(source, destination):
+        source = Path(source)
+        destination = Path(destination)
+        if (
+            source.parent == staging_path
+            and source.name == "training_data.csv"
+            and destination.parent == output_dir
+        ):
+            raise OSError("injected publication failure")
+        os.replace(source, destination)
+
+    with pytest.raises(OSError, match="injected publication failure"):
+        with rebuild_safety.staged_csv_publication(
+            output_dir, replace_file=fail_during_second_publish
+        ) as staging_dir:
+            staging_path = staging_dir
+            write_csv_set(staging_dir, "new")
+
+    assert read_csv_set(output_dir) == before
