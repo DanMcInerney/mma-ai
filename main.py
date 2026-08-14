@@ -68,6 +68,7 @@ from pathlib import Path
 # Import the BFO Scraper
 from libs.bfo_scraper import BFOScraper
 from libs.paths import data_dir, database_url, raw_ufcstats_dir
+from libs.rebuild import require_safe_database_target
 
 def copy_to_derived(conn):
     print("Copying data to fight_stats_derived...")
@@ -163,8 +164,9 @@ def create_db_engine(db_url=None):
     )
 
 
-def reset_database(engine):
+def reset_database(engine, *, allow_nonstandard_db=False):
     """Drop generated schemas so the pipeline can rebuild from raw CSVs."""
+    require_safe_database_target(engine.url, allow_nonstandard=allow_nonstandard_db)
     with engine.begin() as conn:
         conn.execute(text("DROP SCHEMA IF EXISTS features CASCADE"))
         conn.execute(text("DROP SCHEMA IF EXISTS model_data CASCADE"))
