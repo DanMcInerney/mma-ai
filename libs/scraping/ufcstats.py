@@ -44,7 +44,6 @@ COMPETITION_FIELDS = (
     + [f"{fighter}_rd{round_no}_{stat}" for fighter in ("p1", "p2") for stat in SIG_STR_SECTION_STATS for round_no in range(1, 6)]
 )
 
-
 def _normalize_text(value: str | None) -> str:
     return value.strip() if value else ""
 
@@ -52,6 +51,10 @@ def _normalize_text(value: str | None) -> str:
 def _nickname(value: str | None) -> str:
     cleaned = _normalize_text(value).replace('"', "")
     return cleaned if cleaned else "--"
+
+
+def _normalize_details(value: str | None) -> str:
+    return " ".join((value or "").split())
 
 
 def _read_existing_values(path: Path, column: str) -> set[str]:
@@ -179,7 +182,12 @@ if scrapy is not None:
         allowed_domains = ["ufcstats.com"]
         output_fields = FIGHTER_FIELDS
 
-        def __init__(self, existing_urls: Iterable[str] | None = None, output_path: str | Path | None = None, **kwargs):
+        def __init__(
+            self,
+            existing_urls: Iterable[str] | None = None,
+            output_path: str | Path | None = None,
+            **kwargs,
+        ):
             super().__init__(**kwargs)
             self.existing_urls = set(existing_urls or [])
             self.output_path = str(output_path)
@@ -217,7 +225,12 @@ if scrapy is not None:
         start_urls = ["http://ufcstats.com/statistics/events/completed?page=all"]
         output_fields = COMPETITION_FIELDS
 
-        def __init__(self, existing_event_urls: Iterable[str] | None = None, output_path: str | Path | None = None, **kwargs):
+        def __init__(
+            self,
+            existing_event_urls: Iterable[str] | None = None,
+            output_path: str | Path | None = None,
+            **kwargs,
+        ):
             super().__init__(**kwargs)
             self.existing_event_urls = set(existing_event_urls or [])
             self.output_path = str(output_path)
@@ -274,6 +287,7 @@ if scrapy is not None:
                     for text in node.css("::text").getall()
                     if text.strip()
                 )
+            details = _normalize_details(details)
 
             round_no = _normalize_text(response.xpath('//i[contains(text(), "Round:")]/following-sibling::text()').get())
             fight_data = {
@@ -371,6 +385,9 @@ def scrape_ufcstats(
             "REQUEST_FINGERPRINTER_IMPLEMENTATION": "2.7",
             "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
             "ITEM_PIPELINES": {"libs.scraping.ufcstats.CsvWriterPipeline": 300},
+            "DOWNLOADER_MIDDLEWARES": {
+                "libs.scraping.ufcstats_challenge.UfcstatsChallengeMiddleware": 580,
+            },
             "LOG_LEVEL": log_level,
         }
     )

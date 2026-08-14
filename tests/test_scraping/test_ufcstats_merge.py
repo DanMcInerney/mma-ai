@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from libs.scraping.ufcstats import COMPETITION_FIELDS, FIGHTER_FIELDS, _merge_csv
+from libs.scraping.ufcstats import COMPETITION_FIELDS, FIGHTER_FIELDS, _merge_csv, _normalize_details
 
 
 def write_fighters(path: Path, rows: list[dict[str, str]]) -> None:
@@ -206,3 +206,7 @@ def test_force_full_merge_replaces_existing_rows(tmp_path):
     merged = pd.read_csv(existing)
     assert total == 1
     assert merged["url"].tolist() == ["replacement"]
+
+
+def test_fight_details_collapse_embedded_whitespace():
+    assert _normalize_details("to    \n  corner   stoppage") == "to corner stoppage"
