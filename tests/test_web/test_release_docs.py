@@ -244,6 +244,8 @@ def test_rebuild_runtime_contract_is_documented_and_configured():
     assert '"${MMA_AI_POSTGRES_PORT:-5432}:5432"' in compose
     assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
     assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
+    assert "MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY: ${MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY:-200}" in compose
+    assert "MMA_AI_MAX_FEATURE_TABLES_PER_QUERY: ${MMA_AI_MAX_FEATURE_TABLES_PER_QUERY:-6}" in compose
 
     expected_defaults = {
         "MMA_AI_POSTGRES_SHM_SIZE": "2gb",
