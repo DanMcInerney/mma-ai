@@ -688,7 +688,6 @@ def main(odds=False, odds_features=False, db_url=None, raw_data_dir=None, output
 
             # === PARAMETER OPTIMIZATION ===
             # Check if optimized parameters exist
-            from pathlib import Path
             optimized_params_path = Path(__file__).parent / 'config' / 'optimized_parameters.json'
 
             if not optimized_params_path.exists():
