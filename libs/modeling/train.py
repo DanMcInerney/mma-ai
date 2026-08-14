@@ -118,10 +118,15 @@ def build_training_fit_kwargs(
         "time_limit": config.time_limit,
         "num_gpus": 1,
         "raise_on_model_failure": True,
+        # Preserve the historical time-series validation contract even if a
+        # stock preset changes its bagging or stacking defaults.
+        "num_bag_folds": 0,
+        "num_stack_levels": 0,
+        "auto_stack": False,
+        "dynamic_stacking": False,
     }
     if tuning_data is not None:
         fit_kwargs["tuning_data"] = tuning_data
-        fit_kwargs["use_bag_holdout"] = True
     return fit_kwargs
 
 
