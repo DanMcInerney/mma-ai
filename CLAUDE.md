@@ -22,6 +22,21 @@ and Predict dashboard. Training remains a CLI workflow, not a dashboard tab.
 - Summarize model evaluation artifacts: `uv run mma-evaluate`
 - Predict upcoming event: `uv run mma-predict`
 
+## Rebuild Safety and Runtime Bounds
+
+A destructive `--reset-db` rebuild proceeds only when the parsed target
+database name is exactly `mma-ai`. Use `--allow-nonstandard-db` only for a
+deliberately configured disposable target.
+The previous `features` and `model_data` schemas and finalized CSVs are
+preserved before reset. On a handled pipeline failure, the pipeline removes
+partial generated schemas and restores those prior schemas and files.
+
+Compose gives PostgreSQL a `2gb` shared-memory ceiling by default. Configure it
+with `MMA_AI_POSTGRES_SHM_SIZE` and recreate the `db` service after a change.
+Training-data queries default to 200 selected feature columns and six joined
+feature tables; `MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY` and
+`MMA_AI_MAX_FEATURE_TABLES_PER_QUERY` override those positive-integer limits.
+
 ## Dashboard Tabs
 
 - Data: scrape `competitions.csv` and `individuals.csv`, rebuild the Postgres

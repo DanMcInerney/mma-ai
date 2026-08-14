@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:18.1
+    shm_size: ${MMA_AI_POSTGRES_SHM_SIZE:-2gb}
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
