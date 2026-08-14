@@ -240,6 +240,23 @@ uv run mma-release-audit
 uv run mma-docker-smoke --deployed-url http://localhost:8000
 ```
 
+### Rebuild safety and resource limits
+
+A destructive `--reset-db` rebuild proceeds only when the parsed target
+database name is exactly `mma-ai`. Use `--allow-nonstandard-db` only when you
+have deliberately configured another disposable target. Before resetting, the
+pipeline preserves the previous `features` and `model_data` schemas and the
+finalized CSVs. On a handled pipeline failure, it removes partial generated
+schemas and restores those prior schemas and files.
+
+`MMA_AI_POSTGRES_SHM_SIZE` sets the Compose PostgreSQL shared-memory ceiling
+(default `2gb`); recreate the `db` service after changing it. Training-data
+queries default to at most 200 selected feature columns and six joined feature
+tables. Override those positive-integer limits with
+`MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY` and
+`MMA_AI_MAX_FEATURE_TABLES_PER_QUERY` when profiling a different database
+runtime.
+
 Optional real-browser Predict tab e2e, useful before release when Chrome is
 available:
 
@@ -1288,7 +1305,10 @@ ODDS_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/odds
 MMA_AI_COMPOSE_DATABASE_URL=
 MMA_AI_COMPOSE_ODDS_DATABASE_URL=
 MMA_AI_POSTGRES_PORT=5432
+MMA_AI_POSTGRES_SHM_SIZE=2gb
 MMA_AI_WEB_PORT=8000
+MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY=200
+MMA_AI_MAX_FEATURE_TABLES_PER_QUERY=6
 MMA_AI_DATA_DIR=data
 MMA_AI_MODELS_DIR=AutogluonModels
 MMA_AI_UFCSTATS_DIR=data/raw/ufcstats
