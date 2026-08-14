@@ -7,7 +7,7 @@ from libs.feature_store.core import CoreFeatureStore
 # from libs.feature_store.stats import StatsFeatureStore
 from sqlalchemy import text
 from typing import Set
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from sqlalchemy.orm import sessionmaker
 from libs.feature_store.schema import initialize_schema
 from libs.feature_store.schema import create_feature_specific_tables
@@ -68,7 +68,7 @@ from pathlib import Path
 # Import the BFO Scraper
 from libs.bfo_scraper import BFOScraper
 from libs.paths import data_dir, database_url, raw_ufcstats_dir
-from libs.rebuild import require_safe_database_target
+from libs.rebuild import require_safe_database_target, schema_rebuild, staged_csv_publication
 
 def copy_to_derived(conn):
     print("Copying data to fight_stats_derived...")
@@ -569,7 +569,16 @@ def refresh_odds_features(conn, enabled=False, refresh_bfo=None):
     return {"enabled": True, "refresh_bfo": bool(refresh_bfo), "records_scraped": records_scraped, "calculated": True}
 
 
-def main(odds=False, odds_features=False, db_url=None, raw_data_dir=None, output_data_dir=None, scrape=False, reset_db=False):
+def main(
+    odds=False,
+    odds_features=False,
+    db_url=None,
+    raw_data_dir=None,
+    output_data_dir=None,
+    scrape=False,
+    reset_db=False,
+    allow_nonstandard_db=False,
+):
     from libs.feature_store.config import DECAY_HALF_LIFE_YEARS
     decay_rate_years = DECAY_HALF_LIFE_YEARS
     raw_data_dir = Path(raw_data_dir or raw_ufcstats_dir()).expanduser().resolve()
@@ -596,9 +605,34 @@ def main(odds=False, odds_features=False, db_url=None, raw_data_dir=None, output
     engine = create_db_engine(db_url)
 
     if reset_db:
+        require_safe_database_target(
+            engine.url, allow_nonstandard=allow_nonstandard_db
+        )
         print("Resetting generated database schemas...")
-        reset_database(engine)
-    
+    schema_context = schema_rebuild(engine) if reset_db else nullcontext()
+    with schema_context:
+        with staged_csv_publication(output_data_dir) as staging_dir:
+            _run_pipeline(
+                engine=engine,
+                competitions_path=competitions_path,
+                individuals_path=individuals_path,
+                output_data_dir=staging_dir,
+                decay_rate_years=decay_rate_years,
+                odds=odds,
+                odds_features=odds_features,
+            )
+
+
+def _run_pipeline(
+    *,
+    engine,
+    competitions_path,
+    individuals_path,
+    output_data_dir,
+    decay_rate_years,
+    odds,
+    odds_features,
+):
     # Use a single connection for all operations
     with get_db_connection(engine) as conn:
         # Initialize schema
@@ -928,6 +962,11 @@ def parse_args():
     parser.add_argument("--output-data-dir", default=str(data_dir()), help="Directory for prediction_data.csv and training_data*.csv.")
     parser.add_argument("--scrape", action="store_true", help="Scrape UFCStats before rebuilding.")
     parser.add_argument("--reset-db", action="store_true", help="Drop generated schemas before rebuilding.")
+    parser.add_argument(
+        "--allow-nonstandard-db",
+        action="store_true",
+        help="Allow --reset-db against a database not named mma-ai.",
+    )
     parser.add_argument("--odds", action="store_true", help="Refresh BFO odds and calculate odds features.")
     parser.add_argument("--odds-features", action="store_true", help="Calculate odds features from the configured odds database without scraping BFO.")
     return parser.parse_args()
@@ -942,6 +981,7 @@ def cli():
         output_data_dir=args.output_data_dir,
         scrape=args.scrape,
         reset_db=args.reset_db,
+        allow_nonstandard_db=args.allow_nonstandard_db,
         odds_features=args.odds_features,
     )
 
