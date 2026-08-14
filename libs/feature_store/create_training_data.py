@@ -1,10 +1,44 @@
+import os
+
 from sqlalchemy import text
 import pandas as pd
 from typing import Set, List
 from libs.feature_store.features import BASE_STATIC_FEATS
 
+DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY = 200
+DEFAULT_MAX_FEATURE_TABLES_PER_QUERY = 6
+FEATURE_KEY_COLUMNS = ["fight_id", "fighter_id", "event_id"]
+
+
+def _positive_integer_bound(explicit_value, environment_name, default):
+    if explicit_value is not None:
+        if isinstance(explicit_value, bool) or not isinstance(explicit_value, int) or explicit_value <= 0:
+            raise ValueError(f"{environment_name} constructor override must be a positive integer")
+        return explicit_value
+
+    environment_value = os.getenv(environment_name)
+    if environment_value is None:
+        return default
+
+    try:
+        value = int(environment_value)
+    except ValueError as error:
+        raise ValueError(f"{environment_name} must be a positive integer") from error
+    if value <= 0:
+        raise ValueError(f"{environment_name} must be a positive integer")
+    return value
+
+
 class CreateTrainingData:
-    def __init__(self, conn, include_patterns: Set[str] = None, exclude_patterns: Set[str] = None, required_features: Set[str] = None):
+    def __init__(
+        self,
+        conn,
+        include_patterns: Set[str] = None,
+        exclude_patterns: Set[str] = None,
+        required_features: Set[str] = None,
+        max_feature_columns_per_query: int = None,
+        max_feature_tables_per_query: int = None,
+    ):
         """Initialize the CreateTrainingData class.
         
         Args:
@@ -18,6 +52,16 @@ class CreateTrainingData:
         self.include_patterns = include_patterns
         self.exclude_patterns = exclude_patterns
         self.required_features = required_features
+        self.max_feature_columns_per_query = _positive_integer_bound(
+            max_feature_columns_per_query,
+            "MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY",
+            DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY,
+        )
+        self.max_feature_tables_per_query = _positive_integer_bound(
+            max_feature_tables_per_query,
+            "MMA_AI_MAX_FEATURE_TABLES_PER_QUERY",
+            DEFAULT_MAX_FEATURE_TABLES_PER_QUERY,
+        )
 
     def build_dataframe(self):
         """Create a single dataframe containing all training data.
@@ -107,10 +151,6 @@ class CreateTrainingData:
             # Debug: Print total columns found
             print(f"\nFound {len(all_columns)} matching columns across {len(table_columns)} tables")
             
-            # PostgreSQL has a limit of 1664 columns per query
-            # If we exceed this, we need to split into multiple queries
-            MAX_COLUMNS_PER_QUERY = 1500  # Setting a bit lower than the limit for safety
-            
             if not all_columns:
                 print("No columns matched the criteria. Returning empty dataframe.")
                 return pd.DataFrame()
@@ -138,10 +178,9 @@ class CreateTrainingData:
             """
             base_df = pd.read_sql_query(base_query, self.conn)
             print(f"Loaded base dataframe with {len(base_df)} rows and the following metadata columns: {base_df.columns.tolist()}")
+            self._validate_unique_keys(base_df, "base dataframe")
             
-            # Process columns in chunks to avoid the PostgreSQL column limit
-            column_chunks = [all_columns[i:i + MAX_COLUMNS_PER_QUERY] 
-                            for i in range(0, len(all_columns), MAX_COLUMNS_PER_QUERY)]
+            column_chunks = self._plan_feature_query_chunks(all_columns)
             
             print(f"Split columns into {len(column_chunks)} chunks")
             
@@ -190,23 +229,24 @@ class CreateTrainingData:
                 # Execute query and load results into dataframe
                 chunk_df = pd.read_sql_query(select_sql, self.conn)
                 print(f"Loaded chunk with {len(chunk_df)} rows and {len(chunk_df.columns)} columns")
+                self._validate_unique_keys(chunk_df, f"feature query chunk {i + 1}")
                 
                 # Merge feature columns with result dataframe
-                # Use a safer direct merge with a left join to ensure row alignment
+                expected_row_count = len(result_df)
                 result_df = pd.merge(
                     result_df,
                     chunk_df,
-                    on=['fight_id', 'fighter_id', 'event_id'],
+                    on=FEATURE_KEY_COLUMNS,
                     how='left',
-                    suffixes=('', f'_{i}')  # Add unique suffix based on chunk number
+                    suffixes=('', f'_{i}'),
+                    validate='one_to_one',
                 )
-                
-                # Remove any duplicate ID columns created during the merge
-                # These would have the suffix from the current merge
-                duplicate_cols = [col for col in result_df.columns if col.endswith(f'_{i}')]
-                if duplicate_cols:
-                    result_df = result_df.drop(columns=duplicate_cols)
-                    print(f"Removed {len(duplicate_cols)} duplicate columns")
+
+                if len(result_df) != expected_row_count:
+                    raise ValueError(
+                        f"feature query chunk {i + 1} changed row count "
+                        f"from {expected_row_count} to {len(result_df)}"
+                    )
                 
                 print(f"Merged chunk {i+1}, dataframe now has {len(result_df)} rows and {len(result_df.columns)} columns")
             
@@ -229,6 +269,36 @@ class CreateTrainingData:
             raise
         
         print("Dataframe creation complete!")
+
+    def _plan_feature_query_chunks(self, all_columns):
+        """Split selected features across bounded database queries."""
+        chunks = []
+        current_chunk = []
+        current_tables = set()
+
+        for column in all_columns:
+            table = column[0]
+            adds_table = table not in current_tables
+            exceeds_column_bound = len(current_chunk) >= self.max_feature_columns_per_query
+            exceeds_table_bound = adds_table and len(current_tables) >= self.max_feature_tables_per_query
+
+            if current_chunk and (exceeds_column_bound or exceeds_table_bound):
+                chunks.append(current_chunk)
+                current_chunk = []
+                current_tables = set()
+
+            current_chunk.append(column)
+            current_tables.add(table)
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
+
+    @staticmethod
+    def _validate_unique_keys(dataframe, label):
+        if dataframe.duplicated(subset=FEATURE_KEY_COLUMNS, keep=False).any():
+            raise ValueError(f"{label} contains duplicate key rows")
 
     def _get_feature_tables(self) -> list:
         """Get all tables in the features schema."""

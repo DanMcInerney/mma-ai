@@ -234,6 +234,37 @@ def test_env_example_lists_public_configuration_without_real_secrets():
     assert "secret" not in env_example.lower()
 
 
+def test_rebuild_runtime_contract_is_documented_and_configured():
+    compose = read_text("docker-compose.yml")
+    env_example = read_text(".env.example")
+    readme = read_text("README.md")
+    claude = read_text("CLAUDE.md")
+
+    assert "shm_size: ${MMA_AI_POSTGRES_SHM_SIZE:-2gb}" in compose
+    assert '"${MMA_AI_POSTGRES_PORT:-5432}:5432"' in compose
+    assert "MMA_AI_COMPOSE_DATABASE_URL:-postgresql://postgres:postgres@db:5432/mma-ai" in compose
+    assert "MMA_AI_COMPOSE_ODDS_DATABASE_URL:-postgresql://postgres:postgres@db:5432/odds" in compose
+    assert "MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY: ${MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY:-200}" in compose
+    assert "MMA_AI_MAX_FEATURE_TABLES_PER_QUERY: ${MMA_AI_MAX_FEATURE_TABLES_PER_QUERY:-6}" in compose
+
+    expected_defaults = {
+        "MMA_AI_POSTGRES_SHM_SIZE": "2gb",
+        "MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY": "200",
+        "MMA_AI_MAX_FEATURE_TABLES_PER_QUERY": "6",
+    }
+    for key, value in expected_defaults.items():
+        assert f"{key}={value}" in env_example
+        assert key in readme
+        assert key in claude
+
+    for document in (readme, claude):
+        assert "--allow-nonstandard-db" in document
+        assert "exactly `mma-ai`" in document
+        assert "handled pipeline failure" in document
+        assert "previous `features` and `model_data` schemas" in document
+        assert "finalized CSVs" in document
+
+
 def test_public_repo_tracks_seed_raw_csvs_and_no_heavy_generated_artifacts():
     tracked = set(git_ls_files())
     seed_paths = {
