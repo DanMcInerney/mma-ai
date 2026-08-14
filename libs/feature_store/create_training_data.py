@@ -1,3 +1,5 @@
+import os
+
 from sqlalchemy import text
 import pandas as pd
 from typing import Set, List
@@ -7,8 +9,35 @@ DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY = 200
 DEFAULT_MAX_FEATURE_TABLES_PER_QUERY = 6
 
 
+def _positive_integer_bound(explicit_value, environment_name, default):
+    if explicit_value is not None:
+        if isinstance(explicit_value, bool) or not isinstance(explicit_value, int) or explicit_value <= 0:
+            raise ValueError(f"{environment_name} constructor override must be a positive integer")
+        return explicit_value
+
+    environment_value = os.getenv(environment_name)
+    if environment_value is None:
+        return default
+
+    try:
+        value = int(environment_value)
+    except ValueError as error:
+        raise ValueError(f"{environment_name} must be a positive integer") from error
+    if value <= 0:
+        raise ValueError(f"{environment_name} must be a positive integer")
+    return value
+
+
 class CreateTrainingData:
-    def __init__(self, conn, include_patterns: Set[str] = None, exclude_patterns: Set[str] = None, required_features: Set[str] = None):
+    def __init__(
+        self,
+        conn,
+        include_patterns: Set[str] = None,
+        exclude_patterns: Set[str] = None,
+        required_features: Set[str] = None,
+        max_feature_columns_per_query: int = None,
+        max_feature_tables_per_query: int = None,
+    ):
         """Initialize the CreateTrainingData class.
         
         Args:
@@ -22,6 +51,16 @@ class CreateTrainingData:
         self.include_patterns = include_patterns
         self.exclude_patterns = exclude_patterns
         self.required_features = required_features
+        self.max_feature_columns_per_query = _positive_integer_bound(
+            max_feature_columns_per_query,
+            "MMA_AI_MAX_FEATURE_COLUMNS_PER_QUERY",
+            DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY,
+        )
+        self.max_feature_tables_per_query = _positive_integer_bound(
+            max_feature_tables_per_query,
+            "MMA_AI_MAX_FEATURE_TABLES_PER_QUERY",
+            DEFAULT_MAX_FEATURE_TABLES_PER_QUERY,
+        )
 
     def build_dataframe(self):
         """Create a single dataframe containing all training data.
@@ -237,8 +276,8 @@ class CreateTrainingData:
         for column in all_columns:
             table = column[0]
             adds_table = table not in current_tables
-            exceeds_column_bound = len(current_chunk) >= DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY
-            exceeds_table_bound = adds_table and len(current_tables) >= DEFAULT_MAX_FEATURE_TABLES_PER_QUERY
+            exceeds_column_bound = len(current_chunk) >= self.max_feature_columns_per_query
+            exceeds_table_bound = adds_table and len(current_tables) >= self.max_feature_tables_per_query
 
             if current_chunk and (exceeds_column_bound or exceeds_table_bound):
                 chunks.append(current_chunk)
