@@ -3,6 +3,10 @@ import pandas as pd
 from typing import Set, List
 from libs.feature_store.features import BASE_STATIC_FEATS
 
+DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY = 200
+DEFAULT_MAX_FEATURE_TABLES_PER_QUERY = 6
+
+
 class CreateTrainingData:
     def __init__(self, conn, include_patterns: Set[str] = None, exclude_patterns: Set[str] = None, required_features: Set[str] = None):
         """Initialize the CreateTrainingData class.
@@ -107,10 +111,6 @@ class CreateTrainingData:
             # Debug: Print total columns found
             print(f"\nFound {len(all_columns)} matching columns across {len(table_columns)} tables")
             
-            # PostgreSQL has a limit of 1664 columns per query
-            # If we exceed this, we need to split into multiple queries
-            MAX_COLUMNS_PER_QUERY = 1500  # Setting a bit lower than the limit for safety
-            
             if not all_columns:
                 print("No columns matched the criteria. Returning empty dataframe.")
                 return pd.DataFrame()
@@ -139,9 +139,7 @@ class CreateTrainingData:
             base_df = pd.read_sql_query(base_query, self.conn)
             print(f"Loaded base dataframe with {len(base_df)} rows and the following metadata columns: {base_df.columns.tolist()}")
             
-            # Process columns in chunks to avoid the PostgreSQL column limit
-            column_chunks = [all_columns[i:i + MAX_COLUMNS_PER_QUERY] 
-                            for i in range(0, len(all_columns), MAX_COLUMNS_PER_QUERY)]
+            column_chunks = self._plan_feature_query_chunks(all_columns)
             
             print(f"Split columns into {len(column_chunks)} chunks")
             
@@ -229,6 +227,31 @@ class CreateTrainingData:
             raise
         
         print("Dataframe creation complete!")
+
+    def _plan_feature_query_chunks(self, all_columns):
+        """Split selected features across bounded database queries."""
+        chunks = []
+        current_chunk = []
+        current_tables = set()
+
+        for column in all_columns:
+            table = column[0]
+            adds_table = table not in current_tables
+            exceeds_column_bound = len(current_chunk) >= DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY
+            exceeds_table_bound = adds_table and len(current_tables) >= DEFAULT_MAX_FEATURE_TABLES_PER_QUERY
+
+            if current_chunk and (exceeds_column_bound or exceeds_table_bound):
+                chunks.append(current_chunk)
+                current_chunk = []
+                current_tables = set()
+
+            current_chunk.append(column)
+            current_tables.add(table)
+
+        if current_chunk:
+            chunks.append(current_chunk)
+
+        return chunks
 
     def _get_feature_tables(self) -> list:
         """Get all tables in the features schema."""
