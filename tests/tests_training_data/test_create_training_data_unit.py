@@ -123,3 +123,73 @@ def test_environment_configuration_rejects_invalid_bounds_before_query(monkeypat
 
     with pytest.raises(ValueError, match="MMA_AI_MAX_FEATURE_TABLES_PER_QUERY.*positive integer"):
         CreateTrainingData(object())
+
+
+def test_integrity_rejects_duplicate_base_keys(monkeypatch):
+    base_df = _base_dataframe()
+    base_df.loc[1, KEY_COLUMNS] = base_df.loc[0, KEY_COLUMNS]
+    queries = _read_sql_recorder(monkeypatch, base_df)
+    creator = CreateTrainingData(object())
+    _configure_feature_catalog(monkeypatch, creator, table_count=1, columns_per_table=1)
+
+    with pytest.raises(ValueError, match="base dataframe contains duplicate key rows"):
+        creator.create_training_data()
+
+    assert len(queries) == 1
+
+
+def test_integrity_rejects_duplicate_chunk_keys(monkeypatch):
+    base_df = _base_dataframe()
+    calls = 0
+
+    def read_sql_query(_query, _conn):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return base_df.copy()
+        return pd.DataFrame(
+            {
+                "fight_id": [1, 1],
+                "fighter_id": [11, 11],
+                "event_id": [101, 101],
+                "stats_0_feature_0": [10, 20],
+            }
+        )
+
+    monkeypatch.setattr(pd, "read_sql_query", read_sql_query)
+    creator = CreateTrainingData(object())
+    _configure_feature_catalog(monkeypatch, creator, table_count=1, columns_per_table=1)
+
+    with pytest.raises(ValueError, match="feature query chunk 1 contains duplicate key rows"):
+        creator.create_training_data()
+
+
+def test_integrity_rejects_a_row_count_changing_merge(monkeypatch):
+    _read_sql_recorder(monkeypatch)
+    original_merge = pd.merge
+
+    def drop_row_after_merge(*args, **kwargs):
+        return original_merge(*args, **kwargs).iloc[:-1]
+
+    monkeypatch.setattr(pd, "merge", drop_row_after_merge)
+    creator = CreateTrainingData(object())
+    _configure_feature_catalog(monkeypatch, creator, table_count=1, columns_per_table=1)
+
+    with pytest.raises(ValueError, match="feature query chunk 1 changed row count from 2 to 1"):
+        creator.create_training_data()
+
+
+def test_integrity_preserves_base_rows_across_valid_one_to_one_merges(monkeypatch):
+    base_df = _base_dataframe()
+    _read_sql_recorder(monkeypatch, base_df)
+    creator = CreateTrainingData(object(), max_feature_columns_per_query=1)
+    _configure_feature_catalog(monkeypatch, creator, table_count=2, columns_per_table=1)
+
+    result = creator.create_training_data()
+
+    assert len(result) == len(base_df)
+    pd.testing.assert_frame_equal(
+        result[KEY_COLUMNS].reset_index(drop=True),
+        base_df[KEY_COLUMNS].reset_index(drop=True),
+    )
+    assert {"stats_0_feature_0", "stats_1_feature_0"}.issubset(result.columns)

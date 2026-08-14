@@ -7,6 +7,7 @@ from libs.feature_store.features import BASE_STATIC_FEATS
 
 DEFAULT_MAX_FEATURE_COLUMNS_PER_QUERY = 200
 DEFAULT_MAX_FEATURE_TABLES_PER_QUERY = 6
+FEATURE_KEY_COLUMNS = ["fight_id", "fighter_id", "event_id"]
 
 
 def _positive_integer_bound(explicit_value, environment_name, default):
@@ -177,6 +178,7 @@ class CreateTrainingData:
             """
             base_df = pd.read_sql_query(base_query, self.conn)
             print(f"Loaded base dataframe with {len(base_df)} rows and the following metadata columns: {base_df.columns.tolist()}")
+            self._validate_unique_keys(base_df, "base dataframe")
             
             column_chunks = self._plan_feature_query_chunks(all_columns)
             
@@ -227,23 +229,24 @@ class CreateTrainingData:
                 # Execute query and load results into dataframe
                 chunk_df = pd.read_sql_query(select_sql, self.conn)
                 print(f"Loaded chunk with {len(chunk_df)} rows and {len(chunk_df.columns)} columns")
+                self._validate_unique_keys(chunk_df, f"feature query chunk {i + 1}")
                 
                 # Merge feature columns with result dataframe
-                # Use a safer direct merge with a left join to ensure row alignment
+                expected_row_count = len(result_df)
                 result_df = pd.merge(
                     result_df,
                     chunk_df,
-                    on=['fight_id', 'fighter_id', 'event_id'],
+                    on=FEATURE_KEY_COLUMNS,
                     how='left',
-                    suffixes=('', f'_{i}')  # Add unique suffix based on chunk number
+                    suffixes=('', f'_{i}'),
+                    validate='one_to_one',
                 )
-                
-                # Remove any duplicate ID columns created during the merge
-                # These would have the suffix from the current merge
-                duplicate_cols = [col for col in result_df.columns if col.endswith(f'_{i}')]
-                if duplicate_cols:
-                    result_df = result_df.drop(columns=duplicate_cols)
-                    print(f"Removed {len(duplicate_cols)} duplicate columns")
+
+                if len(result_df) != expected_row_count:
+                    raise ValueError(
+                        f"feature query chunk {i + 1} changed row count "
+                        f"from {expected_row_count} to {len(result_df)}"
+                    )
                 
                 print(f"Merged chunk {i+1}, dataframe now has {len(result_df)} rows and {len(result_df.columns)} columns")
             
@@ -291,6 +294,11 @@ class CreateTrainingData:
             chunks.append(current_chunk)
 
         return chunks
+
+    @staticmethod
+    def _validate_unique_keys(dataframe, label):
+        if dataframe.duplicated(subset=FEATURE_KEY_COLUMNS, keep=False).any():
+            raise ValueError(f"{label} contains duplicate key rows")
 
     def _get_feature_tables(self) -> list:
         """Get all tables in the features schema."""
