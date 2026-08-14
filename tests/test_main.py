@@ -78,6 +78,32 @@ def test_main_wraps_pipeline_in_rebuild_safety_contexts(monkeypatch, tmp_path):
     ]
 
 
+def test_main_rejects_database_target_before_engine_creation(monkeypatch, tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    (raw_dir / "competitions.csv").write_text("fight_id\n", encoding="utf-8")
+    (raw_dir / "individuals.csv").write_text("fighter_id\n", encoding="utf-8")
+    unsafe_url = "postgresql://private-user:private-password@db.example/wrong-db"
+
+    def fail_engine_creation(*_args, **_kwargs):
+        raise AssertionError("target validation must precede database access")
+
+    monkeypatch.setattr(rebuild, "create_db_engine", fail_engine_creation)
+
+    with pytest.raises(ValueError) as caught:
+        rebuild.main(
+            db_url=unsafe_url,
+            raw_data_dir=raw_dir,
+            output_data_dir=tmp_path / "output",
+            reset_db=True,
+        )
+
+    message = str(caught.value)
+    assert "wrong-db" in message
+    assert "private-user" not in message
+    assert "private-password" not in message
+
+
 def test_parse_args_exposes_nonstandard_database_override(monkeypatch):
     monkeypatch.setattr(
         "sys.argv", ["mma-rebuild-db", "--reset-db", "--allow-nonstandard-db"]

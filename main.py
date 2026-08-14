@@ -584,6 +584,13 @@ def main(
     raw_data_dir = Path(raw_data_dir or raw_ufcstats_dir()).expanduser().resolve()
     output_data_dir = Path(output_data_dir or data_dir()).expanduser().resolve()
     output_data_dir.mkdir(parents=True, exist_ok=True)
+    resolved_db_url = db_url
+
+    if reset_db:
+        resolved_db_url = db_url or database_url()
+        require_safe_database_target(
+            resolved_db_url, allow_nonstandard=allow_nonstandard_db
+        )
 
     if scrape:
         from scripts.scrape_ufcstats import scrape_ufcstats
@@ -602,12 +609,9 @@ def main(
         )
 
     # Initialize database engine once
-    engine = create_db_engine(db_url)
+    engine = create_db_engine(resolved_db_url)
 
     if reset_db:
-        require_safe_database_target(
-            engine.url, allow_nonstandard=allow_nonstandard_db
-        )
         print("Resetting generated database schemas...")
     schema_context = schema_rebuild(engine) if reset_db else nullcontext()
     with schema_context:
