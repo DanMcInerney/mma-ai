@@ -78,7 +78,7 @@ def test_training_config_rejects_model_allow_list_for_stock_presets() -> None:
 
 @pytest.mark.parametrize("preset", STOCK_PRESETS)
 @pytest.mark.parametrize("with_tuning_data", (False, True))
-def test_shared_fit_kwargs_forward_stock_presets_without_portfolio_overrides(
+def test_shared_fit_kwargs_preserve_historical_validation_contract_with_stock_presets(
     preset: str,
     with_tuning_data: bool,
 ) -> None:
@@ -96,21 +96,20 @@ def test_shared_fit_kwargs_forward_stock_presets_without_portfolio_overrides(
     assert kwargs["num_gpus"] == 1
     assert kwargs["raise_on_model_failure"] is True
     assert kwargs["train_data"] is train_data
+    assert kwargs["num_bag_folds"] == 0
+    assert kwargs["num_stack_levels"] == 0
+    assert kwargs["auto_stack"] is False
+    assert kwargs["dynamic_stacking"] is False
     if with_tuning_data:
         assert kwargs["tuning_data"] is tuning_data
-        assert kwargs["use_bag_holdout"] is True
     else:
         assert "tuning_data" not in kwargs
-        assert "use_bag_holdout" not in kwargs
+    assert "use_bag_holdout" not in kwargs
 
     forbidden = {
         "included_model_types",
         "excluded_model_types",
         "hyperparameters",
-        "num_bag_folds",
-        "num_stack_levels",
-        "auto_stack",
-        "dynamic_stacking",
         "ag_args_fit",
         "ag_args_ensemble",
     }
