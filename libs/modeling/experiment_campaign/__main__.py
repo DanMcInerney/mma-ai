@@ -1,0 +1,97 @@
+"""Command-line seams for campaign bootstrap and validation."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+from .protocol import AccessLedger
+from .validation import validate_campaign
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="python -m libs.modeling.experiment_campaign")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    validate = subparsers.add_parser("validate")
+    validate.add_argument("--campaign", type=Path, required=True)
+    validate.add_argument("--strict", action="store_true")
+    gate = subparsers.add_parser("gate-status")
+    gate.add_argument("--campaign", type=Path, required=True)
+    gate.add_argument("--require-closed", action="store_true")
+    bootstrap = subparsers.add_parser("bootstrap")
+    bootstrap.add_argument("--campaign", type=Path, required=True)
+    bootstrap.add_argument("--artifact-root", type=Path, required=True)
+    bootstrap.add_argument("--source-root", type=Path, required=True)
+    bootstrap.add_argument("--source-revision", required=True)
+    return parser
+
+
+def _bootstrap(args: argparse.Namespace) -> dict:
+    from libs.modeling.training_profiles import (
+        WIN_V8_HYBRID_NO_RECENCY_PROFILE,
+        WIN_V8_HYBRID_WORKING_PROFILE,
+    )
+
+    from .baseline import BaselineSources, bootstrap_experiment_zero
+
+    source_root = args.source_root.resolve()
+    accepted_evidence = source_root / ".orch" / "runs" / "20260815T125602Z-new-feature-hybrid-retrain"
+    no_recency_evidence = source_root / ".orch" / "runs" / "20260815T202035Z-no-recency-weight-experiment"
+    result = bootstrap_experiment_zero(
+        args.campaign,
+        args.artifact_root,
+        sources=BaselineSources(
+            frozen_csv=source_root / "data" / "training_data.csv",
+            accepted_model=source_root / "AutogluonModels" / "ag-20260815_090928-win-hybrid",
+            no_recency_model=source_root / "AutogluonModels" / "ag-20260815_163858-win-hybrid",
+            accepted_evidence=accepted_evidence,
+            no_recency_evidence=no_recency_evidence,
+        ),
+        source_revision=args.source_revision,
+        working_profile=dict(WIN_V8_HYBRID_WORKING_PROFILE),
+        no_recency_profile=dict(WIN_V8_HYBRID_NO_RECENCY_PROFILE),
+        expected_population={"total": 3267, "pre_2025": 2807, "from_2025": 460, "gate": 178},
+        expected_source_hashes={
+            "frozen_csv": "157649B780965ECC585F18B3030199CDC0F4FE3013958FFA4095FCF665FDB1EA",
+            "accepted_evidence/direct-evaluation.json": "6665DF5DE0A9CABEFAE52304B8ADC135F064446A9FDB3763C0833D7D09E8ED69",
+            "accepted_evidence/final-reverification.md": "41CB2A246A0C4BE936C1295A5D3882981F9DD03472ED719FA10AB32F26D82C54",
+            "no_recency_evidence/direct-evaluation.json": "D4B769DF541DEB65B72673930806CEC243C7E95634B4F19C5FE25C9AD3C870F7",
+            "no_recency_evidence/final-verification.md": "7CC2285DB55AE6BBCF1E9897D4C752DDA7004B70D7C7F39ABCB79CCE04B7D0C4",
+        },
+        expected_model_identities={
+            "accepted": {
+                "source_name": "ag-20260815_090928-win-hybrid",
+                "file_count": 56,
+                "complete_tree_sha256": "55445E804973B96B43AB6EC86E856A37390FF4937EAC968DC01106E71A257091",
+                "native_tree_sha256": "2B90CD505809E7624B8A8701A170BCA41220A937F6C2C24513F30C073D8D2346",
+            },
+            "no_recency": {
+                "source_name": "ag-20260815_163858-win-hybrid",
+                "file_count": 56,
+                "complete_tree_sha256": "368DD8B9EA70340AC4330B40D671E2FE01B35A9BCE35C158A8D6B0A5507C2BC9",
+                "native_tree_sha256": "83975AF832458E3B67677D0AB24AD3D52FCEBE2AEDB36BE7D04D5FEDC9C5B16D",
+            },
+        },
+    )
+    return result.__dict__
+
+
+def main() -> int:
+    args = _parser().parse_args()
+    if args.command == "validate":
+        result = validate_campaign(args.campaign, strict=args.strict).__dict__
+    elif args.command == "gate-status":
+        result = AccessLedger(args.campaign).gate_status()
+        if args.require_closed and (
+            result["state"] != "closed" or result["protected_access_count"] != 0
+        ):
+            raise SystemExit("gate is not closed with zero protected accesses")
+    else:
+        result = _bootstrap(args)
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
