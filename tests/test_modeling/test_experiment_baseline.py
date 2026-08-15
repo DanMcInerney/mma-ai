@@ -97,6 +97,7 @@ def test_experiment_zero_is_self_contained_hashed_and_gate_closed(tmp_path):
 
     manifest = json.loads((campaign / "baseline" / "manifest.json").read_text(encoding="utf-8"))
     assert result.experiment_id == "experiment-zero"
+    assert (campaign / ".gitattributes").read_bytes() == b"* -text\n"
     assert manifest["source_revision"] == "a" * 40
     assert manifest["population"]["total"] == 8
     assert manifest["fold_manifest"]["years"] == [2022, 2023, 2024, 2025]

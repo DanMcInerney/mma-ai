@@ -210,6 +210,8 @@ def bootstrap_experiment_zero(
         raise ValueError("frozen CSV copy hash mismatch")
 
     campaign_root.mkdir(parents=True, exist_ok=True)
+    # Registry/manifests are canonical byte streams; disable checkout newline rewriting.
+    (campaign_root / ".gitattributes").write_bytes(b"* -text\n")
     initialize_gate(campaign_root, expected_family_ids=CAMPAIGN_FAMILY_IDS)
     ledger = AccessLedger(campaign_root)
     roster_dates = [pd.Timestamp(row["event_date"]).date() for row in roster]
