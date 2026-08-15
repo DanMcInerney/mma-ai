@@ -105,3 +105,22 @@ def test_gate_requires_exactly_ten_terminal_families_and_blocks_post_gate_adapta
     assert ledger.gate_status()["candidate_id"] == "candidate"
     with pytest.raises(GateError, match="post-gate adaptation"):
         ledger.record_adaptation("changed-profile")
+
+
+def test_gate_access_is_consumed_before_reader_can_fail(tmp_path):
+    campaign = tmp_path / "campaign"
+    families = tuple(f"family-{i:02d}" for i in range(1, 11))
+    initialize_gate(campaign, expected_family_ids=families)
+    seal_candidate(campaign, family_ids=families, candidate_id="candidate")
+    ledger = AccessLedger(campaign)
+
+    def failed_reader():
+        raise RuntimeError("fixture failure before any label value is returned")
+
+    with pytest.raises(RuntimeError, match="fixture failure"):
+        ledger.read_protected_gate(failed_reader)
+    state = ledger.gate_status()
+    assert state["state"] == "open"
+    assert state["protected_access_count"] == 1
+    with pytest.raises(GateError, match="exactly once"):
+        ledger.read_protected_gate(lambda: None)

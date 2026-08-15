@@ -273,11 +273,10 @@ class AccessLedger:
 
     def read_protected_gate(self, reader: Callable[[], T]) -> T:
         state = self.gate_status()
+        if state["protected_access_count"] != 0 or state["state"] == "open":
+            raise GateError("historically exposed campaign gate opens exactly once")
         if state["state"] != "sealed" or not state["candidate_id"]:
             raise GateError("final candidate must be sealed before gate access")
-        if state["protected_access_count"] != 0:
-            raise GateError("historically exposed campaign gate opens exactly once")
-        result = reader()
         entry = {
             "purpose": "final-descriptive-gate",
             "columns": ["y_true", "probability"],
@@ -291,7 +290,8 @@ class AccessLedger:
         state["protected_access_count"] = 1
         state["opened_at"] = datetime.now(timezone.utc).isoformat()
         write_canonical_json(self.gate_path, state)
-        return result
+        # Authorization is durably consumed first: a crashing reader cannot hide a peek.
+        return reader()
 
     def record_adaptation(self, description: str) -> None:
         state = self.gate_status()
