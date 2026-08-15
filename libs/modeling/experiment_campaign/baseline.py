@@ -22,6 +22,7 @@ from .registry import (
     RESOLVED_PROFILE_FIELDS,
     append_registry_record,
     initialize_registry,
+    validate_registry,
     validate_resolved_profile,
 )
 
@@ -336,7 +337,7 @@ def bootstrap_experiment_zero(
     )
 
     initialize_registry(campaign_root)
-    record = append_registry_record(
+    append_registry_record(
         campaign_root,
         {
             "experiment_id": "experiment-zero",
@@ -355,5 +356,7 @@ def bootstrap_experiment_zero(
         baseline_manifest_sha256=baseline_manifest_sha,
         fold_manifest_sha256=fold_manifest_sha,
         artifact_tree_sha256=artifact_inventory["tree_sha256"],
-        registry_prefix_sha256=record["record_sha256"],
+        registry_prefix_sha256=validate_registry(
+            campaign_root, strict=True
+        ).registry_prefix_sha256,
     )

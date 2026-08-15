@@ -112,6 +112,7 @@ def test_experiment_zero_is_self_contained_hashed_and_gate_closed(tmp_path):
     registry = validate_registry(campaign, strict=True)
     assert registry.record_count == 1
     assert registry.family_ids == ()
+    assert result.registry_prefix_sha256 == registry.registry_prefix_sha256
     report = validate_campaign(campaign, strict=True)
     assert report.gate_state == "closed"
     assert report.protected_gate_access_count == 0
