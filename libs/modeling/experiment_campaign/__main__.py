@@ -16,6 +16,12 @@ def _parser() -> argparse.ArgumentParser:
     validate = subparsers.add_parser("validate")
     validate.add_argument("--campaign", type=Path, required=True)
     validate.add_argument("--strict", action="store_true")
+    validate.add_argument("--expect-terminal-through", type=int)
+    validate.add_argument("--require-gate-closed", action="store_true")
+    verify_run = subparsers.add_parser("verify-run")
+    verify_run.add_argument("--campaign", type=Path, required=True)
+    verify_run.add_argument("--experiment", required=True)
+    verify_run.add_argument("--recompute-all", action="store_true")
     gate = subparsers.add_parser("gate-status")
     gate.add_argument("--campaign", type=Path, required=True)
     gate.add_argument("--require-closed", action="store_true")
@@ -80,7 +86,24 @@ def _bootstrap(args: argparse.Namespace) -> dict:
 def main() -> int:
     args = _parser().parse_args()
     if args.command == "validate":
-        result = validate_campaign(args.campaign, strict=args.strict).__dict__
+        if args.expect_terminal_through is not None or args.require_gate_closed:
+            from .runner import validate_terminal_campaign
+
+            result = validate_terminal_campaign(
+                args.campaign,
+                expect_terminal_through=args.expect_terminal_through,
+                require_gate_closed=args.require_gate_closed,
+            )
+        else:
+            result = validate_campaign(args.campaign, strict=args.strict).__dict__
+    elif args.command == "verify-run":
+        from .runner import verify_family_run
+
+        result = verify_family_run(
+            args.campaign,
+            args.experiment,
+            recompute_all=args.recompute_all,
+        )
     elif args.command == "gate-status":
         result = AccessLedger(args.campaign).gate_status()
         if args.require_closed and (
