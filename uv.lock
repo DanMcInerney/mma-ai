@@ -2272,6 +2272,8 @@ dependencies = [
     { name = "unidecode" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "webdriver-manager" },
+    { name = "xgboost-cpu", version = "3.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "xgboost-cpu", version = "3.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 
 [package.optional-dependencies]
@@ -2333,6 +2335,7 @@ requires-dist = [
     { name = "unidecode", specifier = ">=1.3.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32.0" },
     { name = "webdriver-manager", specifier = ">=4.0.0" },
+    { name = "xgboost-cpu", specifier = ">=2.1.1,<3.4" },
 ]
 provides-extras = ["test"]
 
