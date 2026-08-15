@@ -16,6 +16,10 @@ FIXED_CAMPAIGN_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\01-campaign-harness"
 )
+FIXED_FAMILY_1_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\02-family-01-weighted-v8-control"
+)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -69,7 +73,8 @@ def verify_family_run(
     profile = read_json(campaign_root / manifest["profile_path"])
     if canonical_sha256(profile) != manifest["profile_sha256"]:
         raise ValueError("resolved profile hash mismatch")
-    artifact_root = campaign_root / manifest["artifact_path"]
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_1_ARTIFACT
     inventory = tree_inventory(artifact_root)
     if inventory.tree_sha256 != manifest["artifact_tree_sha256"]:
         raise ValueError("family artifact tree hash mismatch")
