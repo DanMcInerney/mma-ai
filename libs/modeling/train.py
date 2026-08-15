@@ -7,6 +7,7 @@ either fight outcomes (win/loss) or fight methods (decision/no decision).
 import os
 import sys
 import argparse
+import copy
 import importlib
 import importlib.metadata as importlib_metadata
 import numpy as np
@@ -33,6 +34,8 @@ from libs.paths import data_file
 
 AUTOGUON_VERSION = "1.6.1"
 STOCK_PRESETS = ("noncommercial", "extreme")
+CUSTOM_PRESETS = ("classical", "hybrid")
+AVAILABLE_PRESETS = STOCK_PRESETS + CUSTOM_PRESETS
 AUTOGUON_DISTRIBUTIONS = (
     "autogluon-common",
     "autogluon-core",
@@ -40,6 +43,138 @@ AUTOGUON_DISTRIBUTIONS = (
     "autogluon-tabular",
 )
 FOUNDATION_MODULES = ("tabpfn", "tabicl", "tabdpt", "pytabkit", "synthefy_nori")
+
+# Deliberately small-data-safe classical portfolio.  The two GBM entries retain
+# the established PrepLightGBM and LightGBM-r8 roles from the commercial
+# portfolio, but omit its 50,000-row admission gates.  No labeled-context model
+# key is present.
+CLASSICAL_HYPERPARAMETERS = {
+    "CAT": [{}],
+    "GBM": [
+        {
+            "ag_args": {"name_prefix": "Prep", "priority": -1},
+            "ag_args_ensemble": {"vary_seed_across_folds": True},
+            "bagging_fraction": 0.9579806621464,
+            "bagging_freq": 1,
+            "cat_l2": 0.016204487031,
+            "cat_smooth": 0.0014602863645,
+            "extra_trees": True,
+            "feature_fraction": 0.9895718304666,
+            "lambda_l1": 0.3456479366371,
+            "lambda_l2": 1.9627316999077,
+            "learning_rate": 0.0238015084616,
+            "max_cat_to_onehot": 15,
+            "min_data_in_leaf": 1,
+            "min_data_per_group": 61,
+            "num_leaves": 7,
+            "ag.model_specific_feature_generator_kwargs": {
+                "feature_generators": [
+                    [
+                        ["GroupByFeatureGenerator", {"max_features": 100}],
+                        [
+                            "RandomSubsetFeatureCompressionGenerator",
+                            {"n_subsets": 50, "random_state": 84},
+                        ],
+                        [
+                            "ArithmeticFeatureGenerator",
+                            {"max_new_feats": 2000, "random_state": 42},
+                        ],
+                        [
+                            [
+                                [
+                                    "CategoricalInteractionFeatureGenerator",
+                                    {
+                                        "max_new_feats": 500,
+                                        "passthrough": True,
+                                        "random_state": 168,
+                                    },
+                                ]
+                            ],
+                            ["OOFTargetEncodingFeatureGenerator", {}],
+                        ],
+                    ],
+                    [["SpearmanFeatureSelector", {"max_features": 2000}]],
+                ],
+                "passthrough_types": {"invalid_raw_types": ["category", "object"]},
+            },
+        },
+        {
+            "bagging_fraction": 0.9688985555289,
+            "bagging_freq": 1,
+            "cat_l2": 0.556257978498,
+            "cat_smooth": 26.9963397207858,
+            "extra_trees": True,
+            "feature_fraction": 0.721510997519,
+            "lambda_l1": 0.918206255573,
+            "lambda_l2": 1.6620308841678,
+            "learning_rate": 0.0243335590501,
+            "max_cat_to_onehot": 63,
+            "min_data_in_leaf": 27,
+            "min_data_per_group": 20,
+            "num_leaves": 16,
+            "ag_args": {"name_suffix": "_r8", "priority": -2},
+        },
+    ],
+    "XT": [{"criterion": "gini", "ag_args": {"name_suffix": "Gini"}}],
+    "RF": [{"criterion": "gini", "ag_args": {"name_suffix": "Gini"}}],
+    "FASTAI": [{}],
+    "REALMLP": [
+        {
+            "act": "mish",
+            "embedding_size": 16,
+            "ens_av_before_softmax": False,
+            "first_layer_lr_factor": 0.5532758772414772,
+            "hidden_sizes": "rectangular",
+            "hidden_width": 256,
+            "lr": 0.028251710648574225,
+            "ls_eps": 0.056278316322438654,
+            "ls_eps_sched": "coslog4",
+            "max_one_hot_cat_size": 5.0,
+            "n_ens": 8,
+            "n_epochs": 256,
+            "n_hidden_layers": 4,
+            "p_drop": 0.4649326053976436,
+            "p_drop_sched": "flat_cos",
+            "plr_hidden_1": 64,
+            "plr_hidden_2": 8,
+            "plr_lr_factor": 0.07180754165845323,
+            "plr_sigma": 0.10819682427602312,
+            "scale_lr_factor": 4.969153878203126,
+            "sq_mom": 0.9555568308637205,
+            "use_early_stopping": True,
+            "use_ls": True,
+            "wd": 0.041333041267482,
+            "ag_args": {"name_suffix": "_r9", "priority": -7},
+        }
+    ],
+    # AutoGluon 1.6.1 admits the CPU-only XGBoost wheel; keep this model on CPU.
+    "XGB": [{"ag_args_fit": {"num_gpus": 0}}],
+}
+
+HYBRID_HYPERPARAMETERS = copy.deepcopy(CLASSICAL_HYPERPARAMETERS)
+HYBRID_HYPERPARAMETERS.update(
+    {
+        "MITRA": [{}],
+        "TABICL": [{}],
+    }
+)
+CUSTOM_HYPERPARAMETERS = {
+    "classical": CLASSICAL_HYPERPARAMETERS,
+    "hybrid": HYBRID_HYPERPARAMETERS,
+}
+
+
+def model_portfolio_description(preset: str) -> str:
+    """Return an accurate label without changing stock-preset reporting."""
+    if preset in STOCK_PRESETS:
+        return f"Stock {preset} preset (no allow-list override)"
+    return f"Custom {preset} portfolio (no allow-list override)"
+
+
+def model_portfolio_id(preset: str) -> str:
+    """Return the stable machine-readable portfolio identifier."""
+    kind = "stock" if preset in STOCK_PRESETS else "custom"
+    return f"{kind}:{preset}"
 
 
 def training_runtime_preflight() -> Dict[str, object]:
@@ -111,10 +246,9 @@ def build_training_fit_kwargs(
     train_data: pd.DataFrame,
     tuning_data: Optional[pd.DataFrame] = None,
 ) -> Dict[str, object]:
-    """Build the shared stock-preset fit contract for every production path."""
+    """Build the shared fit contract for stock and custom portfolios."""
     fit_kwargs: Dict[str, object] = {
         "train_data": train_data,
-        "presets": config.preset,
         "time_limit": config.time_limit,
         "num_gpus": 1,
         "raise_on_model_failure": True,
@@ -125,6 +259,12 @@ def build_training_fit_kwargs(
         "auto_stack": False,
         "dynamic_stacking": False,
     }
+    if config.preset in CUSTOM_HYPERPARAMETERS:
+        fit_kwargs["hyperparameters"] = copy.deepcopy(
+            CUSTOM_HYPERPARAMETERS[config.preset]
+        )
+    else:
+        fit_kwargs["presets"] = config.preset
     if tuning_data is not None:
         fit_kwargs["tuning_data"] = tuning_data
     return fit_kwargs
@@ -135,7 +275,7 @@ class TrainingConfig:
     """Configuration for model training."""
     
     model_type: str  # 'win' or 'decision'
-    preset: str = "extreme"  # stock 'noncommercial' or 'extreme'
+    preset: str = "extreme"  # stock 'noncommercial'/'extreme' or custom portfolio
     time_limit: int = 1500  # seconds
     
     # Data split configuration
@@ -185,13 +325,19 @@ class TrainingConfig:
         if self.model_type not in ['win', 'decision']:
             raise ValueError(f"model_type must be 'win' or 'decision', got '{self.model_type}'")
         
-        if self.preset not in STOCK_PRESETS:
-            raise ValueError(f"preset must be 'noncommercial' or 'extreme', got '{self.preset}'")
+        if self.preset not in AVAILABLE_PRESETS:
+            choices = "', '".join(AVAILABLE_PRESETS)
+            raise ValueError(f"preset must be one of '{choices}', got '{self.preset}'")
 
         if self.included_model_types:
+            if self.preset in STOCK_PRESETS:
+                raise ValueError(
+                    "included_model_types is unsupported for stock presets; "
+                    "select 'extreme' or 'noncommercial' without a model allow-list"
+                )
             raise ValueError(
-                "included_model_types is unsupported for stock presets; "
-                "select 'extreme' or 'noncommercial' without a model allow-list"
+                f"included_model_types is unsupported for the {self.preset} portfolio; "
+                f"select '{self.preset}' without a model allow-list"
             )
         
         if self.split_strategy not in ['standard', 'timeseries_split', 'walkforward']:
@@ -676,7 +822,8 @@ class DataLoader:
         data_path: str,
         num_fights: int,
         start_date: str,
-        include_split_dec: bool
+        include_split_dec: bool,
+        required_features: Optional[List[str]] = None,
     ) -> pd.DataFrame:
         """Load CSV, filter fights, and return sorted DataFrame."""
         full_df = pd.read_csv(data_path)
@@ -689,7 +836,8 @@ class DataLoader:
             threshold=num_fights,
             date=start_date,
             include_split_dec=include_split_dec,
-            data_cutoff=None
+            data_cutoff=None,
+            required_features=required_features,
         )
         
         return full_df
@@ -946,7 +1094,7 @@ class EvaluationManager:
             f.write(f"Use Recency Weights: {config.use_recency_weights}\n")
             f.write(f"Decay Rate: {config.decay_rate}\n")
             f.write(f"Calculate Importance: {config.calculate_importance}\n")
-            f.write(f"Model Portfolio: Stock {config.preset} preset (no allow-list override)\n")
+            f.write(f"Model Portfolio: {model_portfolio_description(config.preset)}\n")
             f.write(f"Include Split Dec: {config.include_split_dec}\n")
             f.write(f"dec_avg rate: {config.decay_rate}\n")
     
@@ -1723,13 +1871,17 @@ class WalkForwardTrainer:
         print(f"\n=== Walk-Forward Data Preparation ===")
         print(f"Model type: {self.config.model_type}")
         print(f"Data path: {data_path}")
+
+        unfiltered_df = pd.read_csv(data_path)
+        features = DataLoader.prepare_features(unfiltered_df, self.config)
         
         # Load and filter data
         full_df = DataLoader.load_and_filter_data(
             data_path,
             self.config.num_fights,
             self.config.start_date,
-            self.config.include_split_dec
+            self.config.include_split_dec,
+            required_features=features,
         )
         
         # Create holdout set
@@ -1751,7 +1903,6 @@ class WalkForwardTrainer:
         print(f"Date range: {training_df['event_date'].min()} to {training_df['event_date'].max()}")
         
         # Prepare features
-        features = DataLoader.prepare_features(training_df, self.config)
         print(f"Selected {len(features)} features")
         
         # Load training data
@@ -2162,7 +2313,7 @@ class WalkForwardTrainer:
                 'normalize': self.config.normalize,
                 'use_recency_weights': self.config.use_recency_weights,
                 'decay_rate': self.config.decay_rate,
-                'model_portfolio': f"stock:{self.config.preset}"
+                'model_portfolio': model_portfolio_id(self.config.preset)
             },
             'window_results': self.window_results,
             'aggregate_metrics': {
@@ -2269,7 +2420,7 @@ class WalkForwardTrainer:
             f.write(f"Use Recency Weights: {self.config.use_recency_weights}\n")
             f.write(f"Decay Rate: {self.config.decay_rate}\n")
             f.write(f"Calculate Importance: {self.config.calculate_importance}\n")
-            f.write(f"Model Portfolio: Stock {self.config.preset} preset (no allow-list override)\n")
+            f.write(f"Model Portfolio: {model_portfolio_description(self.config.preset)}\n")
             f.write(f"Include Split Dec: {self.config.include_split_dec}\n")
             f.write(f"dec_avg rate: {self.config.decay_rate}\n")
             f.write(f"Walk-Forward Windows: {self.config.walkforward_n_windows}\n")
@@ -2612,7 +2763,8 @@ class ModelTrainer:
             data_path,
             self.config.num_fights,
             self.config.start_date,
-            self.config.include_split_dec
+            self.config.include_split_dec,
+            required_features=features,
         )
         
         # Create holdout set based on date cutoff
@@ -3085,7 +3237,7 @@ class ModelTrainer:
                 f.write(f"Use Recency Weights: {self.config.use_recency_weights}\n")
                 f.write(f"Decay Rate: {self.config.decay_rate}\n")
                 f.write(f"Calculate Importance: {self.config.calculate_importance}\n")
-                f.write(f"Model Portfolio: Stock {self.config.preset} preset (no allow-list override)\n")
+                f.write(f"Model Portfolio: {model_portfolio_description(self.config.preset)}\n")
                 f.write(f"Include Split Dec: {self.config.include_split_dec}\n")
                 f.write(f"dec_avg rate: {self.config.decay_rate}\n")
             
@@ -3693,7 +3845,7 @@ def main(model_type='win', time_limit=None, preset=None, split_strategy=None, re
     print(f"\nFeature Importance:")
     print(f"  Calculate:         {config.calculate_importance}")
     print(f"\nModel Portfolio:")
-    print(f"  Selection:          Stock {config.preset} preset (no allow-list override)")
+    print(f"  Selection:          {model_portfolio_description(config.preset)}")
     print("=" * 70 + "\n")
     
     # Train model
@@ -3708,7 +3860,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train an MMA prediction model from data/training_data*.csv.")
     parser.add_argument("--model-type", choices=["win", "decision"], default="win")
     parser.add_argument("--time-limit", type=int, default=None, help="AutoGluon training time limit in seconds.")
-    parser.add_argument("--preset", choices=list(STOCK_PRESETS), default=None)
+    parser.add_argument("--preset", choices=list(AVAILABLE_PRESETS), default=None)
     parser.add_argument("--split-strategy", choices=["standard", "timeseries_split", "walkforward"], default=None)
     parser.add_argument("--no-refit-full", action="store_true", help="Disable AutoGluon refit_full after validation.")
     return parser.parse_args()

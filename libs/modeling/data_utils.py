@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from sklearn.preprocessing import StandardScaler, RobustScaler, FunctionTransformer
 import joblib
 from libs.feature_store.features import FeatureSelector
@@ -352,7 +352,7 @@ def _swap_fighter_roles(df, indices):
     """
     print("Swapping fighter roles...")
     
-    # 1. Swap fighter IDs and names
+    # 1. Swap fighter identities and ordered source metadata
     if 'fighter1_id' in df.columns and 'fighter2_id' in df.columns:
         df.loc[indices, ['fighter1_id', 'fighter2_id']] = \
             df.loc[indices, ['fighter2_id', 'fighter1_id']].values
@@ -360,6 +360,10 @@ def _swap_fighter_roles(df, indices):
     if 'fighter1_name' in df.columns and 'fighter2_name' in df.columns:
         df.loc[indices, ['fighter1_name', 'fighter2_name']] = \
             df.loc[indices, ['fighter2_name', 'fighter1_name']].values
+
+    if 'fighter1_url' in df.columns and 'fighter2_url' in df.columns:
+        df.loc[indices, ['fighter1_url', 'fighter2_url']] = \
+            df.loc[indices, ['fighter2_url', 'fighter1_url']].values
     
     # 2. Swap odds columns to maintain proper alignment
     odds_column_pairs = [
@@ -431,7 +435,24 @@ def calculate_recency_weights(df, indices, decay_rate=0.1):
     return weights.values
 
 
-def filter_fights(df, threshold, date='2014-01-01', include_split_dec=False, data_cutoff=None):
+FILTER_REQUIRED_COLUMNS = (
+    'fight_id',
+    'event_date',
+    'fighter1_id',
+    'fighter2_id',
+    'y_true',
+    'method',
+)
+
+
+def filter_fights(
+    df,
+    threshold,
+    date='2014-01-01',
+    include_split_dec=False,
+    data_cutoff=None,
+    required_features: Optional[List[str]] = None,
+):
     """
     Filter fights based on:
       - Binary results (y_true in [0, 1])
@@ -455,12 +476,50 @@ def filter_fights(df, threshold, date='2014-01-01', include_split_dec=False, dat
           Whether to include split decisions
       data_cutoff : str, optional
           End date for filtering fights in YYYY-MM-DD format. If None, no cutoff is applied.
+      required_features : list of str, optional
+          Selected model features whose values must be present. Unselected columns do
+          not affect row eligibility.
     
     Returns:
       Filtered DataFrame.
     """
     print("\n=== Filtering Fights ===")
     orig_df = df.copy()
+
+    required_features = list(dict.fromkeys(required_features or []))
+    odds_features = [
+        feature for feature in required_features if 'odds' in feature.lower()
+    ]
+    model_features = [
+        feature for feature in required_features if feature not in odds_features
+    ]
+
+    missing_filter_columns = [
+        column for column in FILTER_REQUIRED_COLUMNS if column not in df.columns
+    ]
+    missing_model_features = [
+        feature for feature in model_features if feature not in df.columns
+    ]
+    missing_odds_features = [
+        feature for feature in odds_features if feature not in df.columns
+    ]
+    missing_messages = []
+    if missing_filter_columns:
+        missing_messages.append(
+            "Missing required filter/label columns: "
+            + ", ".join(missing_filter_columns)
+        )
+    if missing_model_features:
+        missing_messages.append(
+            "Missing required non-odds model features: "
+            + ", ".join(missing_model_features)
+        )
+    if missing_odds_features:
+        missing_messages.append(
+            "Missing required odds features: " + ", ".join(missing_odds_features)
+        )
+    if missing_messages:
+        raise ValueError("\n".join(missing_messages))
     
     # --- Step 1. Compute overall fight counts for each fighter ---
     # Build a "long" DataFrame with one row per fighter per fight.
@@ -540,11 +599,24 @@ def filter_fights(df, threshold, date='2014-01-01', include_split_dec=False, dat
     
     print(f"Final number of rows after date filtering: {len(df)}")
 
-    # --- Step 7. Filer NaN values ---
+    # --- Step 7. Filter NaN values only from the active row contract ---
     original_len = len(df)
+    required_columns = list(FILTER_REQUIRED_COLUMNS) + required_features
 
-    df = df.dropna()
-    print(f"Filtered out {original_len - len(df)} rows with NaN values")
+    filter_null_rows = df[list(FILTER_REQUIRED_COLUMNS)].isna().any(axis=1).sum()
+    model_null_rows = (
+        df[model_features].isna().any(axis=1).sum() if model_features else 0
+    )
+    odds_null_rows = (
+        df[odds_features].isna().any(axis=1).sum() if odds_features else 0
+    )
+    print(f"Rows with NaN in required filter/label columns: {filter_null_rows}")
+    print(f"Rows with NaN in required non-odds model features: {model_null_rows}")
+    if odds_features:
+        print(f"Rows with NaN in required odds features: {odds_null_rows}")
+
+    df = df.dropna(subset=required_columns)
+    print(f"Filtered out {original_len - len(df)} rows with NaN in required columns")
 
     # Reset the index
     df.sort_values(by=['event_date', 'fight_id'], inplace=True)
