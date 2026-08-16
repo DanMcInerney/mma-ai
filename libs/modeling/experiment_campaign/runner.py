@@ -32,6 +32,10 @@ FIXED_FAMILY_2_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\03-family-02-horizon-recency"
 )
+FIXED_FAMILY_3_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\04-family-03-temporal-calibration"
+)
 FIXED_FAMILY_4_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\05-family-04-oof-ensemble"
@@ -423,7 +427,8 @@ def _verify_family_3_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
         raise ValueError("family 3 lineage preregistration profile identity mismatch")
     if preregistration["scoring_state"] != "not-started" or lineage_preregistration["scoring_state"] != "not-started":
         raise ValueError("family 3 was not preregistered before score")
-    artifact_root = campaign_root / manifest["artifact_path"]
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_3_ARTIFACT
     inventory = tree_inventory(artifact_root)
     if (
         inventory.tree_sha256 != manifest["artifact_tree_sha256"]
