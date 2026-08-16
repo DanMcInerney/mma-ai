@@ -6,7 +6,7 @@ import csv
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from ..hashing import canonical_sha256, file_sha256, read_json, tree_inventory, write_canonical_json
 from ..metrics import event_block_bootstrap_delta, metric_gap, reduce_predictions
@@ -25,6 +25,10 @@ DATA_PATH = "../../data/experiments/top10_20260815/family-05-semantic-portfolio"
 FROZEN_SPEC_SHA256 = "93FB5CC31AD810B1867FFC8A250DD257AAF74732998D103D56AB8D3A2D309A23"
 FROZEN_SOURCE_SHA256 = "157649B780965ECC585F18B3030199CDC0F4FE3013958FFA4095FCF665FDB1EA"
 V8_ORDERED_FEATURE_SHA256 = "13E545D762A3F1BE4D023D82B8E65D77E41589031051F1F6796D742F25223022"
+DEVELOPMENT_FIGHT_COUNT = 3089
+GATE_FIGHT_COUNT = 178
+POPULATION_FIGHT_COUNT = DEVELOPMENT_FIGHT_COUNT + GATE_FIGHT_COUNT
+DEVELOPMENT_MAX_DATE = "2025-12-13"
 FROZEN_SOURCE = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\01-campaign-harness"
@@ -317,6 +321,62 @@ def _model_identity(model, features: Sequence[str]) -> dict[str, Any]:
     }
 
 
+def _partition_development_ids(
+    fold_manifest: Mapping[str, Any],
+) -> tuple[tuple[str, ...], frozenset[str]]:
+    population_fight_ids = tuple(
+        str(value) for value in fold_manifest["population_fight_ids"]
+    )
+    gate_roster = tuple(str(item["fight_id"]) for item in fold_manifest["gate_roster"])
+    gate_ids = frozenset(gate_roster)
+    safe_ids = tuple(
+        fight_id for fight_id in population_fight_ids if fight_id not in gate_ids
+    )
+    if (
+        len(population_fight_ids) != POPULATION_FIGHT_COUNT
+        or len(set(population_fight_ids)) != POPULATION_FIGHT_COUNT
+        or len(gate_roster) != GATE_FIGHT_COUNT
+        or len(gate_ids) != GATE_FIGHT_COUNT
+        or len(safe_ids) != DEVELOPMENT_FIGHT_COUNT
+        or not set(safe_ids).isdisjoint(gate_ids)
+        or set(safe_ids) | gate_ids != set(population_fight_ids)
+    ):
+        raise ValueError("development and gate identities are not the exact safe partition")
+    return safe_ids, gate_ids
+
+
+def _decode_full_row(raw: bytes, indices: Sequence[int]) -> list[str]:
+    parsed = next(csv.reader([raw.decode("utf-8")]))
+    return [parsed[index] for index in indices]
+
+
+def _decode_safe_rows(
+    raw_rows: Iterable[bytes],
+    *,
+    safe_ids: Sequence[str],
+    gate_ids: frozenset[str],
+    indices: Sequence[int],
+) -> list[list[str]]:
+    safe_ids = tuple(str(fight_id) for fight_id in safe_ids)
+    safe_set = frozenset(safe_ids)
+    gate_ids = frozenset(str(fight_id) for fight_id in gate_ids)
+    if (
+        len(safe_ids) != DEVELOPMENT_FIGHT_COUNT
+        or len(safe_set) != DEVELOPMENT_FIGHT_COUNT
+        or len(gate_ids) != GATE_FIGHT_COUNT
+        or not safe_set.isdisjoint(gate_ids)
+    ):
+        raise ValueError("row decoder requires the exact disjoint safe partition")
+    rows = []
+    for raw in raw_rows:
+        fight_id = raw.split(b",", 1)[0].strip(b'"').decode("utf-8")
+        if fight_id in gate_ids:
+            continue
+        if fight_id in safe_set:
+            rows.append(_decode_full_row(raw, indices))
+    return rows
+
+
 def _load_development_table(profile: Mapping[str, Any]):
     import pandas as pd
 
@@ -324,14 +384,7 @@ def _load_development_table(profile: Mapping[str, Any]):
     if file_sha256(source_path) != profile["frozen_source"]["sha256"]:
         raise ValueError("frozen source bytes differ before score")
     fold_manifest = read_json(source_path.parents[3] / "baseline/fold-manifest.json")
-    gate_ids = {str(item["fight_id"]) for item in fold_manifest["gate_roster"]}
-    safe_ids = tuple(
-        str(value)
-        for value in fold_manifest["population_fight_ids"]
-        if str(value) not in gate_ids
-    )
-    if len(safe_ids) + len(gate_ids) != len(fold_manifest["population_fight_ids"]):
-        raise ValueError("development and gate identities are not an exact partition")
+    safe_ids, gate_ids = _partition_development_ids(fold_manifest)
     columns = [
         "fight_id",
         "event_id",
@@ -342,16 +395,14 @@ def _load_development_table(profile: Mapping[str, Any]):
     ]
     header = _source_header(source_path)
     indices = [header.index(column) for column in columns]
-    safe_set = set(safe_ids)
-    rows = []
     with source_path.open("rb") as source:
         source.readline()
-        for raw in source:
-            fight_id = raw.split(b",", 1)[0].strip(b'"').decode("utf-8")
-            if fight_id not in safe_set:
-                continue
-            parsed = next(csv.reader([raw.decode("utf-8")]))
-            rows.append([parsed[index] for index in indices])
+        rows = _decode_safe_rows(
+            source,
+            safe_ids=safe_ids,
+            gate_ids=gate_ids,
+            indices=indices,
+        )
     table = pd.DataFrame(rows, columns=columns)
     table["fight_id"] = table["fight_id"].astype("string")
     table["event_id"] = table["event_id"].astype("string")
@@ -363,12 +414,12 @@ def _load_development_table(profile: Mapping[str, Any]):
     table["event_year"] = pd.to_datetime(table["event_date"], errors="raise").dt.year
     if (
         len(table) != len(safe_ids)
-        or set(str(value) for value in table["fight_id"]) != safe_set
+        or set(str(value) for value in table["fight_id"]) != set(safe_ids)
         or set(table["y_true"].dropna().astype(int).unique()) != {0, 1}
     ):
         raise ValueError("frozen development population or labels differ")
-    if int(table["event_year"].max()) >= 2026:
-        raise ValueError("protected-year label access is forbidden")
+    if str(table["event_date"].max()) != DEVELOPMENT_MAX_DATE:
+        raise ValueError("development rows do not end at the frozen 2025-12-13 boundary")
     return table.sort_values(["event_date", "event_id", "fight_id"]).reset_index(drop=True)
 
 

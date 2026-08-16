@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from libs.modeling.experiment_campaign.families import semantic_portfolio as family_05
 from libs.modeling.experiment_campaign.semantic_portfolio import (
     MEASUREMENT_GROUP_IDS,
     SemanticPortfolioError,
@@ -122,6 +123,46 @@ def test_stability_selection_is_inner_only_directional_and_redundancy_capped() -
     unstable[1]["direction"] = -1
     result = select_stable_features(unstable, profile=profile, outer_year=2022)
     assert result["selected_features"] == ["feature_b"]
+
+
+def test_gate_roster_is_subtracted_before_any_full_row_decode(monkeypatch) -> None:
+    manifest_path = family_05.FROZEN_SOURCE.parents[3] / "baseline/fold-manifest.json"
+    fold_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    population_fight_ids = tuple(
+        str(fight_id) for fight_id in fold_manifest["population_fight_ids"]
+    )
+    gate_ids = frozenset(
+        str(item["fight_id"]) for item in fold_manifest["gate_roster"]
+    )
+    safe_ids = tuple(
+        fight_id for fight_id in population_fight_ids if fight_id not in gate_ids
+    )
+    assert len(safe_ids) == 3089
+    assert len(gate_ids) == 178
+    assert family_05._partition_development_ids(fold_manifest) == (safe_ids, gate_ids)
+
+    decoded_ids: list[str] = []
+
+    def decode_tripwire(raw: bytes, indices: list[int]) -> list[str]:
+        fight_id = raw.split(b",", 1)[0].decode("utf-8")
+        assert fight_id not in gate_ids, f"gate ID reached full-row decode: {fight_id}"
+        decoded_ids.append(fight_id)
+        return [fight_id, "synthetic-development-payload"]
+
+    monkeypatch.setattr(family_05, "_decode_full_row", decode_tripwire)
+    synthetic_rows = (
+        f"{fight_id},synthetic-payload\n".encode("utf-8")
+        for fight_id in population_fight_ids
+    )
+    decoded = family_05._decode_safe_rows(
+        synthetic_rows,
+        safe_ids=safe_ids,
+        gate_ids=gate_ids,
+        indices=[0, 1],
+    )
+
+    assert len(decoded) == 3089
+    assert tuple(decoded_ids) == safe_ids
 
 
 def test_actual_campaign_has_frozen_eight_profile_preregistration() -> None:
