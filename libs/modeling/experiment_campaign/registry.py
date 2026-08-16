@@ -85,7 +85,7 @@ FAMILY_2_PROFILE_FIELDS = (
     "adaptive_emphasis",
 )
 
-TERMINAL_STATES = {"complete", "failed", "cancelled", "superseded"}
+TERMINAL_STATES = {"complete", "failed", "cancelled", "limited", "superseded"}
 ZERO_HASH = "0" * 64
 
 
