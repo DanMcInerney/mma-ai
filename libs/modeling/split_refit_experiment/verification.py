@@ -75,6 +75,58 @@ def validate_branch_documents(
         raise BranchVerificationError("branch worktrees are not distinct")
 
 
+def _artifact_worktree(model_root: str) -> str:
+    normalized = str(model_root).replace("/", "\\")
+    marker = "\\experiments\\split_refit_20260816\\"
+    index = normalized.lower().find(marker.lower())
+    if index < 0:
+        raise BranchVerificationError("model artifact is not inside the campaign worktree")
+    return normalized[:index]
+
+
+def verify_branches(campaign_root: Path, *, repo: Path, strict: bool) -> dict[str, Any]:
+    if not strict:
+        raise BranchVerificationError("branch verification requires --strict")
+    campaign_root = Path(campaign_root).resolve()
+    repo = Path(repo).resolve()
+    revisions = {
+        name: _git("rev-parse", name, cwd=repo) for name in EXPECTED_BRANCH_REVISIONS
+    }
+    rollback_name = "codex/weighted-v8-67-baseline"
+    merge_bases = {
+        name: _git("merge-base", rollback_name, name, cwd=repo)
+        for name in EXPECTED_BRANCH_REVISIONS
+        if name != rollback_name
+    }
+    rollback = _read_json(campaign_root / "rollback-manifest.json")
+    selection = _read_json(campaign_root / "runs/80-10-10-evaluation/selection.json")
+    refit = _read_json(campaign_root / "runs/full-data-refit/refit-lineage-correction.json")
+    worktrees = {
+        rollback_name: rollback["rollback"]["worktree"],
+        "codex/exp-80-10-10-v8-20260816": _artifact_worktree(selection["model_root"]),
+        "codex/exp-full-refit-v8-20260816": _artifact_worktree(refit["model_root"]),
+    }
+    validate_branch_documents(revisions, merge_bases, worktrees)
+    rollback_root = Path(worktrees[rollback_name])
+    if _git("rev-parse", "HEAD", cwd=rollback_root) != EXPECTED_BRANCH_REVISIONS[rollback_name]:
+        raise BranchVerificationError("rollback worktree HEAD changed")
+    if _git("rev-parse", "HEAD^{tree}", cwd=rollback_root) != rollback["rollback"]["tree"]:
+        raise BranchVerificationError("rollback worktree tree changed")
+    if _git("status", "--porcelain", cwd=rollback_root):
+        raise BranchVerificationError("rollback worktree is dirty")
+    preserved_original = refit["preservation_before"]["original_checkout"]
+    if _original_checkout_identity() != preserved_original:
+        raise BranchVerificationError("original checkout manifest changed")
+    return {
+        "status": "PASS",
+        "revisions": revisions,
+        "merge_bases": merge_bases,
+        "worktrees": worktrees,
+        "rollback_tree": rollback["rollback"]["tree"],
+        "original_checkout": preserved_original,
+    }
+
+
 def has_database_token(text: str) -> bool:
     lowered = text.lower()
     return "clankerfights" in lowered or bool(

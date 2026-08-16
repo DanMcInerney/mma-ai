@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -31,6 +32,30 @@ def _read_json(path: Path) -> dict[str, Any]:
     if raw not in (canonical, canonical + b"\n", canonical + b"\r\n"):
         raise ReportError(f"report input is not canonical JSON: {path}")
     return value
+
+
+def _registry_input(root: Path) -> dict[str, Any]:
+    lines = [line.replace(b"\r\n", b"\n") for line in (root / "registry.jsonl").read_bytes().splitlines(keepends=True)]
+    if len(lines) < 7:
+        raise ReportError("registry does not contain the accepted seven-record refit prefix")
+    records = [json.loads(line) for line in lines[:7]]
+    expected = [
+        "rollback-capsule",
+        "split-materialization",
+        "evaluation-selection",
+        "evaluation-result",
+        "full-data-refit-failure",
+        "full-data-refit-recovery",
+        "full-data-refit-lineage-correction",
+    ]
+    if [row.get("record_id") for row in records] != expected:
+        raise ReportError("accepted registry prefix changed")
+    prefix = b"".join(lines[:7])
+    return {
+        "record_count": 7,
+        "prefix_sha256": hashlib.sha256(prefix).hexdigest().upper(),
+        "last_record_sha256": records[-1]["record_sha256"],
+    }
 
 
 def _evaluation_row(
@@ -71,7 +96,6 @@ def build_report(campaign_root: Path) -> dict[str, Any]:
     selection = _read_json(root / "runs/80-10-10-evaluation/selection.json")
     refit = _read_json(root / "runs/full-data-refit/refit-lineage-correction.json")
     failure = _read_json(root / "runs/full-data-refit/fit-failure.json")
-    registry_head = _read_json(root / "registry-head.json")
 
     accepted = rollback["evaluation"]["accepted_direct_validation"]
     nested = rollback["evaluation"]["nested_historical"]["metrics"]
@@ -212,9 +236,7 @@ def build_report(campaign_root: Path) -> dict[str, Any]:
             "rollback_model_tree_sha256": rollback["model_identity"]["complete_tree_sha256"],
         },
         "registry_input": {
-            "record_count": registry_head["record_count"],
-            "prefix_sha256": registry_head["registry_prefix_sha256"],
-            "last_record_sha256": registry_head["last_record_sha256"],
+            **_registry_input(root),
         },
     }
     validate_report_documents(report)
@@ -339,3 +361,39 @@ def report_manifest(campaign_root: Path, report: Mapping[str, Any], markdown: st
         },
     }
 
+
+def write_final_report(campaign_root: Path) -> dict[str, Any]:
+    root = Path(campaign_root)
+    destinations = (root / "report.json", root / "report.md", root / "final-manifest.json")
+    if any(path.exists() for path in destinations):
+        raise ReportError("final report destination already exists")
+    report = build_report(root)
+    markdown = render_report_markdown(report)
+    report_path, markdown_path, manifest_path = destinations
+    report_path.write_bytes(canonical_json_bytes(report) + b"\n")
+    markdown_path.write_text(markdown, encoding="utf-8", newline="\n")
+    manifest = report_manifest(root, report, markdown)
+    manifest_path.write_bytes(canonical_json_bytes(manifest) + b"\n")
+
+    from .registry import append_registry_record
+
+    record = append_registry_record(
+        root,
+        record_id="final-evidence-report",
+        payload={
+            "kind": "final-report",
+            "artifact_path": "final-manifest.json",
+            "artifact_sha256": file_sha256(manifest_path),
+            "report_json_path": "report.json",
+            "report_json_sha256": file_sha256(report_path),
+            "report_markdown_path": "report.md",
+            "report_markdown_sha256": file_sha256(markdown_path),
+        },
+    )
+    return {
+        "registry_record_id": record["record_id"],
+        "registry_record_sha256": record["record_sha256"],
+        "report_json_sha256": file_sha256(report_path),
+        "report_markdown_sha256": file_sha256(markdown_path),
+        "final_manifest_sha256": file_sha256(manifest_path),
+    }
