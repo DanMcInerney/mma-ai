@@ -1,0 +1,49 @@
+{
+  "calibration_history_artifact_path": "artifacts/02-family-01-weighted-v8-control",
+  "calibration_history_boundary": "Original",
+  "experiment_id": "family-03-temporal-calibration",
+  "fold_lineage": [
+    {
+      "calibration_source_years": [],
+      "outer_year": 2022,
+      "selection": "identity-only-no-fit"
+    },
+    {
+      "calibration_source_years": [
+        2022
+      ],
+      "outer_year": 2023,
+      "selection": "chronological-event-block-tail"
+    },
+    {
+      "calibration_source_years": [
+        2022,
+        2023
+      ],
+      "outer_year": 2024,
+      "selection": "chronological-event-block-tail"
+    },
+    {
+      "calibration_source_years": [
+        2022,
+        2023,
+        2024
+      ],
+      "outer_year": 2025,
+      "selection": "chronological-event-block-tail"
+    }
+  ],
+  "negative_control": {
+    "artifact_path": "artifacts/03-family-02-horizon-recency",
+    "boundary": "InnerSelection",
+    "expected_result": "reject-same-fit-before-variant-fit-or-score"
+  },
+  "outer_target_artifact_path": "artifacts/03-family-02-horizon-recency",
+  "outer_target_boundary": "Original",
+  "selection_fraction": 0.7,
+  "selection_group": "event_id",
+  "selection_metric": "positive-log-loss",
+  "selection_rule": "Fit each non-identity variant on the earliest 70 percent of calibration-history events, score all four variants on the remaining chronological event tail, tie-break in frozen menu order, then refit only the selected variant on the complete prior history.",
+  "scoring_state": "not-started",
+  "variant_menu_profile_sha256": "E3C434FCC8820874D5541E086D00C8D85B2F1CBDAE85C02AD912C9E5421A421D"
+}

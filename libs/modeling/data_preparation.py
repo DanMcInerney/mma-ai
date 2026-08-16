@@ -113,14 +113,18 @@ class DataPreparation:
         
         # Step 3: Remove odds columns if not using odds
         if not self.odds:
-            odds_columns = [col for col in orig_df.columns if '_odds' in col]
+            odds_columns = [
+                col for col in orig_df.columns
+                if '_odds' in col and col not in feats_for_model
+            ]
             orig_df = orig_df.drop(columns=odds_columns)
         
         # Step 4: Filter fights
         cutoff_msg = f", cutoff_date={self.data_cutoff}" if self.data_cutoff else ""
         print(f"Filtering fights (min_fights={self.num_fights}, start_date={self.start_date}{cutoff_msg})...")
         self.df = filter_fights(orig_df, self.num_fights, date=self.start_date, 
-                               include_split_dec=self.include_split_dec, data_cutoff=self.data_cutoff)
+                               include_split_dec=self.include_split_dec, data_cutoff=self.data_cutoff,
+                               required_features=feats_for_model)
         
         # Step 5: Balance dataset if enabled (MUST be done before load_training_data)
         if self.balance_fighters:
