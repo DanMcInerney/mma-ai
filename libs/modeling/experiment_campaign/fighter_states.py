@@ -276,3 +276,56 @@ def build_fighter_state_rows(
                     }
                 )
     return output
+
+
+def select_state_profile(
+    evidence: Sequence[Mapping[str, Any]],
+    *,
+    profile: Mapping[str, Any],
+    outer_year: int,
+) -> dict[str, Any]:
+    """Select one preregistered profile using only prior inner years."""
+
+    profile_ids = tuple(item["id"] for item in profile["profiles"])
+    by_profile: dict[str, dict[int, float]] = {profile_id: {} for profile_id in profile_ids}
+    for row in evidence:
+        profile_id = str(row.get("profile_id", ""))
+        validation_year = int(row.get("validation_year", outer_year))
+        _require(profile_id in by_profile, "unknown profile selection evidence")
+        _require(
+            row.get("role") == "inner-chronological" and validation_year < outer_year,
+            "outer or future selection evidence is forbidden",
+        )
+        _require(
+            validation_year not in by_profile[profile_id],
+            "duplicate profile/year selection evidence",
+        )
+        loss = float(row["validation_log_loss"])
+        _require(loss == loss, "selection loss is not finite")
+        by_profile[profile_id][validation_year] = loss
+    required_support = int(profile["inner_validation_year_count"])
+    _require(
+        all(len(scores) == required_support for scores in by_profile.values()),
+        "profile selection evidence support is incomplete",
+    )
+    years = sorted(next(iter(by_profile.values())))
+    _require(
+        all(sorted(scores) == years for scores in by_profile.values()),
+        "profile selection years differ",
+    )
+    mean_losses = {
+        profile_id: sum(scores.values()) / len(scores)
+        for profile_id, scores in by_profile.items()
+    }
+    selected = min(profile_ids, key=lambda value: (mean_losses[value], profile_ids.index(value)))
+    selected_profile = next(item for item in profile["profiles"] if item["id"] == selected)
+    return {
+        "outer_year": outer_year,
+        "selection_role": "inner-chronological",
+        "selection_years": years,
+        "profile_scores": mean_losses,
+        "selected_profile_id": selected,
+        "selected_feature_names": selected_profile["feature_names"],
+        "selected_ordered_feature_sha256": selected_profile["ordered_feature_sha256"],
+        "outer_label_selection_count": 0,
+    }

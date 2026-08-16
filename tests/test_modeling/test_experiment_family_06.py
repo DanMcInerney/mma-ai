@@ -10,6 +10,7 @@ import pytest
 from libs.modeling.experiment_campaign.fighter_states import (
     FighterStateError,
     build_fighter_state_rows,
+    select_state_profile,
     validate_preregistered_profiles,
 )
 from libs.modeling.experiment_campaign.families.fighter_states import (
@@ -194,3 +195,40 @@ def test_actual_campaign_has_pre_score_eight_profile_preregistration() -> None:
         "retry_count": 0,
         "serialized": True,
     }
+
+
+def test_profile_selection_is_strictly_inner_and_prior() -> None:
+    profile = build_preregistered_profile()
+    evidence = [
+        {
+            "outer_year": 2025,
+            "validation_year": year,
+            "profile_id": profile_id,
+            "role": "inner-chronological",
+            "validation_log_loss": 0.6 + index / 100.0,
+        }
+        for year in (2022, 2023, 2024)
+        for index, profile_id in enumerate(PROFILE_IDS)
+    ]
+    selected = select_state_profile(evidence, profile=profile, outer_year=2025)
+    assert selected["selected_profile_id"] == PROFILE_IDS[0]
+    assert selected["selection_years"] == [2022, 2023, 2024]
+    assert selected["outer_label_selection_count"] == 0
+    future = [dict(row) for row in evidence]
+    future[0]["validation_year"] = 2025
+    with pytest.raises(FighterStateError, match="outer or future"):
+        select_state_profile(future, profile=profile, outer_year=2025)
+
+
+def test_actual_campaign_has_terminal_family_06_result() -> None:
+    campaign = Path("experiments/top10_20260815")
+    manifest = json.loads(
+        (campaign / "runs/family-06-fighter-states/manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["experiment_id"] == "family-06-multiscale-count-aware-state"
+    assert manifest["exit_state"] == "complete"
+    assert len(manifest["folds"]) == 4
+    assert manifest["outer_label_selection_count"] == 0
+    assert manifest["gate_access_count"] == 0
+    assert manifest["invocation"]["gpu_lease_count"] == 1
+    assert manifest["invocation"]["retry_count"] == 0
