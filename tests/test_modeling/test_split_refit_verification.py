@@ -7,6 +7,7 @@ import pytest
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
 from libs.modeling.split_refit_experiment.verification import (
     EvaluationVerificationError,
+    has_database_token,
     validate_evaluation_documents,
 )
 
@@ -114,3 +115,9 @@ def test_document_verifier_rejects_hostile_mutations(mutation: str):
             result=result,
             expected_count=2,
         )
+
+
+def test_database_audit_distinguishes_metrics_from_connection_tokens():
+    assert not has_database_token('{"metric":0.6261685244094812}')
+    assert has_database_token("postgresql://user@localhost:5432/clankerfights")
+    assert has_database_token("host=localhost port=5432 dbname=clankerfights")
