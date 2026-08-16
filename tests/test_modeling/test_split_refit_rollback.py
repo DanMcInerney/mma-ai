@@ -92,16 +92,16 @@ EXPECTED_PROFILE = {
     "refit_full": True,
 }
 EXPECTED_CANDIDATES = [
+    "RandomForestGini",
     "CatBoost",
+    "TabICL",
+    "ExtraTreesGini",
+    "Mitra",
+    "NeuralNetFastAI",
+    "XGBoost",
     "PrepLightGBM",
     "LightGBM_r8",
-    "ExtraTreesGini",
-    "RandomForestGini",
-    "NeuralNetFastAI",
     "RealMLP_r9",
-    "XGBoost",
-    "Mitra",
-    "TabICL",
 ]
 EXPECTED_NESTED_METRICS = {
     "accuracy": 0.6552346570397112,
