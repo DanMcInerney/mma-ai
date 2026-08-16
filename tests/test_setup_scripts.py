@@ -164,8 +164,8 @@ def test_setup_scripts_download_restore_configure_and_start_dashboard():
         assert "processed/prediction_data.csv" in script
         assert "processed/training_data.csv" in script
         assert "processed/training_data_dec.csv" in script
-        assert "models/ag-20260304_110750-win-extreme.tar.gz" in script
-        assert "248511976D55895BE2C167F2F8FA8C4013E635B39A9BAB0D5F28C0916B5AAD74" in script
+        assert "models/ag-20260815_090928-win-hybrid.tar.gz" in script
+        assert "A1562B5105BFE874812AE4F5EF88DFD6DD5A5E7E5385B392B65D16775C17A57B" in script
         assert "pg_restore" in script
         assert "--clean" in script
         assert "--if-exists" in script
@@ -425,7 +425,7 @@ def test_setup_scripts_pin_compose_database_and_starter_model():
         assert "ODDS_DATABASE_URL" in script
         assert "55432" in script
         assert "18000" in script
-        assert "ag-20260304_110750-win-extreme" in script
+        assert "ag-20260815_090928-win-hybrid" in script
         assert "AutogluonModels" in script
 
 

@@ -33,7 +33,7 @@ from libs.web.models import DataRefreshRequest, EventPredictionRequest, MatchupP
 from libs.web.path_safety import resolve_data_csv, resolve_data_output_dir, resolve_model_dir
 
 
-STARTER_MODEL_NAME = "ag-20260304_110750-win-extreme"
+STARTER_MODEL_NAME = "ag-20260815_090928-win-hybrid"
 TRAINING_RESULT_BEGIN = "<<<MMA_AI_TRAINING_RESULT_BEGIN>>>"
 TRAINING_RESULT_END = "<<<MMA_AI_TRAINING_RESULT_END>>>"
 UPCOMING_EVENTS_CACHE_TTL_SECONDS = int(os.getenv("MMA_AI_UPCOMING_EVENTS_CACHE_TTL_SECONDS", "900"))

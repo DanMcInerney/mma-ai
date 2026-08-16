@@ -169,7 +169,7 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
     write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
     write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
-    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model = models_dir / "ag-20260815_090928-win-hybrid"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
@@ -190,8 +190,8 @@ def test_get_readiness_status_requires_seed_data_model_csvs_model_and_databases(
     assert readiness["checks"]["competitions_csv"]["required_columns"] == ["event_url"]
     assert readiness["checks"]["prediction_data_csv"]["ok"] is True
     assert readiness["checks"]["training_data_dec_csv"]["ok"] is True
-    assert readiness["checks"]["starter_model"]["expected"] == "ag-20260304_110750-win-extreme"
-    assert readiness["checks"]["starter_model"]["models"] == ["ag-20260304_110750-win-extreme"]
+    assert readiness["checks"]["starter_model"]["expected"] == "ag-20260815_090928-win-hybrid"
+    assert readiness["checks"]["starter_model"]["models"] == ["ag-20260815_090928-win-hybrid"]
     assert readiness["checks"]["database"]["ok"] is True
     assert readiness["checks"]["odds_database"]["ok"] is True
     assert readiness["checks"]["prediction_runtime"]["ok"] is True
@@ -214,7 +214,7 @@ def test_get_readiness_status_does_not_full_scan_large_csvs(monkeypatch, tmp_pat
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
     write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
     write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
-    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model = models_dir / "ag-20260815_090928-win-hybrid"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
@@ -278,7 +278,7 @@ def test_get_readiness_status_reports_malformed_csv_headers(monkeypatch, tmp_pat
     write_csv(data_dir / "prediction_data.csv", [{"fighter": "fighter one"}])
     write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one"}])
     write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one"}])
-    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model = models_dir / "ag-20260815_090928-win-hybrid"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
@@ -317,7 +317,7 @@ def test_get_readiness_status_requires_configured_starter_model_name(monkeypatch
 
     assert readiness["ready"] is False
     assert readiness["checks"]["starter_model"]["ok"] is False
-    assert readiness["checks"]["starter_model"]["expected"] == "ag-20260304_110750-win-extreme"
+    assert readiness["checks"]["starter_model"]["expected"] == "ag-20260815_090928-win-hybrid"
     assert readiness["checks"]["starter_model"]["models"] == ["some-other-model"]
 
 
@@ -334,7 +334,7 @@ def test_get_readiness_status_reports_missing_imported_database_tables(monkeypat
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
     write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
     write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
-    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model = models_dir / "ag-20260815_090928-win-hybrid"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     (starter_model / "predictor.pkl").write_text("starter", encoding="utf-8")
@@ -364,7 +364,7 @@ def test_get_readiness_status_requires_loadable_starter_model(monkeypatch, tmp_p
     write_csv(data_dir / "prediction_data.csv", [{"fighter_name": "fighter one"}])
     write_csv(data_dir / "training_data.csv", [{"fighter1_name": "fighter one", "y_true": 1}])
     write_csv(data_dir / "training_data_dec.csv", [{"fighter1_name": "fighter one", "y_true": 0}])
-    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model = models_dir / "ag-20260815_090928-win-hybrid"
     starter_model.mkdir(parents=True)
     (starter_model / "feats.txt").write_text("feature\n", encoding="utf-8")
     monkeypatch.setattr("libs.web.services._database_ready", lambda url, required_tables=None: {"ok": True, "url": url})
@@ -584,7 +584,7 @@ def test_list_fighters_supports_prediction_data_shapes(monkeypatch, tmp_path):
 
 def test_list_models_discovers_huggingface_starter_model_shape(monkeypatch, tmp_path):
     models_dir = tmp_path / "AutogluonModels"
-    starter_model = models_dir / "ag-20260304_110750-win-extreme"
+    starter_model = models_dir / "ag-20260815_090928-win-hybrid"
     starter_model.mkdir(parents=True)
     for filename in ("predictor.pkl", "learner.pkl", "metadata.json", "feats.txt", "scaler.pkl"):
         (starter_model / filename).write_text("starter", encoding="utf-8")
@@ -592,7 +592,7 @@ def test_list_models_discovers_huggingface_starter_model_shape(monkeypatch, tmp_
 
     models = list_models()
 
-    assert [model["name"] for model in models] == ["ag-20260304_110750-win-extreme"]
+    assert [model["name"] for model in models] == ["ag-20260815_090928-win-hybrid"]
     assert models[0]["path"] == str(starter_model)
     assert models[0]["has_features"] is True
     assert models[0]["has_predictor"] is True
@@ -634,17 +634,17 @@ def test_list_models_ignores_incomplete_model_directories(monkeypatch, tmp_path)
 
 def test_list_models_can_filter_by_prediction_target(monkeypatch, tmp_path):
     models_dir = tmp_path / "AutogluonModels"
-    for model_name in ("ag-20260304_110750-win-extreme", "ag-20260304_110750-decision-best"):
+    for model_name in ("ag-20260815_090928-win-hybrid", "ag-20260304_110750-decision-best"):
         model_dir = models_dir / model_name
         model_dir.mkdir(parents=True)
         (model_dir / "feats.txt").write_text("feature\n", encoding="utf-8")
         (model_dir / "predictor.pkl").write_text("predictor", encoding="utf-8")
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(models_dir))
 
-    assert [model["name"] for model in list_models("win")] == ["ag-20260304_110750-win-extreme"]
+    assert [model["name"] for model in list_models("win")] == ["ag-20260815_090928-win-hybrid"]
     assert [model["name"] for model in list_models("decision")] == ["ag-20260304_110750-decision-best"]
     assert {model["name"] for model in list_models()} == {
-        "ag-20260304_110750-win-extreme",
+        "ag-20260815_090928-win-hybrid",
         "ag-20260304_110750-decision-best",
     }
 

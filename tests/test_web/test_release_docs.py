@@ -30,7 +30,11 @@ def test_public_release_docs_cover_runtime_and_dashboard_surface():
     assert "setup.ps1" in readme
     assert "setup.sh" in readme
     assert "./setup.sh" in readme
-    assert "ag-20260304_110750-win-extreme" in readme
+    assert "ag-20260815_090928-win-hybrid" in readme
+    assert "309/460 (67.17%)" in huggingface_docs
+    assert "726/1,108 (65.52%)" in huggingface_docs
+    assert "selection-biased" in huggingface_docs
+    assert "not an untouched holdout" in huggingface_docs
     assert "auxiliary `odds` database" in readme
     assert "Python 3.10-3.12" in readme
     assert "Data: update the shipped raw UFCStats CSVs" in readme

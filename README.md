@@ -1023,7 +1023,7 @@ Static features are not shifted because they are known pre-fight: `age`,
 `days_since_last_fight`, `reach`, `height`, `ufcage`, historical odds fields
 when included, and `weightclass_encoded`.
 
-A valid starter model directory such as `ag-20260304_110750-win-extreme`
+A valid starter model directory such as `ag-20260815_090928-win-hybrid`
 usually includes `feats.txt`. Single models also need `scaler.pkl`; walk-forward
 ensembles scale internally.
 
@@ -1237,7 +1237,7 @@ CLI entrypoints outside Docker.
    cp artifacts/mma-ai-dataset/processed/training_data.csv data/training_data.csv
    cp artifacts/mma-ai-dataset/processed/training_data_dec.csv data/training_data_dec.csv
    cp artifacts/mma-ai-dataset/processed/prediction_data.csv data/prediction_data.csv
-   tar -xzf artifacts/mma-ai-dataset/models/ag-20260304_110750-win-extreme.tar.gz -C AutogluonModels
+   tar -xzf artifacts/mma-ai-dataset/models/ag-20260815_090928-win-hybrid.tar.gz -C AutogluonModels
    ```
 
    PowerShell equivalent:
@@ -1247,14 +1247,14 @@ CLI entrypoints outside Docker.
    Copy-Item artifacts\mma-ai-dataset\processed\training_data.csv data\training_data.csv
    Copy-Item artifacts\mma-ai-dataset\processed\training_data_dec.csv data\training_data_dec.csv
    Copy-Item artifacts\mma-ai-dataset\processed\prediction_data.csv data\prediction_data.csv
-   tar -xzf artifacts\mma-ai-dataset\models\ag-20260304_110750-win-extreme.tar.gz -C AutogluonModels
+   tar -xzf artifacts\mma-ai-dataset\models\ag-20260815_090928-win-hybrid.tar.gz -C AutogluonModels
    ```
 
    With those copied, you can run predictions immediately:
 
    ```bash
    uv run python predict.py \
-     --model-path AutogluonModels/ag-20260304_110750-win-extreme \
+     --model-path AutogluonModels/ag-20260815_090928-win-hybrid \
      --prediction-data-csv data/prediction_data.csv \
      --training-data-csv data/training_data.csv \
      --no-shap

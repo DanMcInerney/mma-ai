@@ -55,7 +55,14 @@ The scripts save `LLM_PROVIDER`, `LLM_MODEL`, `LLM_API_KEY`, and optional
 | `processed/training_data.csv` | Generated win-model training CSV. |
 | `processed/training_data_dec.csv` | Generated decision-model training CSV. |
 | `processed/prediction_data.csv` | Generated prediction feature CSV. |
-| `models/ag-20260304_110750-win-extreme.tar.gz` | Pretrained AutoGluon win model. |
+| `models/ag-20260815_090928-win-hybrid.tar.gz` | Pretrained AutoGluon win model. |
+
+The starter model is the accepted recency-weighted v8 hybrid. Its exposed
+460-fight chronological tuning score was 309/460 (67.17%), while its separate
+event-grouped 2022–2025 development replay was 726/1,108 (65.52%). The tuning
+score is selection-biased and is not an untouched holdout result. Exact model
+and evaluation identities are recorded in the dataset `manifest.json` and in
+`research/2026-08-16-top10-mma-experiments/`.
 
 The dumps use PostgreSQL custom archive format with gzip compression. Restore
 them with the repo's PostgreSQL 18.1 Docker service or a compatible local
@@ -112,7 +119,7 @@ raw CSVs and appends newly discovered fighters/fights.
 
 ```bash
 mkdir -p AutogluonModels
-tar -xzf artifacts/mma-ai-dataset/models/ag-20260304_110750-win-extreme.tar.gz -C AutogluonModels
+tar -xzf artifacts/mma-ai-dataset/models/ag-20260815_090928-win-hybrid.tar.gz -C AutogluonModels
 mkdir -p data
 cp artifacts/mma-ai-dataset/processed/training_data.csv data/training_data.csv
 cp artifacts/mma-ai-dataset/processed/training_data_dec.csv data/training_data_dec.csv
@@ -123,7 +130,7 @@ Then run:
 
 ```bash
 uv run python predict.py \
-  --model-path AutogluonModels/ag-20260304_110750-win-extreme \
+  --model-path AutogluonModels/ag-20260815_090928-win-hybrid \
   --prediction-data-csv data/prediction_data.csv \
   --training-data-csv data/training_data.csv \
   --no-shap
