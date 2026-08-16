@@ -14,6 +14,10 @@ from libs.modeling.experiment_campaign.ensemble import (
     validate_constituents,
     validate_weights,
 )
+from libs.modeling.experiment_campaign.families.oof_ensemble import (
+    OOFLineageError,
+    select_recipe_for_outer,
+)
 
 
 CONSTITUENT_IDS = (
@@ -55,6 +59,27 @@ def _solver() -> dict[str, object]:
         "tolerance": 1e-12,
         "seed": None,
     }
+
+
+def _profile() -> dict[str, object]:
+    return {
+        "constituent_ids": list(CONSTITUENT_IDS),
+        "current_constituent_id": "weighted-v8-control",
+        "foundation_constituent_ids": ["weighted-v8-control"],
+        "foundation_aggregate_cap": 0.6,
+        "regularization_shrinkage": 0.15,
+        "solver": _solver(),
+        "selection_tie_break": list(ENSEMBLE_VARIANT_IDS),
+    }
+
+
+def _historical_rows() -> dict[str, list[dict]]:
+    rows = _rows(fold="2022")
+    for values in rows.values():
+        for index, row in enumerate(values):
+            row["event_date"] = f"2022-01-{15 + index:02d}"
+            row["context_max_date"] = "2021-12-18"
+    return rows
 
 
 def test_exact_five_recipe_menu_is_frozen() -> None:
@@ -186,3 +211,69 @@ def test_outer_label_role_and_nondeterministic_solver_state_are_rejected() -> No
             foundation_aggregate_cap=0.6,
             solver={**_solver(), "seed": 123},
         )
+
+
+def test_recipe_selection_uses_only_prior_chronological_oof_rows() -> None:
+    result = select_recipe_for_outer(
+        _historical_rows(),
+        _rows(fold="2023"),
+        outer_year=2023,
+        profile=_profile(),
+    )
+    selection = result["selection"]
+    assert tuple(selection["recipe_scores"]) == ENSEMBLE_VARIANT_IDS
+    assert selection["fit_role"] == "inner-chronological-oof"
+    assert selection["fit_row_count"] == 2
+    assert selection["fit_folds"] == ["2022"]
+    assert selection["fit_max_date"] == "2022-01-16"
+    assert selection["selected_recipe_id"] in ENSEMBLE_VARIANT_IDS
+    assert set(selection["weights"]) == set(CONSTITUENT_IDS)
+
+
+def test_current_outer_labels_cannot_change_selection_weights_or_probabilities() -> None:
+    outer = _rows(fold="2023")
+    changed = deepcopy(outer)
+    for rows in changed.values():
+        for row in rows:
+            row["y_true"] = 1 - row["y_true"]
+    first = select_recipe_for_outer(
+        _historical_rows(), outer, outer_year=2023, profile=_profile()
+    )
+    second = select_recipe_for_outer(
+        _historical_rows(), changed, outer_year=2023, profile=_profile()
+    )
+    assert first["selection"] == second["selection"]
+    assert [row["probability"] for row in first["predictions"]] == [
+        row["probability"] for row in second["predictions"]
+    ]
+
+
+def test_earliest_fold_is_current_ensemble_identity_without_fit() -> None:
+    outer = _rows(fold="2022")
+    result = select_recipe_for_outer({}, outer, outer_year=2022, profile=_profile())
+    assert result["selection"]["selected_recipe_id"] == "current-autogluon-tune-ensemble"
+    assert result["selection"]["fit_row_count"] == 0
+    assert result["predictions"] == outer["weighted-v8-control"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "match"),
+    [
+        ("boundary", "FULL", "FULL"),
+        ("event_date", "2024-01-13", "strictly prior"),
+    ],
+)
+def test_inadmissible_oof_history_terminates_before_recipe_score(
+    field: str, value: object, match: str
+) -> None:
+    history = _historical_rows()
+    history["horizon-recency"][0][field] = value
+    with pytest.raises(OOFLineageError, match=match) as error:
+        select_recipe_for_outer(
+            history,
+            _rows(fold="2023"),
+            outer_year=2023,
+            profile=_profile(),
+        )
+    assert error.value.audit["variant_fit_count"] == 0
+    assert error.value.audit["variant_score_count"] == 0
