@@ -20,7 +20,7 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--strict", action="store_true")
     validate = commands.add_parser("validate")
     validate.add_argument("--campaign", type=Path, required=True)
-    validate.add_argument("--through", default="split")
+    validate.add_argument("--through", default="final")
     validate.add_argument("--strict", action="store_true")
     preflight = commands.add_parser("preflight-evaluation")
     preflight.add_argument("--campaign", type=Path, required=True)
@@ -59,6 +59,14 @@ def _parser() -> argparse.ArgumentParser:
     verify_refit = commands.add_parser("verify-refit")
     verify_refit.add_argument("--campaign", type=Path, required=True)
     verify_refit.add_argument("--recompute-lineage", action="store_true")
+    write_report = commands.add_parser("write-report")
+    write_report.add_argument("--campaign", type=Path, required=True)
+    verify_report = commands.add_parser("verify-report")
+    verify_report.add_argument("--campaign", type=Path, required=True)
+    verify_report.add_argument("--strict", action="store_true")
+    verify_branches = commands.add_parser("verify-branches")
+    verify_branches.add_argument("--campaign", type=Path, required=True)
+    verify_branches.add_argument("--strict", action="store_true")
     return parser
 
 
@@ -71,10 +79,15 @@ def main() -> int:
             args.campaign, source_csv=args.source_csv, strict=args.strict
         ).as_dict()
     elif args.command == "validate":
-        registry = validate_registry(
-            args.campaign, strict=args.strict, through=args.through
-        )
-        result = {"registry": registry.as_dict()}
+        if args.through == "final":
+            from .verification import validate_final_campaign
+
+            result = validate_final_campaign(args.campaign, strict=args.strict)
+        else:
+            registry = validate_registry(
+                args.campaign, strict=args.strict, through=args.through
+            )
+            result = {"registry": registry.as_dict()}
         if args.through == "split":
             result["split"] = verify_split(
                 args.campaign, source_csv=DEFAULT_SOURCE_CSV, strict=False
@@ -133,10 +146,22 @@ def main() -> int:
         from .refit import verify_refit_attempt
 
         result = verify_refit_attempt(args.campaign, strict=args.strict)
-    else:
+    elif args.command == "verify-refit":
         from .verification import verify_refit
 
         result = verify_refit(args.campaign, recompute_lineage=args.recompute_lineage)
+    elif args.command == "write-report":
+        from .report import write_final_report
+
+        result = write_final_report(args.campaign)
+    elif args.command == "verify-report":
+        from .verification import verify_report
+
+        result = verify_report(args.campaign, strict=args.strict)
+    else:
+        from .verification import verify_branches
+
+        result = verify_branches(args.campaign, repo=Path.cwd(), strict=args.strict)
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))
     return 0
 
