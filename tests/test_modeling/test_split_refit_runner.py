@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -13,6 +15,7 @@ from libs.modeling.split_refit_experiment.runner import (
     assert_production_grammar,
     compute_recency_weights,
     freeze_selection,
+    gpu_process_snapshot,
     predict_without_labels,
     resolve_candidate_names,
 )
@@ -139,3 +142,13 @@ def test_production_grammar_requires_one_fit_pair_then_one_access():
     with pytest.raises(EvaluationError, match="exactly one test access"):
         assert_production_grammar(attempts, access * 2, selection_frozen=True, require_access=True)
 
+
+def test_gpu_process_audit_excludes_only_its_own_python_pid(monkeypatch):
+    own = f"{os.getpid()}, python.exe, 1024 MiB"
+    monkeypatch.setattr(
+        "libs.modeling.split_refit_experiment.runner.subprocess.run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout=own + "\n", stderr=""),
+    )
+    result = gpu_process_snapshot()
+    assert result["python_rows"] == []
+    assert result["rows"] == [own]
