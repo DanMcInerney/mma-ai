@@ -1,18 +1,64 @@
 from __future__ import annotations
 
 import copy
+from pathlib import Path
 
 import pytest
 
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
 from libs.modeling.split_refit_experiment.verification import (
+    BranchVerificationError,
+    EXPECTED_BRANCH_REVISIONS,
     EvaluationVerificationError,
     RefitVerificationError,
+    validate_branch_documents,
+    verify_branches,
+    _validate_refit_registry,
     has_database_token,
     validate_evaluation_documents,
     validate_refit_documents,
     validate_loaded_predictor,
 )
+
+
+def test_branch_documents_require_exact_separate_refs_and_rollback_merge_base():
+    actual = {
+        "codex/weighted-v8-67-baseline": "545441975b86caf0abb6136e099e44e6b93caf22",
+        "codex/exp-80-10-10-v8-20260816": "7217012abcee3c22937dd378c0a904033564018d",
+        "codex/exp-full-refit-v8-20260816": "70559ac40300c62067f23b335050dda3e4931ce6",
+    }
+    merge_bases = {
+        "codex/exp-80-10-10-v8-20260816": actual["codex/weighted-v8-67-baseline"],
+        "codex/exp-full-refit-v8-20260816": actual["codex/weighted-v8-67-baseline"],
+    }
+    worktrees = {
+        name: f"C:/isolated/{index}" for index, name in enumerate(actual, start=1)
+    }
+    validate_branch_documents(actual, merge_bases, worktrees)
+    moved = dict(actual)
+    moved["codex/weighted-v8-67-baseline"] = "0" * 40
+    with pytest.raises(BranchVerificationError, match="branch target"):
+        validate_branch_documents(moved, merge_bases, worktrees)
+    aliased = dict(worktrees)
+    aliased["codex/exp-full-refit-v8-20260816"] = aliased[
+        "codex/exp-80-10-10-v8-20260816"
+    ]
+    with pytest.raises(BranchVerificationError, match="distinct"):
+        validate_branch_documents(actual, merge_bases, aliased)
+
+
+def test_live_campaign_branches_replay_without_moving_refs():
+    verified = verify_branches(Path("experiments/split_refit_20260816"), repo=Path.cwd(), strict=True)
+    assert verified["status"] == "PASS"
+    assert verified["revisions"] == EXPECTED_BRANCH_REVISIONS
+
+
+def test_refit_replay_accepts_only_the_appended_final_report_successor():
+    registry = _validate_refit_registry(Path("experiments/split_refit_20260816"))
+    assert registry["record_ids"][-2:] == [
+        "full-data-refit-lineage-correction",
+        "final-evidence-report",
+    ]
 
 
 def _documents():

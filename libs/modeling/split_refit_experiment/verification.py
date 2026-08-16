@@ -41,6 +41,271 @@ class RefitVerificationError(ValueError):
     pass
 
 
+class BranchVerificationError(ValueError):
+    pass
+
+
+EXPECTED_BRANCH_REVISIONS = {
+    "codex/weighted-v8-67-baseline": "545441975b86caf0abb6136e099e44e6b93caf22",
+    "codex/exp-80-10-10-v8-20260816": "7217012abcee3c22937dd378c0a904033564018d",
+    "codex/exp-full-refit-v8-20260816": "70559ac40300c62067f23b335050dda3e4931ce6",
+}
+
+
+def validate_branch_documents(
+    revisions: Mapping[str, str],
+    merge_bases: Mapping[str, str],
+    worktrees: Mapping[str, str],
+) -> None:
+    if dict(revisions) != EXPECTED_BRANCH_REVISIONS:
+        raise BranchVerificationError("branch target revisions changed")
+    rollback = EXPECTED_BRANCH_REVISIONS["codex/weighted-v8-67-baseline"]
+    experiments = (
+        "codex/exp-80-10-10-v8-20260816",
+        "codex/exp-full-refit-v8-20260816",
+    )
+    if set(merge_bases) != set(experiments) or any(
+        merge_bases[name] != rollback for name in experiments
+    ):
+        raise BranchVerificationError("experiment merge base changed")
+    if set(worktrees) != set(EXPECTED_BRANCH_REVISIONS):
+        raise BranchVerificationError("branch worktree mapping is incomplete")
+    normalized = [str(Path(worktrees[name]).resolve()).lower() for name in EXPECTED_BRANCH_REVISIONS]
+    if len(normalized) != len(set(normalized)):
+        raise BranchVerificationError("branch worktrees are not distinct")
+
+
+def _artifact_worktree(model_root: str) -> str:
+    normalized = str(model_root).replace("/", "\\")
+    marker = "\\experiments\\split_refit_20260816\\"
+    index = normalized.lower().find(marker.lower())
+    if index < 0:
+        raise BranchVerificationError("model artifact is not inside the campaign worktree")
+    return normalized[:index]
+
+
+def verify_branches(campaign_root: Path, *, repo: Path, strict: bool) -> dict[str, Any]:
+    if not strict:
+        raise BranchVerificationError("branch verification requires --strict")
+    campaign_root = Path(campaign_root).resolve()
+    repo = Path(repo).resolve()
+    revisions = {
+        name: _git("rev-parse", name, cwd=repo) for name in EXPECTED_BRANCH_REVISIONS
+    }
+    rollback_name = "codex/weighted-v8-67-baseline"
+    merge_bases = {
+        name: _git("merge-base", rollback_name, name, cwd=repo)
+        for name in EXPECTED_BRANCH_REVISIONS
+        if name != rollback_name
+    }
+    rollback = _read_json(campaign_root / "rollback-manifest.json")
+    selection = _read_json(campaign_root / "runs/80-10-10-evaluation/selection.json")
+    refit = _read_json(campaign_root / "runs/full-data-refit/refit-lineage-correction.json")
+    worktrees = {
+        rollback_name: rollback["rollback"]["worktree"],
+        "codex/exp-80-10-10-v8-20260816": _artifact_worktree(selection["model_root"]),
+        "codex/exp-full-refit-v8-20260816": _artifact_worktree(refit["model_root"]),
+    }
+    validate_branch_documents(revisions, merge_bases, worktrees)
+    rollback_root = Path(worktrees[rollback_name])
+    if _git("rev-parse", "HEAD", cwd=rollback_root) != EXPECTED_BRANCH_REVISIONS[rollback_name]:
+        raise BranchVerificationError("rollback worktree HEAD changed")
+    if _git("rev-parse", "HEAD^{tree}", cwd=rollback_root) != rollback["rollback"]["tree"]:
+        raise BranchVerificationError("rollback worktree tree changed")
+    if _git("status", "--porcelain", cwd=rollback_root):
+        raise BranchVerificationError("rollback worktree is dirty")
+    preserved_original = refit["preservation_before"]["original_checkout"]
+    if _original_checkout_identity() != preserved_original:
+        raise BranchVerificationError("original checkout manifest changed")
+    return {
+        "status": "PASS",
+        "revisions": revisions,
+        "merge_bases": merge_bases,
+        "worktrees": worktrees,
+        "rollback_tree": rollback["rollback"]["tree"],
+        "original_checkout": preserved_original,
+    }
+
+
+def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
+    raw_lines = (campaign_root / "registry.jsonl").read_bytes().splitlines(keepends=True)
+    lines = [line.replace(b"\r\n", b"\n") for line in raw_lines]
+    records = [json.loads(line) for line in lines]
+    expected_ids = [
+        "rollback-capsule",
+        "split-materialization",
+        "evaluation-selection",
+        "evaluation-result",
+        "full-data-refit-failure",
+        "full-data-refit-recovery",
+        "full-data-refit-lineage-correction",
+        "final-evidence-report",
+    ]
+    if [record.get("record_id") for record in records] != expected_ids:
+        raise EvaluationVerificationError("final registry record order changed")
+    prefix = b""
+    previous = "0" * 64
+    for sequence, (raw, record) in enumerate(zip(lines, records, strict=True)):
+        if raw != canonical_json_bytes(record) + b"\n":
+            raise EvaluationVerificationError("final registry is not canonical")
+        core = {key: value for key, value in record.items() if key != "record_sha256"}
+        if (
+            record.get("sequence") != sequence
+            or record.get("prefix_sha256_before") != hashlib.sha256(prefix).hexdigest().upper()
+            or record.get("previous_record_sha256") != previous
+            or record.get("record_sha256") != canonical_sha256(core)
+        ):
+            raise EvaluationVerificationError("final registry chain changed")
+        payload = record.get("payload", {})
+        artifact = (campaign_root / str(payload.get("artifact_path"))).resolve()
+        try:
+            artifact.relative_to(campaign_root.resolve())
+        except ValueError as exc:
+            raise EvaluationVerificationError("final registry artifact escapes campaign") from exc
+        if file_sha256(artifact) != payload.get("artifact_sha256"):
+            normalized = hashlib.sha256(artifact.read_bytes().replace(b"\r\n", b"\n")).hexdigest().upper()
+            if normalized != payload.get("artifact_sha256"):
+                raise EvaluationVerificationError("final registry artifact hash changed")
+        prefix += raw
+        previous = record["record_sha256"]
+    if hashlib.sha256(b"".join(lines[:7])).hexdigest().upper() != "C5626124C315D14639C52037EE33313418E309DA4C39426BEC59449A040A7A9E":
+        raise EvaluationVerificationError("accepted seven-record registry prefix changed")
+    final = records[-1]["payload"]
+    for path_key, hash_key in (
+        ("report_json_path", "report_json_sha256"),
+        ("report_markdown_path", "report_markdown_sha256"),
+    ):
+        path = campaign_root / final[path_key]
+        if file_sha256(path) != final[hash_key]:
+            raise EvaluationVerificationError(f"registered {path_key} hash changed")
+    head = _read_json(campaign_root / "registry-head.json")
+    expected_head = {
+        "record_count": 8,
+        "registry_bytes": len(prefix),
+        "registry_prefix_sha256": hashlib.sha256(prefix).hexdigest().upper(),
+        "last_record_sha256": previous,
+    }
+    _same(head, expected_head, "final registry head")
+    return {"record_count": 8, "record_ids": expected_ids, **expected_head}
+
+
+def verify_report(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
+    if not strict:
+        raise EvaluationVerificationError("report verification requires --strict")
+    from .report import (
+        ReportError,
+        build_report,
+        render_report_markdown,
+        report_manifest,
+        validate_report_documents,
+    )
+
+    campaign_root = Path(campaign_root).resolve()
+    report_path = campaign_root / "report.json"
+    raw_report = report_path.read_bytes()
+    report = json.loads(raw_report)
+    if raw_report.replace(b"\r\n", b"\n") != canonical_json_bytes(report) + b"\n":
+        raise EvaluationVerificationError("report JSON is not canonical")
+    try:
+        validate_report_documents(report)
+        expected = build_report(campaign_root)
+    except ReportError as exc:
+        raise EvaluationVerificationError(str(exc)) from exc
+    _same(report, expected, "final report")
+    markdown = (campaign_root / "report.md").read_text(encoding="utf-8")
+    if markdown != render_report_markdown(report):
+        raise EvaluationVerificationError("report markdown content changed")
+    manifest = _read_json(campaign_root / "final-manifest.json")
+    expected_manifest = report_manifest(campaign_root, report, markdown)
+    _same(manifest, expected_manifest, "final report manifest")
+
+    predictions_path = campaign_root / "runs/80-10-10-evaluation/test-predictions.jsonl"
+    predictions = read_jsonl(predictions_path)
+    replay = reduce_predictions(predictions).as_dict()
+    direct = report["historical_evaluations"][2]
+    for key, report_key in (
+        ("correct_count", "correct_count"),
+        ("row_count", "row_count"),
+        ("accuracy", "accuracy"),
+        ("log_loss", "positive_log_loss"),
+        ("brier", "brier"),
+        ("ece", "ece"),
+        ("calibration_intercept", "calibration_intercept"),
+        ("calibration_slope", "calibration_slope"),
+    ):
+        if replay[key] != direct[report_key]:
+            raise EvaluationVerificationError(f"report prediction replay changed: {key}")
+    evaluation = _read_json(campaign_root / "runs/80-10-10-evaluation/evaluation.json")
+    prediction_bytes = predictions_path.read_bytes()
+    prediction_hashes = {
+        hashlib.sha256(prediction_bytes).hexdigest().upper(),
+        hashlib.sha256(prediction_bytes.replace(b"\r\n", b"\n")).hexdigest().upper(),
+    }
+    if evaluation["prediction_sha256"] not in prediction_hashes:
+        raise EvaluationVerificationError("report prediction bytes changed")
+    registry = _validate_final_registry(campaign_root)
+    audited = "\n".join(
+        [
+            raw_report.decode("utf-8"),
+            markdown,
+            (campaign_root / "final-manifest.json").read_text(encoding="utf-8"),
+        ]
+    )
+    if has_database_token(audited):
+        raise EvaluationVerificationError("database token found in final report evidence")
+    return {
+        "status": "PASS",
+        "prediction_replay": replay,
+        "report_json_sha256": file_sha256(report_path),
+        "report_markdown_sha256": file_sha256(campaign_root / "report.md"),
+        "final_manifest_sha256": file_sha256(campaign_root / "final-manifest.json"),
+        "registry": registry,
+    }
+
+
+def validate_final_campaign(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
+    if not strict:
+        raise EvaluationVerificationError("final campaign validation requires --strict")
+    campaign_root = Path(campaign_root).resolve()
+    paths = _paths(campaign_root)
+    selection = _read_json(paths["selection"])
+    evaluation_attempts = read_jsonl(paths["attempts"])
+    access = read_jsonl(paths["access"])
+    predictions = read_jsonl(paths["predictions"])
+    evaluation = _read_json(paths["result"])
+    evaluated = validate_evaluation_documents(
+        selection=selection,
+        attempts=evaluation_attempts,
+        access=access,
+        predictions=predictions,
+        result=evaluation,
+        expected_count=307,
+    )
+    if len(access) != 1 or access[0].get("label_decode_count") != 307:
+        raise EvaluationVerificationError("test access ledger changed")
+    prediction_bytes = paths["predictions"].read_bytes()
+    if evaluation.get("prediction_sha256") not in {
+        hashlib.sha256(prediction_bytes).hexdigest().upper(),
+        hashlib.sha256(prediction_bytes.replace(b"\r\n", b"\n")).hexdigest().upper(),
+    }:
+        raise EvaluationVerificationError("registered predictions changed")
+    refit_attempts = read_jsonl(campaign_root / "runs/full-data-refit/attempts.jsonl")
+    refit = _read_json(campaign_root / "runs/full-data-refit/refit-lineage-correction.json")
+    refit_verified = validate_refit_documents(attempts=refit_attempts, result=refit)
+    report = verify_report(campaign_root, strict=True)
+    return {
+        "status": "PASS",
+        "evaluation": evaluated,
+        "refit": refit_verified,
+        "registry": report["registry"],
+        "report": {
+            key: value
+            for key, value in report.items()
+            if key.endswith("sha256")
+        },
+    }
+
+
 def has_database_token(text: str) -> bool:
     lowered = text.lower()
     return "clankerfights" in lowered or bool(
@@ -366,7 +631,9 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "full-data-refit-recovery",
         "full-data-refit-lineage-correction",
     ]
-    if [record.get("record_id") for record in records] != expected_ids:
+    actual_ids = [record.get("record_id") for record in records]
+    allowed_ids = [expected_ids, [*expected_ids, "final-evidence-report"]]
+    if actual_ids not in allowed_ids:
         raise RefitVerificationError("registry does not have the exact full-refit sequence")
     if hashlib.sha256(b"".join(lines[:4])).hexdigest().upper() != EXPECTED_REGISTRY_PREFIX:
         raise RefitVerificationError("post-evaluation registry prefix changed")
@@ -403,7 +670,7 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "last_record_sha256": previous,
     }
     _same(head, expected_head, "full-refit registry head")
-    return {"record_ids": expected_ids, "prefix_sha256": expected_head["registry_prefix_sha256"]}
+    return {"record_ids": actual_ids, "prefix_sha256": expected_head["registry_prefix_sha256"]}
 
 
 def _refit_git_scope(repo: Path) -> list[str]:
@@ -423,8 +690,13 @@ def _refit_git_scope(repo: Path) -> list[str]:
         "libs/modeling/split_refit_experiment/verification.py",
         "tests/test_modeling/test_split_refit_refit.py",
         "tests/test_modeling/test_split_refit_verification.py",
+        "tests/test_modeling/test_split_refit_report.py",
+        "libs/modeling/split_refit_experiment/report.py",
         "experiments/split_refit_20260816/registry.jsonl",
         "experiments/split_refit_20260816/registry-head.json",
+        "experiments/split_refit_20260816/report.json",
+        "experiments/split_refit_20260816/report.md",
+        "experiments/split_refit_20260816/final-manifest.json",
     }
     allowed_prefix = "experiments/split_refit_20260816/runs/full-data-refit/"
     unexpected = [path for path in paths if path not in allowed_files and not path.startswith(allowed_prefix)]
