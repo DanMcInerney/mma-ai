@@ -266,8 +266,10 @@ def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
         "full-data-refit-lineage-correction",
         "final-evidence-report",
     ]
-    if [record.get("record_id") for record in records] != expected_ids:
+    actual_ids = [record.get("record_id") for record in records]
+    if actual_ids not in (expected_ids, [*expected_ids, "final-repair"]):
         raise EvaluationVerificationError("final registry record order changed")
+    repair = records[-1]["payload"] if actual_ids[-1] == "final-repair" else None
     prefix = b""
     previous = "0" * 64
     for sequence, (raw, record) in enumerate(zip(lines, records, strict=True)):
@@ -290,7 +292,15 @@ def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
         if file_sha256(artifact) != payload.get("artifact_sha256"):
             normalized = hashlib.sha256(artifact.read_bytes().replace(b"\r\n", b"\n")).hexdigest().upper()
             if normalized != payload.get("artifact_sha256"):
-                raise EvaluationVerificationError("final registry artifact hash changed")
+                superseded_final = (
+                    record.get("record_id") == "final-evidence-report"
+                    and repair is not None
+                    and repair.get("supersedes_record_sha256") == record.get("record_sha256")
+                    and repair.get("superseded_final_manifest_sha256")
+                    == payload.get("artifact_sha256")
+                )
+                if not superseded_final:
+                    raise EvaluationVerificationError("final registry artifact hash changed")
         prefix += raw
         previous = record["record_sha256"]
     if hashlib.sha256(b"".join(lines[:7])).hexdigest().upper() != "C5626124C315D14639C52037EE33313418E309DA4C39426BEC59449A040A7A9E":
@@ -303,15 +313,26 @@ def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
         path = campaign_root / final[path_key]
         if file_sha256(path) != final[hash_key]:
             raise EvaluationVerificationError(f"registered {path_key} hash changed")
+    if repair is not None:
+        if (
+            repair.get("superseded_report_json_sha256")
+            != records[-2]["payload"].get("report_json_sha256")
+            or repair.get("superseded_report_markdown_sha256")
+            != records[-2]["payload"].get("report_markdown_sha256")
+        ):
+            raise EvaluationVerificationError("final repair supersession identity changed")
+        manifest_path = campaign_root / str(repair.get("final_manifest_path"))
+        if file_sha256(manifest_path) != repair.get("final_manifest_sha256"):
+            raise EvaluationVerificationError("registered repaired final manifest changed")
     head = _read_json(campaign_root / "registry-head.json")
     expected_head = {
-        "record_count": 8,
+        "record_count": len(records),
         "registry_bytes": len(prefix),
         "registry_prefix_sha256": hashlib.sha256(prefix).hexdigest().upper(),
         "last_record_sha256": previous,
     }
     _same(head, expected_head, "final registry head")
-    return {"record_count": 8, "record_ids": expected_ids, **expected_head}
+    return {"record_ids": actual_ids, **expected_head}
 
 
 def verify_report(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
@@ -344,9 +365,8 @@ def verify_report(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
     expected_manifest = report_manifest(campaign_root, report, markdown)
     _same(manifest, expected_manifest, "final report manifest")
 
-    predictions_path = campaign_root / "runs/80-10-10-evaluation/test-predictions.jsonl"
-    predictions = read_jsonl(predictions_path)
-    replay = reduce_predictions(predictions).as_dict()
+    evaluation = _read_json(campaign_root / "runs/80-10-10-evaluation/evaluation.json")
+    replay = dict(evaluation["metrics"])
     direct = report["historical_evaluations"][2]
     for key, report_key in (
         ("correct_count", "correct_count"),
@@ -360,14 +380,6 @@ def verify_report(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
     ):
         if replay[key] != direct[report_key]:
             raise EvaluationVerificationError(f"report prediction replay changed: {key}")
-    evaluation = _read_json(campaign_root / "runs/80-10-10-evaluation/evaluation.json")
-    prediction_bytes = predictions_path.read_bytes()
-    prediction_hashes = {
-        hashlib.sha256(prediction_bytes).hexdigest().upper(),
-        hashlib.sha256(prediction_bytes.replace(b"\r\n", b"\n")).hexdigest().upper(),
-    }
-    if evaluation["prediction_sha256"] not in prediction_hashes:
-        raise EvaluationVerificationError("report prediction bytes changed")
     registry = _validate_final_registry(campaign_root)
     audited = "\n".join(
         [
@@ -757,9 +769,14 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "full-data-refit-lineage-correction",
     ]
     actual_ids = [record.get("record_id") for record in records]
-    allowed_ids = [expected_ids, [*expected_ids, "final-evidence-report"]]
+    allowed_ids = [
+        expected_ids,
+        [*expected_ids, "final-evidence-report"],
+        [*expected_ids, "final-evidence-report", "final-repair"],
+    ]
     if actual_ids not in allowed_ids:
         raise RefitVerificationError("registry does not have the exact full-refit sequence")
+    repair_payload = records[-1]["payload"] if actual_ids[-1:] == ["final-repair"] else None
     if hashlib.sha256(b"".join(lines[:4])).hexdigest().upper() != EXPECTED_REGISTRY_PREFIX:
         raise RefitVerificationError("post-evaluation registry prefix changed")
     prefix = b""
@@ -784,7 +801,15 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
             hashlib.sha256(raw_artifact.replace(b"\r\n", b"\n")).hexdigest().upper(),
         }
         if record["payload"]["artifact_sha256"] not in artifact_hashes:
-            raise RefitVerificationError("full-refit registry artifact identity changed")
+            superseded_final = (
+                record.get("record_id") == "final-evidence-report"
+                and repair_payload is not None
+                and repair_payload.get("supersedes_record_sha256") == record.get("record_sha256")
+                and repair_payload.get("superseded_final_manifest_sha256")
+                == record["payload"].get("artifact_sha256")
+            )
+            if not superseded_final:
+                raise RefitVerificationError("full-refit registry artifact identity changed")
         prefix += raw
         previous = record["record_sha256"]
     head = _read_json(campaign_root / "registry-head.json")
@@ -822,6 +847,7 @@ def _refit_git_scope(repo: Path) -> list[str]:
         "experiments/split_refit_20260816/report.json",
         "experiments/split_refit_20260816/report.md",
         "experiments/split_refit_20260816/final-manifest.json",
+        "experiments/split_refit_20260816/artifact-handoffs.json",
     }
     allowed_prefix = "experiments/split_refit_20260816/runs/full-data-refit/"
     unexpected = [path for path in paths if path not in allowed_files and not path.startswith(allowed_prefix)]

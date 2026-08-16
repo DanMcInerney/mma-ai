@@ -131,9 +131,10 @@ def test_handoff_replay_rejects_wrong_dedicated_copy(tmp_path: Path):
 
 def test_refit_replay_accepts_only_the_appended_final_report_successor():
     registry = _validate_refit_registry(Path("experiments/split_refit_20260816"))
-    assert registry["record_ids"][-2:] == [
+    assert registry["record_ids"][-3:] == [
         "full-data-refit-lineage-correction",
         "final-evidence-report",
+        "final-repair",
     ]
 
 
