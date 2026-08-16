@@ -67,6 +67,9 @@ def _parser() -> argparse.ArgumentParser:
     verify_branches = commands.add_parser("verify-branches")
     verify_branches.add_argument("--campaign", type=Path, required=True)
     verify_branches.add_argument("--strict", action="store_true")
+    verify_handoffs = commands.add_parser("verify-artifact-handoffs")
+    verify_handoffs.add_argument("--campaign", type=Path, required=True)
+    verify_handoffs.add_argument("--strict", action="store_true")
     return parser
 
 
@@ -158,10 +161,14 @@ def main() -> int:
         from .verification import verify_report
 
         result = verify_report(args.campaign, strict=args.strict)
-    else:
+    elif args.command == "verify-branches":
         from .verification import verify_branches
 
         result = verify_branches(args.campaign, repo=Path.cwd(), strict=args.strict)
+    else:
+        from .verification import verify_artifact_handoffs
+
+        result = verify_artifact_handoffs(args.campaign, strict=args.strict)
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))
     return 0
 

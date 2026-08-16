@@ -45,17 +45,33 @@ class BranchVerificationError(ValueError):
     pass
 
 
+class ArtifactHandoffVerificationError(ValueError):
+    pass
+
+
 EXPECTED_BRANCH_REVISIONS = {
     "codex/weighted-v8-67-baseline": "545441975b86caf0abb6136e099e44e6b93caf22",
     "codex/exp-80-10-10-v8-20260816": "7217012abcee3c22937dd378c0a904033564018d",
     "codex/exp-full-refit-v8-20260816": "70559ac40300c62067f23b335050dda3e4931ce6",
 }
 
+EXPECTED_BRANCH_WORKTREES = {
+    "codex/weighted-v8-67-baseline": r"C:\Users\danhm\mma-ai\worktrees\weighted-v8-67-baseline",
+    "codex/exp-80-10-10-v8-20260816": r"C:\Users\danhm\mma-ai\worktrees\exp-80-10-10-v8-20260816",
+    "codex/exp-full-refit-v8-20260816": r"C:\Users\danhm\mma-ai\worktrees\exp-full-refit-v8-20260816",
+}
+
+EXPECTED_EXECUTOR_BASELINES = {
+    "codex/weighted-v8-67-baseline": "545441975b86caf0abb6136e099e44e6b93caf22",
+    "codex/exp-80-10-10-v8-20260816": "4ef43de12db79252355e5b6f5ecd58ccdb4c6a06",
+    "codex/exp-full-refit-v8-20260816": "70233a10c24cc240f84584cc6979717c46abf51e",
+}
+
 
 def validate_branch_documents(
     revisions: Mapping[str, str],
     merge_bases: Mapping[str, str],
-    worktrees: Mapping[str, str],
+    worktrees: Mapping[str, Mapping[str, Any]],
 ) -> None:
     if dict(revisions) != EXPECTED_BRANCH_REVISIONS:
         raise BranchVerificationError("branch target revisions changed")
@@ -70,18 +86,32 @@ def validate_branch_documents(
         raise BranchVerificationError("experiment merge base changed")
     if set(worktrees) != set(EXPECTED_BRANCH_REVISIONS):
         raise BranchVerificationError("branch worktree mapping is incomplete")
-    normalized = [str(Path(worktrees[name]).resolve()).lower() for name in EXPECTED_BRANCH_REVISIONS]
+    normalized = [
+        str(Path(str(worktrees[name].get("path", ""))).resolve()).lower()
+        for name in EXPECTED_BRANCH_REVISIONS
+    ]
     if len(normalized) != len(set(normalized)):
         raise BranchVerificationError("branch worktrees are not distinct")
-
-
-def _artifact_worktree(model_root: str) -> str:
-    normalized = str(model_root).replace("/", "\\")
-    marker = "\\experiments\\split_refit_20260816\\"
-    index = normalized.lower().find(marker.lower())
-    if index < 0:
-        raise BranchVerificationError("model artifact is not inside the campaign worktree")
-    return normalized[:index]
+    rollback_name = "codex/weighted-v8-67-baseline"
+    for name, expected_revision in EXPECTED_BRANCH_REVISIONS.items():
+        record = worktrees[name]
+        expected_path = str(Path(EXPECTED_BRANCH_WORKTREES[name]).resolve()).lower()
+        if str(Path(str(record.get("path", ""))).resolve()).lower() != expected_path:
+            raise BranchVerificationError(f"branch worktree path changed: {name}")
+        if record.get("branch") != name:
+            raise BranchVerificationError(f"checked-out branch changed: {name}")
+        if record.get("head") != expected_revision:
+            raise BranchVerificationError(f"worktree HEAD changed: {name}")
+        if record.get("status"):
+            raise BranchVerificationError(f"branch worktree is dirty: {name}")
+        if record.get("executor_baseline") != EXPECTED_EXECUTOR_BASELINES[name]:
+            raise BranchVerificationError(f"executor baseline changed: {name}")
+        direct_cut = record.get("direct_cut_from_rollback")
+        if name == rollback_name:
+            if direct_cut is not True:
+                raise BranchVerificationError("rollback identity is not marked as the exact rollback")
+        elif direct_cut is not False:
+            raise BranchVerificationError(f"false exact-cut claim: {name}")
 
 
 def verify_branches(campaign_root: Path, *, repo: Path, strict: bool) -> dict[str, Any]:
@@ -99,15 +129,28 @@ def verify_branches(campaign_root: Path, *, repo: Path, strict: bool) -> dict[st
         if name != rollback_name
     }
     rollback = _read_json(campaign_root / "rollback-manifest.json")
-    selection = _read_json(campaign_root / "runs/80-10-10-evaluation/selection.json")
     refit = _read_json(campaign_root / "runs/full-data-refit/refit-lineage-correction.json")
-    worktrees = {
-        rollback_name: rollback["rollback"]["worktree"],
-        "codex/exp-80-10-10-v8-20260816": _artifact_worktree(selection["model_root"]),
-        "codex/exp-full-refit-v8-20260816": _artifact_worktree(refit["model_root"]),
-    }
+    handoffs = _read_json(campaign_root / "artifact-handoffs.json")
+    documented = handoffs.get("branch_worktrees", {})
+    worktrees = {}
+    for name in EXPECTED_BRANCH_REVISIONS:
+        record = dict(documented.get(name, {}))
+        root = Path(str(record.get("path", "")))
+        if not root.is_dir():
+            raise BranchVerificationError(f"branch worktree path is missing: {name}")
+        record.update(
+            {
+                "branch": _git("symbolic-ref", "--short", "HEAD", cwd=root),
+                "head": _git("rev-parse", "HEAD", cwd=root),
+                "tree": _git("rev-parse", "HEAD^{tree}", cwd=root),
+                "status": _git("status", "--porcelain", cwd=root),
+            }
+        )
+        if record.get("merge_base") != (rollback_name == name and revisions[name] or merge_bases[name]):
+            raise BranchVerificationError(f"documented merge base changed: {name}")
+        worktrees[name] = record
     validate_branch_documents(revisions, merge_bases, worktrees)
-    rollback_root = Path(worktrees[rollback_name])
+    rollback_root = Path(worktrees[rollback_name]["path"])
     if _git("rev-parse", "HEAD", cwd=rollback_root) != EXPECTED_BRANCH_REVISIONS[rollback_name]:
         raise BranchVerificationError("rollback worktree HEAD changed")
     if _git("rev-parse", "HEAD^{tree}", cwd=rollback_root) != rollback["rollback"]["tree"]:
@@ -125,6 +168,88 @@ def verify_branches(campaign_root: Path, *, repo: Path, strict: bool) -> dict[st
         "rollback_tree": rollback["rollback"]["tree"],
         "original_checkout": preserved_original,
     }
+
+
+def _artifact_inventory(root: Path) -> dict[str, Any]:
+    try:
+        identity = tree_identity(root)
+    except EvaluationError as exc:
+        raise ArtifactHandoffVerificationError(str(exc)) from exc
+    return {
+        "file_count": identity["file_count"],
+        "total_bytes": sum(int(row["size"]) for row in identity["files"]),
+        "canonical_inventory_sha256": identity["sha256"],
+    }
+
+
+def verify_artifact_handoffs(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
+    if not strict:
+        raise ArtifactHandoffVerificationError("artifact handoff verification requires --strict")
+    campaign_root = Path(campaign_root).resolve()
+    document = _read_json(campaign_root / "artifact-handoffs.json")
+    if document.get("schema_version") != 1:
+        raise ArtifactHandoffVerificationError("artifact handoff schema changed")
+    if document.get("resolver_policy") != (
+        "Resolve the first existing candidate in resolver_precedence and require its complete canonical artifact, model-tree, and scaler identities. "
+        "The dedicated destination is mandatory and authoritative; executor_source is historical and optional."
+    ):
+        raise ArtifactHandoffVerificationError("artifact resolver policy changed")
+    handoffs = document.get("handoffs")
+    if not isinstance(handoffs, list) or [row.get("id") for row in handoffs] != [
+        "one-shot-evaluation",
+        "full-data-refit",
+    ]:
+        raise ArtifactHandoffVerificationError("artifact handoff sequence changed")
+    verified = []
+    for handoff in handoffs:
+        precedence = handoff.get("resolver_precedence")
+        if precedence != ["dedicated_destination", "executor_source"]:
+            raise ArtifactHandoffVerificationError("artifact resolver precedence changed")
+        destination = Path(str(handoff["dedicated_destination"].get("artifact_root", "")))
+        if not destination.is_dir():
+            raise ArtifactHandoffVerificationError("dedicated artifact destination is missing")
+        resolved_name = next(
+            (
+                name
+                for name in precedence
+                if Path(str(handoff[name].get("artifact_root", ""))).is_dir()
+            ),
+            None,
+        )
+        if resolved_name is None:
+            raise ArtifactHandoffVerificationError("no artifact resolver candidate exists")
+        expected = handoff.get("artifact_identity", {})
+        root = Path(str(handoff[resolved_name]["artifact_root"]))
+        actual = _artifact_inventory(root)
+        for key in ("file_count", "total_bytes", "canonical_inventory_sha256"):
+            if actual[key] != expected.get(key):
+                raise ArtifactHandoffVerificationError(f"artifact inventory changed: {handoff['id']}")
+        model = root / str(handoff["model_identity"].get("relative_root", ""))
+        model_identity = _artifact_inventory(model)
+        if (
+            model_identity["file_count"] != handoff["model_identity"].get("file_count")
+            or model_identity["canonical_inventory_sha256"]
+            != handoff["model_identity"].get("tree_sha256")
+        ):
+            raise ArtifactHandoffVerificationError(f"model tree identity changed: {handoff['id']}")
+        scaler = root / str(handoff["scaler_identity"].get("relative_path", ""))
+        if not scaler.is_file() or file_sha256(scaler) != handoff["scaler_identity"].get("sha256"):
+            raise ArtifactHandoffVerificationError(f"scaler identity changed: {handoff['id']}")
+        source = Path(str(handoff["executor_source"].get("artifact_root", "")))
+        if source.is_dir() and _artifact_inventory(source) != actual:
+            raise ArtifactHandoffVerificationError(f"source/destination inventory differs: {handoff['id']}")
+        verified.append(
+            {
+                "id": handoff["id"],
+                "resolved_from": resolved_name,
+                "artifact_root": str(root.resolve()),
+                "inventory": actual,
+                "join_inventory_sha256": expected.get("join_inventory_sha256"),
+                "model_tree_sha256": model_identity["canonical_inventory_sha256"],
+                "scaler_sha256": file_sha256(scaler),
+            }
+        )
+    return {"status": "PASS", "handoffs": verified}
 
 
 def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
