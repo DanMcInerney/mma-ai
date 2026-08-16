@@ -112,3 +112,53 @@ def blend_probability(first: float, second: float, first_weight: float) -> float
     b = _probability(second, "second")
     weight = _probability(first_weight, "blend-weight")
     return weight * a + (1.0 - weight) * b
+
+
+def build_combined_records(
+    template_records: Iterable[Mapping[str, Any]],
+    decision_records: Iterable[Mapping[str, Any]],
+    decision_win_records: Iterable[Mapping[str, Any]],
+    finish_win_records: Iterable[Mapping[str, Any]],
+    *,
+    variant_id: str,
+    clipping: tuple[float, float],
+) -> list[dict[str, Any]]:
+    """Combine aligned components while preserving the honest outer identity."""
+
+    template = [dict(record) for record in template_records]
+    decision = [dict(record) for record in decision_records]
+    decision_win = [dict(record) for record in decision_win_records]
+    finish_win = [dict(record) for record in finish_win_records]
+    component_ids = validate_component_alignment(decision, decision_win, finish_win)
+    template_identity = [(str(row["fight_id"]), str(row["fold"])) for row in template]
+    if template_identity != [
+        (fight_id, str(decision[index]["fold"])) for index, fight_id in enumerate(component_ids)
+    ]:
+        raise OutcomeDecompositionError("template and component identity mismatch")
+    lower = _probability(clipping[0], "lower clipping")
+    upper = _probability(clipping[1], "upper clipping")
+    if lower > upper:
+        raise OutcomeDecompositionError("clipping interval is reversed")
+    combined: list[dict[str, Any]] = []
+    for template_row, p_decision, p_decision_win, p_finish_win in zip(
+        template, decision, decision_win, finish_win, strict=True
+    ):
+        probability = combine_law_of_total_probability(
+            p_decision["probability"],
+            p_decision_win["probability"],
+            p_finish_win["probability"],
+        )
+        combined.append(
+            {
+                **template_row,
+                "candidate_id": variant_id,
+                "probability": min(upper, max(lower, probability)),
+                "component_probabilities": {
+                    "decision": float(p_decision["probability"]),
+                    "decision-win": float(p_decision_win["probability"]),
+                    "finish-win": float(p_finish_win["probability"]),
+                },
+                "outer_label_reads": 0,
+            }
+        )
+    return combined

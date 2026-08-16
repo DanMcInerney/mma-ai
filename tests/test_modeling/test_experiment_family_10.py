@@ -8,6 +8,7 @@ import pytest
 
 from libs.modeling.experiment_campaign.outcome_decomposition import (
     OutcomeDecompositionError,
+    build_combined_records,
     combine_law_of_total_probability,
     validate_component_alignment,
     validate_fallback,
@@ -37,6 +38,25 @@ def _component(fight_id: str, probability: float, *, fold: str = "2025") -> dict
 
 def test_law_of_total_probability_is_exact() -> None:
     assert combine_law_of_total_probability(0.25, 0.8, 0.2) == pytest.approx(0.35)
+
+
+def test_combined_records_preserve_outer_identity_and_exact_formula() -> None:
+    template = [{**_component("1", 0.5), "y_true": 1, "event_id": "9", "outcome_type": "finish"}]
+    rows = build_combined_records(
+        template,
+        [_component("1", 0.25)],
+        [_component("1", 0.8)],
+        [_component("1", 0.2)],
+        variant_id="three-component",
+        clipping=(0.0, 1.0),
+    )
+    assert rows[0]["probability"] == pytest.approx(0.35)
+    assert rows[0]["fight_id"] == "1" and rows[0]["y_true"] == 1
+    assert rows[0]["component_probabilities"] == {
+        "decision": 0.25,
+        "decision-win": 0.8,
+        "finish-win": 0.2,
+    }
 
 
 @pytest.mark.parametrize("values", [(-0.1, 0.5, 0.5), (0.5, 1.1, 0.5), (0.5, 0.5, float("nan"))])
