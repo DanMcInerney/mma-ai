@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timezone
 import hashlib
+import json
+import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ..hashing import canonical_sha256, file_sha256, write_canonical_json
+from ..feature_lineage import build_development_safe_ids
+from ..hashing import (
+    canonical_json_bytes,
+    canonical_sha256,
+    file_sha256,
+    read_json,
+    tree_inventory,
+    write_canonical_json,
+)
 from ..protocol import AccessLedger
 from .semantic_portfolio import V8_FEATURES
 
@@ -19,6 +30,10 @@ FROZEN_SOURCE_SHA256 = "157649B780965ECC585F18B3030199CDC0F4FE3013958FFA4095FCF6
 RUN_PATH = "runs/family-08-catboost-specialist"
 ARTIFACT_PATH = "artifacts/09-family-08-catboost-specialist"
 DATA_PATH = "data/experiments/top10_20260815/family-08-catboost-specialist"
+FIXED_FAMILY_7_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\08-family-07-matchup-geometry"
+)
 
 PROFILE_IDS = (
     "shared-normalized-ordered-low",
@@ -442,3 +457,293 @@ def write_preregistration(campaign_root: Path, *, source_revision: str) -> dict[
     }
     write_canonical_json(preregistration_path, preregistration)
     return preregistration
+
+
+def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"".join(canonical_json_bytes(dict(row)) + b"\n" for row in rows))
+
+
+def _append_registry(campaign_root: Path, payload: Mapping[str, Any]) -> dict[str, str]:
+    registry_path = campaign_root / "registry.jsonl"
+    head_path = campaign_root / "registry-head.json"
+    before = registry_path.read_bytes()
+    records = [json.loads(line) for line in before.splitlines()]
+    if any(record["payload"]["experiment_id"] == EXPERIMENT_ID for record in records):
+        raise ValueError("family 8 already exists in the registry")
+    head = read_json(head_path)
+    prefix_before = hashlib.sha256(before).hexdigest().upper()
+    if prefix_before != head["registry_prefix_sha256"] or len(records) != 8:
+        raise ValueError("registry head does not match the immutable family-7 prefix")
+    record = {
+        "payload": dict(payload),
+        "prefix_sha256_before": prefix_before,
+        "previous_record_sha256": head["last_record_sha256"],
+        "sequence": head["record_count"],
+    }
+    record["record_sha256"] = canonical_sha256(record)
+    after = before + canonical_json_bytes(record) + b"\n"
+    registry_path.write_bytes(after)
+    write_canonical_json(
+        head_path,
+        {
+            "last_record_sha256": record["record_sha256"],
+            "record_count": len(records) + 1,
+            "registry_bytes": len(after),
+            "registry_prefix_sha256": hashlib.sha256(after).hexdigest().upper(),
+        },
+    )
+    return {
+        "record_sha256": record["record_sha256"],
+        "registry_prefix_sha256_before": prefix_before,
+        "registry_prefix_sha256_after": hashlib.sha256(after).hexdigest().upper(),
+    }
+
+
+def materialize_family_08(
+    campaign_root: Path,
+    *,
+    source_revision: str,
+    preregistration_commit: str,
+) -> dict[str, Any]:
+    """Record one no-retry dependency failure before any row or target decode."""
+
+    campaign_root = Path(campaign_root)
+    run_root = campaign_root / RUN_PATH
+    artifact_root = campaign_root / ARTIFACT_PATH
+    data_root = campaign_root.parents[1] / DATA_PATH
+    manifest_path = run_root / "manifest.json"
+    if artifact_root.exists() or data_root.exists() or manifest_path.exists():
+        raise ValueError("family 8 score destination already exists; retries are forbidden")
+    inherited_database = [
+        name for name in ("DATABASE_URL", "ODDS_DATABASE_URL") if os.environ.get(name)
+    ]
+    if inherited_database:
+        raise ValueError("family 8 refuses inherited database URLs")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 8 requires the gate closed with zero access")
+    profile_path = campaign_root / "profiles/family-08-catboost-specialist.json"
+    preregistration_path = run_root / "preregistration.json"
+    profile = read_json(profile_path)
+    preregistration = read_json(preregistration_path)
+    validated = validate_preregistered_profile(profile)
+    registry_before = hashlib.sha256((campaign_root / "registry.jsonl").read_bytes()).hexdigest().upper()
+    if (
+        profile != build_preregistered_profile()
+        or preregistration["scoring_state"] != "not-started"
+        or preregistration["profile_sha256"] != canonical_sha256(profile)
+        or preregistration["profile_file_sha256"] != file_sha256(profile_path)
+        or preregistration["registry_prefix_sha256_before"] != registry_before
+    ):
+        raise ValueError("family 8 was not exactly preregistered before launch")
+
+    # Identity-only subtraction is the mandatory first data operation. No CSV row is opened here.
+    fold_manifest = read_json(campaign_root / "baseline/fold-manifest.json")
+    safe_ids, retired_ids = build_development_safe_ids(fold_manifest)
+    development_max_date = str(fold_manifest["folds"][-1]["outer"]["test_date_range"][1])
+    if len(safe_ids) != 3_089 or len(retired_ids) != 178 or development_max_date != "2025-12-13":
+        raise ValueError("family 8 development-safe population differs before target decode")
+    development_population = {
+        "asserted_before_row_or_target_decode": True,
+        "development_safe_id_count": len(safe_ids),
+        "development_max_date": development_max_date,
+        "retired_id_count": len(retired_ids),
+    }
+
+    artifact_root.mkdir(parents=True)
+    started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    acquired = {
+        "lease_id": "family-08-serialized-gpu-lease-1",
+        "ordinal": 1,
+        "pid": os.getpid(),
+        "state": "acquired",
+        "started_at": started_at,
+    }
+    write_canonical_json(artifact_root / "gpu-lease-acquired.json", acquired)
+
+    dependency_manifest = read_json(campaign_root / "runs/family-07-matchup-geometry/manifest.json")
+    dependency_inventory = tree_inventory(FIXED_FAMILY_7_ARTIFACT)
+    dependency_predictions = [
+        *dependency_manifest["outer_original_prediction_identities"],
+        *dependency_manifest["outer_swapped_prediction_identities"],
+    ]
+    if (
+        dependency_manifest["exit_state"] != "failed"
+        or dependency_manifest["data_path"] is not None
+        or dependency_predictions
+        or dependency_inventory.tree_sha256 != dependency_manifest["artifact_tree_sha256"]
+    ):
+        raise ValueError("family 7 dependency evidence differs from the frozen terminal failure")
+    dependency_evidence = {
+        "experiment_id": dependency_manifest["experiment_id"],
+        "exit_state": dependency_manifest["exit_state"],
+        "artifact_tree_sha256": dependency_inventory.tree_sha256,
+        "artifact_file_count": dependency_inventory.file_count,
+        "data_path": dependency_manifest["data_path"],
+        "outer_prediction_identities": dependency_predictions,
+        "adaptive_signal": dependency_manifest["adaptive_signal_for_family_08"],
+    }
+    failure_text = (
+        "Family 8 terminated before row or target decode: the immutable family 7 dependency "
+        "failed before construction and produced no matchup table or Original predictions."
+    )
+    stderr_path = artifact_root / "terminal-stderr.txt"
+    stderr_path.write_text(failure_text + "\n", encoding="utf-8", newline="\n")
+    terminal_failure = {
+        "attempt_ordinal": 1,
+        "stage": "pre-construction-dependency-resolution",
+        "exception_type": "DependencyUnavailable",
+        "message": failure_text,
+        "stderr_path": "terminal-stderr.txt",
+        "stderr_sha256": file_sha256(stderr_path),
+        "construction_started": False,
+        "row_decode_started": False,
+        "target_decode_started": False,
+        "fit_started": False,
+        "outer_labels_scored": False,
+        "retry_performed": False,
+    }
+    representation_comparison = {
+        "status": "unavailable",
+        "reason": "pre-construction-dependency-failure",
+        "shared_profile_ids": list(PROFILE_IDS[:2]),
+        "raw_count_exposure_profile_ids": list(PROFILE_IDS[2:4]),
+        "native_categorical_profile_ids": list(PROFILE_IDS[4:]),
+        "identical_fold_ids": list(FOLD_IDS),
+        "native_versus_shared_deltas": None,
+    }
+    promotion = {
+        "action": "retain-family-01-weighted-v8-control",
+        "incumbent_before": "family-01-weighted-v8-control",
+        "incumbent_after": "family-01-weighted-v8-control",
+        "promoted": False,
+        "rule": "failed candidates cannot be promoted",
+    }
+    adaptive_signal = {
+        "status": "family-08-failed-before-catboost-construction",
+        "selected_profiles": [],
+        "selected_representation_hashes": [],
+        "native_categorical_evidence_available": False,
+    }
+    result = {
+        "experiment_id": EXPERIMENT_ID,
+        "status": "failed",
+        "terminal_failure": terminal_failure,
+        "metrics": None,
+        "incumbent_metrics": None,
+        "metric_deltas": None,
+        "paired_event_block_intervals": None,
+        "calibration_gaps": None,
+        "subgroup_gaps": None,
+        "train_gaps": None,
+        "capacity_diagnostics": None,
+        "representation_comparison": representation_comparison,
+        "representation_schema_and_lineage_hashes": validated["representation_hashes"],
+        "outer_prediction_identities": [],
+        "promotion_decision": promotion,
+        "adaptive_signal_for_family_09": adaptive_signal,
+        "development_safe_population": development_population,
+        "dependency_evidence": dependency_evidence,
+        "gate_access_count": gate["protected_access_count"],
+    }
+    write_canonical_json(artifact_root / "failure.json", terminal_failure)
+    write_canonical_json(artifact_root / "dependency-evidence.json", dependency_evidence)
+    write_canonical_json(
+        artifact_root / "representation-schema.json",
+        {
+            "representations": profile["representations"],
+            "representation_hashes": validated["representation_hashes"],
+            "fold_ids": list(FOLD_IDS),
+        },
+    )
+    write_canonical_json(
+        artifact_root / "safety.json",
+        {
+            "database_access": profile["database_access"],
+            "gpu_lease_count": 1,
+            "production_attempt_count": 1,
+            "retry_count": 0,
+            "serialized": True,
+            "gate_access_count": gate["protected_access_count"],
+            **development_population,
+        },
+    )
+    ended_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    released = {
+        "lease_id": acquired["lease_id"],
+        "ordinal": 1,
+        "pid": acquired["pid"],
+        "state": "released-after-terminal-failure",
+        "ended_at": ended_at,
+    }
+    write_canonical_json(artifact_root / "gpu-lease-released.json", released)
+    runtime = {
+        "attempt_ordinal": 1,
+        "started_at": started_at,
+        "ended_at": ended_at,
+        "gpu_lease_id": acquired["lease_id"],
+        "serialized": True,
+        "retry_count": 0,
+        "terminal_stage": terminal_failure["stage"],
+    }
+    write_canonical_json(artifact_root / "runtime.json", runtime)
+    write_canonical_json(artifact_root / "result.json", result)
+    inventory = tree_inventory(artifact_root)
+
+    _write_jsonl(
+        run_root / "attempts.jsonl",
+        [
+            {
+                "attempt_ordinal": 1,
+                "state": "failed",
+                "stage": terminal_failure["stage"],
+                "exception_type": terminal_failure["exception_type"],
+                "gpu_lease_id": acquired["lease_id"],
+                "retry": False,
+            }
+        ],
+    )
+    (run_root / "decision.md").write_text(
+        "# Family 8 decision\n\nRetain family 1: the sole serialized attempt stopped before row decode because family 7 produced no matchup table or predictions.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    manifest = {
+        **result,
+        "kind": "family",
+        "exit_state": "failed",
+        "artifact_path": ARTIFACT_PATH,
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "data_path": None,
+        "data_sha256": None,
+        "profile_path": "profiles/family-08-catboost-specialist.json",
+        "profile_sha256": canonical_sha256(profile),
+        "profile_file_sha256": file_sha256(profile_path),
+        "preregistration_path": f"{RUN_PATH}/preregistration.json",
+        "preregistration_sha256": canonical_sha256(preregistration),
+        "preregistration_commit": preregistration_commit,
+        "attempts_path": f"{RUN_PATH}/attempts.jsonl",
+        "runtime_path": f"{ARTIFACT_PATH}/runtime.json",
+        "source_revision": source_revision,
+        "outer_label_selection_count": 0,
+        "invocation": profile["invocation"],
+        "database_access": profile["database_access"],
+    }
+    write_canonical_json(manifest_path, manifest)
+    registry = _append_registry(
+        campaign_root,
+        {
+            "artifact_path": ARTIFACT_PATH,
+            "artifact_tree_sha256": inventory.tree_sha256,
+            "experiment_id": EXPERIMENT_ID,
+            "kind": "family",
+            "manifest_path": f"{RUN_PATH}/manifest.json",
+            "manifest_sha256": canonical_sha256(manifest),
+            "profile_path": manifest["profile_path"],
+            "profile_sha256": manifest["profile_sha256"],
+            "status": "failed",
+        },
+    )
+    return {**result, **registry, "artifact_tree_sha256": inventory.tree_sha256}

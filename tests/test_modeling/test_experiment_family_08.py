@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -11,12 +12,14 @@ from libs.modeling.experiment_campaign.families.catboost_specialist import (
     PROFILE_IDS,
     CatBoostSpecialistError,
     build_preregistered_profile,
+    materialize_family_08,
     validate_fold_fit_evidence,
     validate_preregistered_profile,
     write_preregistration,
 )
 from libs.modeling.experiment_campaign.hashing import canonical_sha256, file_sha256
 from libs.modeling.experiment_campaign.protocol import initialize_gate
+from libs.modeling.experiment_campaign.runner import verify_family_run
 
 
 def test_exact_eight_materialized_catboost_profiles_compare_shared_raw_and_native() -> None:
@@ -183,3 +186,28 @@ def test_actual_campaign_has_prelaunch_eight_profile_preregistration() -> None:
     assert preregistration["profile_file_sha256"] == file_sha256(profile_path)
     assert preregistration["ordered_profile_hashes"] == validated["profile_hashes"]
     assert preregistration["representation_hashes"] == validated["representation_hashes"]
+
+
+def test_one_shot_materializer_records_a_recomputable_predecode_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("ODDS_DATABASE_URL", raising=False)
+    campaign = tmp_path / "experiments/top10_20260815"
+    shutil.copytree(Path("experiments/top10_20260815"), campaign)
+    result = materialize_family_08(
+        campaign,
+        source_revision="committed-scorer",
+        preregistration_commit="committed-preregistration",
+    )
+    assert result["status"] == "failed"
+    assert result["terminal_failure"]["row_decode_started"] is False
+    assert result["terminal_failure"]["target_decode_started"] is False
+    assert result["terminal_failure"]["fit_started"] is False
+    assert result["outer_prediction_identities"] == []
+    verified = verify_family_run(campaign, "family-08-catboost-specialist", recompute_all=True)
+    assert verified["status"] == "failed"
+    assert verified["profile_count"] == 8
+    assert verified["attempt_count"] == 1
+    assert verified["retry_count"] == 0
