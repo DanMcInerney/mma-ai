@@ -18,6 +18,7 @@ from libs.modeling.split_refit_experiment.verification import (
     validate_final_campaign,
     verify_report,
 )
+from libs.modeling.split_refit_experiment.__main__ import _parser
 
 
 CAMPAIGN = Path("experiments/split_refit_20260816")
@@ -160,3 +161,14 @@ def test_strict_report_and_campaign_replay_recompute_registered_predictions(tmp_
     (campaign / "report.json").write_text(document.replace("202,", "201,", 1), encoding="utf-8")
     with pytest.raises(EvaluationVerificationError):
         verify_report(campaign, strict=True)
+
+
+def test_cli_exposes_append_once_report_and_strict_final_verifiers():
+    parser = _parser()
+    assert parser.parse_args(["write-report", "--campaign", "x"]).command == "write-report"
+    report = parser.parse_args(["verify-report", "--campaign", "x", "--strict"])
+    assert report.command == "verify-report" and report.strict is True
+    branches = parser.parse_args(["verify-branches", "--campaign", "x", "--strict"])
+    assert branches.command == "verify-branches" and branches.strict is True
+    final = parser.parse_args(["validate", "--campaign", "x", "--strict"])
+    assert final.through == "final"
