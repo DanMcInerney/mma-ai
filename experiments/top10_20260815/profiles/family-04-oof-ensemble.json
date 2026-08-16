@@ -1,0 +1,78 @@
+{
+  "adaptive_emphasis": "Family-03 calibration did not promote; compare only registered prior OOF constituents and keep foundation aggregate weight capped.",
+  "bootstrap": {
+    "block": "event_id",
+    "iterations": 2000,
+    "seed": 20260815
+  },
+  "constituents": [
+    {
+      "artifact_path": "artifacts/02-family-01-weighted-v8-control",
+      "experiment_id": "family-01-weighted-v8-control",
+      "foundation_model": true,
+      "id": "weighted-v8-control"
+    },
+    {
+      "artifact_path": "artifacts/03-family-02-horizon-recency",
+      "experiment_id": "family-02-horizon-recency",
+      "foundation_model": false,
+      "id": "horizon-recency"
+    },
+    {
+      "artifact_path": "artifacts/04-family-03-temporal-calibration",
+      "experiment_id": "family-03-temporal-calibration",
+      "foundation_model": false,
+      "id": "temporal-calibrated"
+    }
+  ],
+  "constituent_ids": [
+    "weighted-v8-control",
+    "horizon-recency",
+    "temporal-calibrated"
+  ],
+  "current_constituent_id": "weighted-v8-control",
+  "experiment_id": "family-04-chronological-oof-ensemble",
+  "family_number": 4,
+  "fit_role": "inner-chronological-oof",
+  "foundation_aggregate_cap": 0.6,
+  "foundation_constituent_ids": [
+    "weighted-v8-control"
+  ],
+  "outer_label_roles": [
+    "final-metrics-only"
+  ],
+  "outer_years": [
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "promotion_rule": "Promote only after all four outer folds complete when pooled log loss is below the aligned incumbent and the paired event-block log-loss interval upper bound is below zero; otherwise retain the incumbent.",
+  "recipe_menu": [
+    "best-single",
+    "current-autogluon-tune-ensemble",
+    "median-probability-blend",
+    "rank-probability-blend",
+    "regularized-nonnegative-oof-blend"
+  ],
+  "regularization_shrinkage": 0.15,
+  "selection_metric": "positive-log-loss",
+  "selection_scope": "inside-each-outer-history-only",
+  "selection_tie_break": [
+    "best-single",
+    "current-autogluon-tune-ensemble",
+    "median-probability-blend",
+    "rank-probability-blend",
+    "regularized-nonnegative-oof-blend"
+  ],
+  "solver": {
+    "algorithm": "projected-gradient-log-loss",
+    "learning_rate": 0.05,
+    "max_iterations": 4000,
+    "seed": null,
+    "tolerance": 1e-12
+  },
+  "terminal_failure_rule": "Stop before fit or score when constituent IDs, labels, folds, boundaries, chronology, context, source identity, or foundation cap validation fails.",
+  "threshold": 0.5,
+  "threshold_role": "headline-only-never-tuned"
+}
