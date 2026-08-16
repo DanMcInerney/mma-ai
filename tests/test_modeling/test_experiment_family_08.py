@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -17,9 +18,18 @@ from libs.modeling.experiment_campaign.families.catboost_specialist import (
     validate_preregistered_profile,
     write_preregistration,
 )
-from libs.modeling.experiment_campaign.hashing import canonical_sha256, file_sha256
+from libs.modeling.experiment_campaign.hashing import (
+    canonical_sha256,
+    file_sha256,
+    write_canonical_json,
+)
 from libs.modeling.experiment_campaign.protocol import initialize_gate
-from libs.modeling.experiment_campaign.runner import verify_family_run
+from libs.modeling.experiment_campaign.runner import (
+    audit_campaign_safety,
+    replay_campaign_decisions,
+    validate_terminal_campaign,
+    verify_family_run,
+)
 
 
 def test_exact_eight_materialized_catboost_profiles_compare_shared_raw_and_native() -> None:
@@ -195,7 +205,31 @@ def test_one_shot_materializer_records_a_recomputable_predecode_failure(
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("ODDS_DATABASE_URL", raising=False)
     campaign = tmp_path / "experiments/top10_20260815"
-    shutil.copytree(Path("experiments/top10_20260815"), campaign)
+    shutil.copytree(
+        Path("experiments/top10_20260815"),
+        campaign,
+        ignore=shutil.ignore_patterns("artifacts"),
+    )
+    run_root = campaign / "runs/family-08-catboost-specialist"
+    for name in ("attempts.jsonl", "decision.md", "manifest.json"):
+        (run_root / name).unlink(missing_ok=True)
+    registry_path = campaign / "registry.jsonl"
+    lines = registry_path.read_bytes().splitlines(keepends=True)
+    assert json.loads(lines[-1])["payload"]["experiment_id"] == (
+        "family-08-catboost-native-specialist"
+    )
+    prefix = b"".join(lines[:-1])
+    previous = json.loads(lines[-2])
+    registry_path.write_bytes(prefix)
+    write_canonical_json(
+        campaign / "registry-head.json",
+        {
+            "last_record_sha256": previous["record_sha256"],
+            "record_count": len(lines) - 1,
+            "registry_bytes": len(prefix),
+            "registry_prefix_sha256": hashlib.sha256(prefix).hexdigest().upper(),
+        },
+    )
     result = materialize_family_08(
         campaign,
         source_revision="committed-scorer",
@@ -211,3 +245,62 @@ def test_one_shot_materializer_records_a_recomputable_predecode_failure(
     assert verified["profile_count"] == 8
     assert verified["attempt_count"] == 1
     assert verified["retry_count"] == 0
+
+
+def test_actual_campaign_records_one_terminal_dependency_failure_before_decode() -> None:
+    campaign = Path("experiments/top10_20260815")
+    manifest = json.loads(
+        (campaign / "runs/family-08-catboost-specialist/manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    failure = manifest["terminal_failure"]
+    assert manifest["experiment_id"] == "family-08-catboost-native-specialist"
+    assert manifest["exit_state"] == "failed"
+    assert failure["stage"] == "pre-construction-dependency-resolution"
+    assert failure["row_decode_started"] is False
+    assert failure["target_decode_started"] is False
+    assert failure["fit_started"] is False
+    assert failure["outer_labels_scored"] is False
+    assert failure["retry_performed"] is False
+    assert manifest["outer_prediction_identities"] == []
+    assert manifest["metrics"] is None
+    assert manifest["paired_event_block_intervals"] is None
+    assert manifest["representation_comparison"]["status"] == "unavailable"
+    assert manifest["development_safe_population"] == {
+        "asserted_before_row_or_target_decode": True,
+        "development_safe_id_count": 3_089,
+        "development_max_date": "2025-12-13",
+        "retired_id_count": 178,
+    }
+
+
+def test_family_08_terminal_result_recomputes_run_replay_safety_and_prefix() -> None:
+    campaign = Path("experiments/top10_20260815")
+    verified = verify_family_run(campaign, "family-08-catboost-specialist", recompute_all=True)
+    assert verified["status"] == "failed"
+    assert verified["profile_count"] == 8
+    assert verified["attempt_count"] == 1
+    assert verified["retry_count"] == 0
+    assert verified["outer_prediction_identities"] == []
+    assert verified["representation_comparison"]["status"] == "unavailable"
+    replayed = replay_campaign_decisions(campaign, through="family-08-catboost-specialist")
+    assert len(replayed["decisions"]) == 8
+    assert replayed["decisions"][-1]["status"] == "failed"
+    assert replayed["incumbent_after"] == "family-01-weighted-v8-control"
+    safety = audit_campaign_safety(
+        campaign,
+        through="family-08-catboost-specialist",
+        require_gate_closed=True,
+    )
+    assert safety["gpu_lease_count"] == 1
+    assert safety["production_attempt_count"] == 1
+    assert safety["retry_count"] == 0
+    assert safety["database_access"] == {"used": False, "sql": None, "urls": []}
+    terminal = validate_terminal_campaign(
+        campaign,
+        expect_terminal_through=8,
+        require_gate_closed=True,
+    )
+    assert len(terminal["family_ids"]) == 8
+    assert terminal["protected_gate_access_count"] == 0
