@@ -28,15 +28,26 @@ No validation metric is claimed for the full-data refit. The only production pro
 - evaluation: `codex/exp-80-10-10-v8-20260816` at `7217012abcee3c22937dd378c0a904033564018d`
 - full refit: `codex/exp-full-refit-v8-20260816` at `70559ac40300c62067f23b335050dda3e4931ce6`
 
-Verify the existing rollback worktree without touching the original dirty checkout:
+The evaluation and full-refit refs have the rollback revision as their merge base, but were not directly cut from the rollback revision: their executors began from later integration baselines (`4ef43de...` and `70233a1...`). Each accepted ref now owns the dedicated worktree named above.
+
+Select and verify the immutable rollback worktree without touching the original dirty checkout:
 
 ```powershell
-git -C C:/Users/danhm/mma-ai/mma-ai rev-parse codex/weighted-v8-67-baseline
-git -C C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline rev-parse HEAD
-git -C C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline status --short
+$RollbackWorktree = 'C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline'
+Set-Location -LiteralPath $RollbackWorktree
+git rev-parse HEAD
+git rev-parse 'HEAD^{tree}'
+git status --porcelain
+uv run python -c "from libs.modeling.training_profiles import get_training_profile; p=get_training_profile('v8-hybrid-weighted'); assert p.model_type == 'win' and p.preset == 'hybrid' and p.refit_full is True"
 ```
 
-The first two commands must both print the fixed rollback revision above; the final command must print nothing.
+`HEAD` must be `545441975b86caf0abb6136e099e44e6b93caf22`, its tree must be `82305ddf6160338bfab8e1e8e4e6dc3b82efc7bf`, and status must print nothing. These verification commands select a shell working directory and prove identities; verification itself does not switch production.
+
+If an operator intentionally wants to retrain this exact named profile, the profile-based invocation seam is below. It starts a new training run; it does not activate or switch a deployed model:
+
+```powershell
+uv run python -c "from libs.modeling.training_profiles import train_profile; train_profile('v8-hybrid-weighted')"
+```
 
 ## Replacement predicate
 

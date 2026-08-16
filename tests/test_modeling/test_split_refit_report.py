@@ -88,6 +88,18 @@ def test_report_validation_rejects_denominator_pooling_and_full_score_claims():
     with pytest.raises(ReportError, match="validation"):
         validate_report_documents(full_claim)
 
+    unsafe = copy.deepcopy(report)
+    unsafe["rollback"]["verification_commands"][0] = (
+        "git -C C:/Users/danhm/mma-ai/mma-ai switch codex/weighted-v8-67-baseline"
+    )
+    with pytest.raises(ReportError, match="dirty main checkout"):
+        validate_report_documents(unsafe)
+
+    false_cut = copy.deepcopy(report)
+    false_cut["branches"]["evaluation"]["direct_cut_from_rollback"] = True
+    with pytest.raises(ReportError, match="direct-cut"):
+        validate_report_documents(false_cut)
+
 
 def test_markdown_uses_precise_retrospective_and_refit_language():
     text = render_report_markdown(build_report(CAMPAIGN))
@@ -99,10 +111,33 @@ def test_markdown_uses_precise_retrospective_and_refit_language():
     assert "does not establish untouched, external, or prospective performance" in text
     assert "No validation metric is claimed for the full-data refit" in text
     assert "RealMLP_r9_FULL is an Original clone fitted on 2,807 rows" in text
+    assert "were not directly cut from the rollback revision" in text
+    assert "does not switch production" in text
+    assert "starts a new training run" in text
+
+
+def test_rollback_instructions_select_only_the_immutable_worktree_and_name_profile_seam():
+    rollback = build_report(CAMPAIGN)["rollback"]
+    commands = "\n".join(
+        [
+            *rollback["selection_commands"],
+            *rollback["verification_commands"],
+            rollback["profile_verification_command"],
+            rollback["training_invocation"],
+        ]
+    )
+    assert "C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline" in commands
+    assert "C:/Users/danhm/mma-ai/mma-ai" not in commands
+    assert "rev-parse 'HEAD^{tree}'" in commands
+    assert "get_training_profile('v8-hybrid-weighted')" in commands
+    assert "train_profile('v8-hybrid-weighted')" in commands
+    assert rollback["verification_changes_production"] is False
+    assert rollback["training_invocation_starts_new_fit"] is True
 
 
 def _copy_report_inputs(destination: Path) -> Path:
     for relative in (
+        "artifact-handoffs.json",
         "rollback-manifest.json",
         "partitions/manifest.json",
         "profiles/evaluation.json",
@@ -191,5 +226,9 @@ def test_cli_exposes_append_once_report_and_strict_final_verifiers():
     assert report.command == "verify-report" and report.strict is True
     branches = parser.parse_args(["verify-branches", "--campaign", "x", "--strict"])
     assert branches.command == "verify-branches" and branches.strict is True
+    handoffs = parser.parse_args(
+        ["verify-artifact-handoffs", "--campaign", "x", "--strict"]
+    )
+    assert handoffs.command == "verify-artifact-handoffs" and handoffs.strict is True
     final = parser.parse_args(["validate", "--campaign", "x", "--strict"])
     assert final.through == "final"

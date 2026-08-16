@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -8,9 +9,12 @@ import pytest
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
 from libs.modeling.split_refit_experiment.verification import (
     BranchVerificationError,
+    ArtifactHandoffVerificationError,
     EXPECTED_BRANCH_REVISIONS,
+    EXPECTED_BRANCH_WORKTREES,
     EvaluationVerificationError,
     RefitVerificationError,
+    verify_artifact_handoffs,
     validate_branch_documents,
     verify_branches,
     _validate_refit_registry,
@@ -32,32 +36,105 @@ def test_branch_documents_require_exact_separate_refs_and_rollback_merge_base():
         "codex/exp-full-refit-v8-20260816": actual["codex/weighted-v8-67-baseline"],
     }
     worktrees = {
-        name: f"C:/isolated/{index}" for index, name in enumerate(actual, start=1)
+        name: {
+            "path": EXPECTED_BRANCH_WORKTREES[name],
+            "branch": name,
+            "head": revision,
+            "status": "",
+            "direct_cut_from_rollback": name == "codex/weighted-v8-67-baseline",
+            "executor_baseline": {
+                "codex/weighted-v8-67-baseline": actual["codex/weighted-v8-67-baseline"],
+                "codex/exp-80-10-10-v8-20260816": "4ef43de12db79252355e5b6f5ecd58ccdb4c6a06",
+                "codex/exp-full-refit-v8-20260816": "70233a10c24cc240f84584cc6979717c46abf51e",
+            }[name],
+        }
+        for name, revision in actual.items()
     }
     validate_branch_documents(actual, merge_bases, worktrees)
     moved = dict(actual)
     moved["codex/weighted-v8-67-baseline"] = "0" * 40
     with pytest.raises(BranchVerificationError, match="branch target"):
         validate_branch_documents(moved, merge_bases, worktrees)
-    aliased = dict(worktrees)
-    aliased["codex/exp-full-refit-v8-20260816"] = aliased[
-        "codex/exp-80-10-10-v8-20260816"
-    ]
-    with pytest.raises(BranchVerificationError, match="distinct"):
-        validate_branch_documents(actual, merge_bases, aliased)
+    hostile_mutations = {
+        "path": ("codex/exp-full-refit-v8-20260816", "path", "C:/wrong/path"),
+        "checked-out branch": (
+            "codex/exp-full-refit-v8-20260816",
+            "branch",
+            "codex/internal-executor",
+        ),
+        "HEAD": ("codex/exp-full-refit-v8-20260816", "head", "0" * 40),
+        "false exact-cut": (
+            "codex/exp-full-refit-v8-20260816",
+            "direct_cut_from_rollback",
+            True,
+        ),
+    }
+    for message, (name, field, value) in hostile_mutations.items():
+        hostile = copy.deepcopy(worktrees)
+        hostile[name][field] = value
+        with pytest.raises(BranchVerificationError, match=message):
+            validate_branch_documents(actual, merge_bases, hostile)
 
 
 def test_live_campaign_branches_replay_without_moving_refs():
     verified = verify_branches(Path("experiments/split_refit_20260816"), repo=Path.cwd(), strict=True)
     assert verified["status"] == "PASS"
     assert verified["revisions"] == EXPECTED_BRANCH_REVISIONS
+    assert verified["worktrees"]["codex/exp-80-10-10-v8-20260816"]["direct_cut_from_rollback"] is False
+    assert verified["worktrees"]["codex/exp-full-refit-v8-20260816"]["direct_cut_from_rollback"] is False
+
+
+def test_handoff_replay_prefers_dedicated_copy_when_executor_paths_are_missing(
+    tmp_path: Path,
+):
+    document = json.loads(
+        Path("experiments/split_refit_20260816/artifact-handoffs.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for handoff in document["handoffs"]:
+        handoff["executor_source"]["artifact_root"] = str(
+            tmp_path / "removed-executor" / handoff["id"]
+        )
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    (campaign / "artifact-handoffs.json").write_text(
+        json.dumps(document, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    verified = verify_artifact_handoffs(campaign, strict=True)
+    assert [row["resolved_from"] for row in verified["handoffs"]] == [
+        "dedicated_destination",
+        "dedicated_destination",
+    ]
+
+
+def test_handoff_replay_rejects_wrong_dedicated_copy(tmp_path: Path):
+    document = json.loads(
+        Path("experiments/split_refit_20260816/artifact-handoffs.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    wrong = tmp_path / "wrong-copy"
+    wrong.mkdir()
+    (wrong / "model.pkl").write_bytes(b"not-the-accepted-artifact")
+    document["handoffs"][0]["dedicated_destination"]["artifact_root"] = str(wrong)
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    (campaign / "artifact-handoffs.json").write_text(
+        json.dumps(document, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ArtifactHandoffVerificationError, match="inventory"):
+        verify_artifact_handoffs(campaign, strict=True)
 
 
 def test_refit_replay_accepts_only_the_appended_final_report_successor():
     registry = _validate_refit_registry(Path("experiments/split_refit_20260816"))
-    assert registry["record_ids"][-2:] == [
+    assert registry["record_ids"][-3:] == [
         "full-data-refit-lineage-correction",
         "final-evidence-report",
+        "final-repair",
     ]
 
 
