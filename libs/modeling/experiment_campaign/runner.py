@@ -48,8 +48,13 @@ FIXED_FAMILY_6_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\07-family-06-fighter-states"
 )
+FIXED_FAMILY_7_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\08-family-07-matchup-geometry"
+)
 FAMILY_5_RUN_ALIAS = "family-05-semantic-portfolio"
 FAMILY_6_RUN_ALIAS = "family-06-fighter-states"
+FAMILY_7_RUN_ALIAS = "family-07-matchup-geometry"
 
 
 def _canonical_family_id(experiment_id: str) -> str:
@@ -57,6 +62,8 @@ def _canonical_family_id(experiment_id: str) -> str:
         return CAMPAIGN_FAMILY_IDS[4]
     if experiment_id == FAMILY_6_RUN_ALIAS:
         return CAMPAIGN_FAMILY_IDS[5]
+    if experiment_id == FAMILY_7_RUN_ALIAS:
+        return CAMPAIGN_FAMILY_IDS[6]
     return experiment_id
 
 
@@ -76,6 +83,9 @@ FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_5 = (
 )
 FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_6 = (
     "AB670F8B67B5408B949C264A808F9B9F788494D23C9F785FD0E41BCC17A63B25"
+)
+FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_7 = (
+    "16E71698CFF77558EDB91085DB5CD3F0A5C6186DE65D69C13E722C05805C7592"
 )
 
 
@@ -101,8 +111,8 @@ def _validate_campaign_registry(campaign_root: Path):
     if len(raw_lines) <= 3:
         return validate_registry(campaign_root, strict=True)
     records = [json.loads(line) for line in raw_lines]
-    if len(records) > 7:
-        raise RegistryError("registry extends beyond the completed family-6 prefix")
+    if len(records) > 8:
+        raise RegistryError("registry extends beyond the completed family-7 prefix")
     expected_ids = ["experiment-zero", *CAMPAIGN_FAMILY_IDS[: len(records) - 1]]
     if [row["payload"]["experiment_id"] for row in records] != expected_ids:
         raise RegistryError("registry does not contain the exact completed family prefix")
@@ -126,6 +136,12 @@ def _validate_campaign_registry(campaign_root: Path):
         != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_6
     ):
         raise RegistryError("the frozen registry prefix before family 6 changed")
+    if (
+        len(raw_lines) > 7
+        and hashlib.sha256(b"".join(raw_lines[:7])).hexdigest().upper()
+        != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_7
+    ):
+        raise RegistryError("the frozen registry prefix before family 7 changed")
     previous_record = "0" * 64
     prefix_bytes = b""
     for sequence, (raw, record) in enumerate(zip(raw_lines, records, strict=True)):
@@ -202,6 +218,8 @@ def verify_family_run(
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
     experiment_id = _canonical_family_id(experiment_id)
+    if experiment_id == CAMPAIGN_FAMILY_IDS[6]:
+        return _verify_family_7_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[5]:
         return _verify_family_6_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[4]:
@@ -1038,6 +1056,131 @@ def _verify_family_6_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
     }
 
 
+def _verify_family_7_run(campaign_root: Path, *, recompute_all: bool) -> dict[str, Any]:
+    from .families.matchup_geometry import (
+        EXPERIMENT_ID,
+        PROFILE_IDS,
+        build_preregistered_profile,
+    )
+    from .feature_lineage import build_development_safe_ids
+    from .matchup_geometry import validate_preregistered_matchup_profiles
+
+    manifest = read_json(campaign_root / "runs/family-07-matchup-geometry/manifest.json")
+    profile_path = campaign_root / manifest["profile_path"]
+    profile = read_json(profile_path)
+    validated = validate_preregistered_matchup_profiles(profile)
+    preregistration = read_json(campaign_root / manifest["preregistration_path"])
+    if (
+        manifest.get("experiment_id") != EXPERIMENT_ID
+        or profile != build_preregistered_profile()
+        or tuple(validated["profile_ids"]) != PROFILE_IDS
+        or canonical_sha256(profile) != manifest["profile_sha256"]
+        or file_sha256(profile_path) != manifest["profile_file_sha256"]
+        or preregistration["scoring_state"] != "not-started"
+        or canonical_sha256(preregistration) != manifest["preregistration_sha256"]
+    ):
+        raise ValueError("family 7 profile or preregistration identity mismatch")
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_7_ARTIFACT
+    inventory = tree_inventory(artifact_root)
+    if (
+        inventory.tree_sha256 != manifest["artifact_tree_sha256"]
+        or inventory.file_count != manifest["artifact_file_count"]
+    ):
+        raise ValueError("family 7 artifact inventory mismatch")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 7 verification requires the gate closed with zero access")
+    safe_ids, retired_ids = build_development_safe_ids(
+        read_json(campaign_root / "baseline/fold-manifest.json")
+    )
+    if (
+        len(safe_ids) != 3_089
+        or len(retired_ids) != 178
+        or manifest["development_safe_population"]["development_max_date"] != "2025-12-13"
+        or manifest["development_safe_population"]["asserted_before_row_or_target_decode"] is not True
+    ):
+        raise ValueError("family 7 development-safe population evidence differs")
+    if manifest["exit_state"] != "failed":
+        raise ValueError("family 7 verifier expected the frozen terminal failure result")
+    failure = manifest["terminal_failure"]
+    attempts = read_jsonl(campaign_root / manifest["attempts_path"])
+    acquired = read_json(artifact_root / "gpu-lease-acquired.json")
+    released = read_json(artifact_root / "gpu-lease-released.json")
+    safety = read_json(artifact_root / "safety.json")
+    dependency = read_json(artifact_root / "dependency-evidence.json")
+    dependency_inventory = tree_inventory(FIXED_FAMILY_6_ARTIFACT)
+    if (
+        failure["attempt_ordinal"] != 1
+        or failure["stage"] != "pre-construction-dependency-resolution"
+        or failure["construction_started"] is not False
+        or failure["row_decode_started"] is not False
+        or failure["target_decode_started"] is not False
+        or failure["fit_started"] is not False
+        or failure["outer_labels_scored"] is not False
+        or failure["retry_performed"] is not False
+        or file_sha256(artifact_root / failure["stderr_path"]) != failure["stderr_sha256"]
+        or len(attempts) != 1
+        or attempts[0].get("retry") is not False
+        or acquired["lease_id"] != released["lease_id"]
+        or acquired["pid"] != released["pid"]
+        or safety["gpu_lease_count"] != 1
+        or safety["production_attempt_count"] != 1
+        or safety["retry_count"] != 0
+        or safety["database_access"] != {"used": False, "sql": None, "urls": []}
+        or dependency["exit_state"] != "failed"
+        or dependency["data_path"] is not None
+        or dependency["outer_prediction_identities"]
+        or dependency["artifact_tree_sha256"] != dependency_inventory.tree_sha256
+    ):
+        raise ValueError("family 7 terminal failure, dependency, or invocation evidence differs")
+    if manifest["outer_original_prediction_identities"] or manifest["outer_swapped_prediction_identities"]:
+        raise ValueError("family 7 pre-construction failure unexpectedly recorded predictions")
+    if recompute_all:
+        _assert_equal(read_json(artifact_root / "failure.json"), failure, "family 7 failure")
+        _assert_equal(dependency, manifest["dependency_evidence"], "family 7 dependency evidence")
+        result = read_json(artifact_root / "result.json")
+        for key in (
+            "status",
+            "terminal_failure",
+            "metrics",
+            "paired_event_block_intervals",
+            "slice_metrics",
+            "symmetry_diagnostics",
+            "swap_mapping_and_invariance_evidence",
+            "outer_original_prediction_identities",
+            "outer_swapped_prediction_identities",
+            "promotion_decision",
+            "adaptive_signal_for_family_08",
+            "development_safe_population",
+            "dependency_evidence",
+            "gate_access_count",
+        ):
+            _assert_equal(result[key], manifest[key], f"family 7 {key}")
+    return {
+        "experiment_id": EXPERIMENT_ID,
+        "status": "failed",
+        "gate_access_count": gate["protected_access_count"],
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "profile_count": validated["profile_count"],
+        "attempt_count": 1,
+        "retry_count": 0,
+        "terminal_failure": failure,
+        "metrics": None,
+        "paired_event_block_intervals": None,
+        "slice_metrics": None,
+        "symmetry_diagnostics": None,
+        "swap_mapping_and_invariance_evidence": manifest["swap_mapping_and_invariance_evidence"],
+        "outer_original_prediction_identities": [],
+        "outer_swapped_prediction_identities": [],
+        "promotion_decision": manifest["promotion_decision"],
+        "adaptive_signal_for_family_08": manifest["adaptive_signal_for_family_08"],
+        "development_safe_population": manifest["development_safe_population"],
+        "preregistration_commit": manifest["preregistration_commit"],
+    }
+
+
 def verify_feature_lineage(
     campaign_root: Path,
     experiment_id: str,
@@ -1047,8 +1190,30 @@ def verify_feature_lineage(
     """Verify the preregistered lineage result, including an honest pre-construction failure."""
 
     experiment_id = _canonical_family_id(experiment_id)
+    if experiment_id == CAMPAIGN_FAMILY_IDS[6]:
+        verified = _verify_family_7_run(Path(campaign_root), recompute_all=strict)
+        manifest = read_json(Path(campaign_root) / "runs/family-07-matchup-geometry/manifest.json")
+        if (
+            manifest["data_path"] is not None
+            or manifest["data_sha256"] is not None
+            or manifest["outer_original_prediction_identities"]
+            or manifest["outer_swapped_prediction_identities"]
+        ):
+            raise ValueError("family 7 pre-construction failure unexpectedly materialized data")
+        return {
+            "experiment_id": experiment_id,
+            "status": "failed-pre-construction",
+            "profile_count": verified["profile_count"],
+            "lineage_materialized": False,
+            "failure_evidence_verified": True,
+            "construction_started": False,
+            "development_safe_id_count": verified["development_safe_population"]["development_safe_id_count"],
+            "retired_id_count": verified["development_safe_population"]["retired_id_count"],
+            "outer_label_selection_count": 0,
+            "gate_access_count": verified["gate_access_count"],
+        }
     if experiment_id != CAMPAIGN_FAMILY_IDS[5]:
-        raise ValueError("feature-lineage verifier owns only family 6")
+        raise ValueError("feature-lineage verifier owns only families 6 and 7")
     verified = _verify_family_6_run(Path(campaign_root), recompute_all=strict)
     manifest = read_json(Path(campaign_root) / "runs/family-06-fighter-states/manifest.json")
     if verified["status"] == "failed":
@@ -1081,13 +1246,19 @@ def audit_campaign_safety(
 
     campaign_root = Path(campaign_root)
     through = _canonical_family_id(through)
-    if through != CAMPAIGN_FAMILY_IDS[5]:
-        raise ValueError("safety audit is bounded through family 6")
-    verified = _verify_family_6_run(campaign_root, recompute_all=True)
-    manifest = read_json(campaign_root / "runs/family-06-fighter-states/manifest.json")
+    if through not in CAMPAIGN_FAMILY_IDS[5:7]:
+        raise ValueError("safety audit is bounded through families 6 and 7")
+    if through == CAMPAIGN_FAMILY_IDS[6]:
+        verified = _verify_family_7_run(campaign_root, recompute_all=True)
+        manifest = read_json(campaign_root / "runs/family-07-matchup-geometry/manifest.json")
+        fixed_artifact = FIXED_FAMILY_7_ARTIFACT
+    else:
+        verified = _verify_family_6_run(campaign_root, recompute_all=True)
+        manifest = read_json(campaign_root / "runs/family-06-fighter-states/manifest.json")
+        fixed_artifact = FIXED_FAMILY_6_ARTIFACT
     artifact_root = campaign_root / manifest["artifact_path"]
     if not artifact_root.is_dir():
-        artifact_root = FIXED_FAMILY_6_ARTIFACT
+        artifact_root = fixed_artifact
     safety = read_json(artifact_root / "safety.json")
     searchable = b"\n".join(
         path.read_bytes().lower()
@@ -1095,7 +1266,7 @@ def audit_campaign_safety(
         if path.is_file()
     )
     if any(token in searchable for token in (b"5432", b"clankerfights", b"postgresql://")):
-        raise ValueError("family 6 safety evidence contains a forbidden database token")
+        raise ValueError("family safety evidence contains a forbidden database token")
     gate = AccessLedger(campaign_root).gate_status()
     if require_gate_closed and (gate["state"] != "closed" or gate["protected_access_count"] != 0):
         raise ValueError("campaign gate is not closed with zero access")
@@ -1116,7 +1287,7 @@ def audit_campaign_safety(
 def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
     through = _canonical_family_id(through)
-    if through not in CAMPAIGN_FAMILY_IDS[:6]:
+    if through not in CAMPAIGN_FAMILY_IDS[:7]:
         raise ValueError("decision replay is bounded to the completed family prefix")
     registry = _validate_campaign_registry(campaign_root)
     through_index = CAMPAIGN_FAMILY_IDS.index(through) + 1
@@ -1141,7 +1312,10 @@ def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str,
                         "adaptive_signal_for_family_05",
                         verified.get(
                             "adaptive_signal_for_family_06",
-                            verified.get("adaptive_signal_for_family_07"),
+                            verified.get(
+                                "adaptive_signal_for_family_07",
+                                verified.get("adaptive_signal_for_family_08"),
+                            ),
                         ),
                     ),
                 ),
