@@ -249,7 +249,14 @@ def verify_artifact_handoffs(campaign_root: Path, *, strict: bool) -> dict[str, 
                 "scaler_sha256": file_sha256(scaler),
             }
         )
-    return {"status": "PASS", "handoffs": verified}
+    return {
+        "status": "PASS",
+        "manifest_canonical_sha256": canonical_sha256(document),
+        "manifest_physical_sha256_checkout_local": file_sha256(
+            campaign_root / "artifact-handoffs.json"
+        ),
+        "handoffs": verified,
+    }
 
 
 def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:

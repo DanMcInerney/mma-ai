@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
+from libs.modeling.split_refit_experiment.protocol import canonical_sha256
 from libs.modeling.split_refit_experiment.verification import (
     BranchVerificationError,
     ArtifactHandoffVerificationError,
@@ -107,9 +108,7 @@ def test_handoff_replay_prefers_dedicated_copy_when_executor_paths_are_missing(
         "dedicated_destination",
         "dedicated_destination",
     ]
-    assert verified["manifest_canonical_sha256"] == (
-        "532AF1B15EC57531562619AEDBE9E3EABBE96678419660EC7ECD05FA2BF37A2E"
-    )
+    assert verified["manifest_canonical_sha256"] == canonical_sha256(document)
     assert verified["manifest_physical_sha256_checkout_local"]
 
 
