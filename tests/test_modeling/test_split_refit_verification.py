@@ -9,6 +9,7 @@ from libs.modeling.split_refit_experiment.verification import (
     EvaluationVerificationError,
     has_database_token,
     validate_evaluation_documents,
+    validate_loaded_predictor,
 )
 
 
@@ -121,3 +122,32 @@ def test_database_audit_distinguishes_metrics_from_connection_tokens():
     assert not has_database_token('{"metric":0.6261685244094812}')
     assert has_database_token("postgresql://user@localhost:5432/clankerfights")
     assert has_database_token("host=localhost port=5432 dbname=clankerfights")
+
+
+def test_predictor_load_smoke_requires_frozen_graph_and_selected_node():
+    class Predictor:
+        model_best = "WeightedEnsemble_L2"
+
+        def model_names(self):
+            return [
+                "RandomForestGini",
+                "CatBoost",
+                "TabICL",
+                "ExtraTreesGini",
+                "Mitra",
+                "NeuralNetFastAI",
+                "XGBoost",
+                "PrepLightGBM",
+                "LightGBM_r8",
+                "RealMLP_r9",
+                "WeightedEnsemble_L2",
+            ]
+
+    selection = {
+        "selected_node": "WeightedEnsemble_L2",
+        "base_models": Predictor().model_names()[:-1],
+    }
+    validate_loaded_predictor(Predictor(), selection)
+    Predictor.model_best = "Mitra"
+    with pytest.raises(EvaluationVerificationError, match="selected node"):
+        validate_loaded_predictor(Predictor(), selection)
