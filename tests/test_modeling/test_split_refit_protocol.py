@@ -248,6 +248,25 @@ def test_registry_is_exact_canonical_append_only_chain():
         assert line == _canonical_bytes(json.loads(line))
 
 
+def test_registry_commitments_survive_git_checkout_line_endings(tmp_path):
+    clone = _copy_campaign(tmp_path)
+    paths = [
+        clone / "registry.jsonl",
+        clone / "registry-head.json",
+        clone / "profiles/evaluation.json",
+        *(clone / "partitions").glob("*.json"),
+    ]
+    for path in paths:
+        raw = path.read_bytes().replace(b"\r\n", b"\n")
+        path.write_bytes(raw.replace(b"\n", b"\r\n"))
+
+    result = validate_registry(clone, strict=True, through="split")
+
+    assert result.registry_prefix_sha256 == validate_registry(
+        CAMPAIGN, strict=True, through="split"
+    ).registry_prefix_sha256
+
+
 @pytest.mark.parametrize(
     "mutation",
     ["reorder", "duplicate_id", "changed_prior", "missing_head", "noncanonical"],
