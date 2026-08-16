@@ -34,6 +34,11 @@ def _read_json(path: Path) -> dict[str, Any]:
     return value
 
 
+def canonical_json_file_sha256(path: Path) -> str:
+    """Hash parsed canonical JSON, independent of checkout newline policy."""
+    return canonical_sha256(_read_json(Path(path)))
+
+
 def _registry_input(root: Path) -> dict[str, Any]:
     lines = [line.replace(b"\r\n", b"\n") for line in (root / "registry.jsonl").read_bytes().splitlines(keepends=True)]
     if len(lines) < 7:
@@ -203,7 +208,9 @@ def build_report(campaign_root: Path) -> dict[str, Any]:
         },
         "artifact_handoffs": {
             "manifest_path": "artifact-handoffs.json",
-            "manifest_sha256": file_sha256(root / "artifact-handoffs.json"),
+            "manifest_canonical_sha256": canonical_json_file_sha256(
+                root / "artifact-handoffs.json"
+            ),
             "resolver_precedence": ["dedicated_destination", "executor_source"],
             "dedicated_destinations": {
                 row["id"]: row["dedicated_destination"]["artifact_root"]
@@ -326,6 +333,14 @@ def validate_report_documents(report: Mapping[str, Any]) -> None:
         raise ReportError("experiment direct-cut history claim is false")
     if branches.get("rollback", {}).get("direct_cut_from_rollback") is not True:
         raise ReportError("rollback direct-cut identity is missing")
+    handoff_identity = report.get("artifact_handoffs", {})
+    if (
+        set(handoff_identity).intersection(
+            {"manifest_sha256", "manifest_physical_sha256", "physical_sha256"}
+        )
+        or not isinstance(handoff_identity.get("manifest_canonical_sha256"), str)
+    ):
+        raise ReportError("handoff manifest must use only canonical semantic identity")
     if branches.get("evaluation", {}).get("executor_baseline") != "4ef43de12db79252355e5b6f5ecd58ccdb4c6a06" or branches.get(
         "full_refit", {}
     ).get("executor_baseline") != "70233a10c24cc240f84584cc6979717c46abf51e":
@@ -428,7 +443,9 @@ def report_manifest(campaign_root: Path, report: Mapping[str, Any], markdown: st
             "evaluation": EVALUATION_REVISION,
             "full_refit": FULL_REFIT_REVISION,
         },
-        "artifact_handoffs_sha256": file_sha256(root / "artifact-handoffs.json"),
+        "artifact_handoffs_canonical_sha256": canonical_json_file_sha256(
+            root / "artifact-handoffs.json"
+        ),
     }
 
 

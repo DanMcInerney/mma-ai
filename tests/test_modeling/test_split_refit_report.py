@@ -11,6 +11,7 @@ import pytest
 from libs.modeling.split_refit_experiment.report import (
     ReportError,
     build_report,
+    canonical_json_file_sha256,
     render_report_markdown,
     validate_report_documents,
     write_final_report,
@@ -24,6 +25,42 @@ from libs.modeling.split_refit_experiment.__main__ import _parser
 
 
 CAMPAIGN = Path("experiments/split_refit_20260816")
+
+
+def test_handoff_manifest_identity_is_semantic_across_real_lf_crlf_checkouts(
+    tmp_path: Path,
+):
+    value = json.loads((CAMPAIGN / "artifact-handoffs.json").read_bytes())
+    canonical = json.dumps(value, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    lf = tmp_path / "lf.json"
+    crlf = tmp_path / "crlf.json"
+    lf.write_bytes(canonical + b"\n")
+    crlf.write_bytes(canonical + b"\r\n")
+
+    assert hashlib.sha256(lf.read_bytes()).hexdigest() != hashlib.sha256(
+        crlf.read_bytes()
+    ).hexdigest()
+    assert canonical_json_file_sha256(lf) == canonical_json_file_sha256(crlf)
+    assert canonical_json_file_sha256(lf) == (
+        "532AF1B15EC57531562619AEDBE9E3EABBE96678419660EC7ECD05FA2BF37A2E"
+    )
+
+    mutated = copy.deepcopy(value)
+    mutated["resolver_policy"] += " semantic mutation"
+    (tmp_path / "mutated.json").write_text(
+        json.dumps(mutated, separators=(",", ":"), sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    assert canonical_json_file_sha256(tmp_path / "mutated.json") != canonical_json_file_sha256(lf)
+
+
+def test_report_uses_only_canonical_handoff_manifest_identity():
+    identity = build_report(CAMPAIGN)["artifact_handoffs"]
+    assert identity["manifest_canonical_sha256"] == (
+        "532AF1B15EC57531562619AEDBE9E3EABBE96678419660EC7ECD05FA2BF37A2E"
+    )
+    assert "manifest_sha256" not in identity
+    assert not any("physical" in key for key in identity)
 
 
 def test_report_keeps_all_historical_denominators_separate_and_exact():

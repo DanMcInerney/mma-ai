@@ -249,7 +249,14 @@ def verify_artifact_handoffs(campaign_root: Path, *, strict: bool) -> dict[str, 
                 "scaler_sha256": file_sha256(scaler),
             }
         )
-    return {"status": "PASS", "handoffs": verified}
+    return {
+        "status": "PASS",
+        "manifest_canonical_sha256": canonical_sha256(document),
+        "manifest_physical_sha256_checkout_local": file_sha256(
+            campaign_root / "artifact-handoffs.json"
+        ),
+        "handoffs": verified,
+    }
 
 
 def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
@@ -267,9 +274,17 @@ def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
         "final-evidence-report",
     ]
     actual_ids = [record.get("record_id") for record in records]
-    if actual_ids not in (expected_ids, [*expected_ids, "final-repair"]):
+    allowed_ids = (
+        expected_ids,
+        [*expected_ids, "final-repair"],
+        [*expected_ids, "final-repair", "eol-hash-repair"],
+    )
+    if actual_ids not in allowed_ids:
         raise EvaluationVerificationError("final registry record order changed")
-    repair = records[-1]["payload"] if actual_ids[-1] == "final-repair" else None
+    repair_record = records[8] if len(records) >= 9 else None
+    repair = repair_record["payload"] if repair_record else None
+    eol_record = records[9] if len(records) == 10 else None
+    eol_repair = eol_record["payload"] if eol_record else None
     prefix = b""
     previous = "0" * 64
     for sequence, (raw, record) in enumerate(zip(lines, records, strict=True)):
@@ -289,7 +304,14 @@ def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
             artifact.relative_to(campaign_root.resolve())
         except ValueError as exc:
             raise EvaluationVerificationError("final registry artifact escapes campaign") from exc
-        if file_sha256(artifact) != payload.get("artifact_sha256"):
+        if record.get("record_id") == "eol-hash-repair":
+            try:
+                artifact_document = json.loads(artifact.read_bytes())
+            except json.JSONDecodeError as exc:
+                raise EvaluationVerificationError("EOL-repaired artifact is invalid JSON") from exc
+            if canonical_sha256(artifact_document) != payload.get("artifact_canonical_sha256"):
+                raise EvaluationVerificationError("EOL-repaired artifact canonical identity changed")
+        elif file_sha256(artifact) != payload.get("artifact_sha256"):
             normalized = hashlib.sha256(artifact.read_bytes().replace(b"\r\n", b"\n")).hexdigest().upper()
             if normalized != payload.get("artifact_sha256"):
                 superseded_final = (
@@ -299,31 +321,76 @@ def _validate_final_registry(campaign_root: Path) -> dict[str, Any]:
                     and repair.get("superseded_final_manifest_sha256")
                     == payload.get("artifact_sha256")
                 )
-                if not superseded_final:
+                superseded_repair = (
+                    record.get("record_id") == "final-repair"
+                    and eol_repair is not None
+                    and eol_repair.get("supersedes_record_sha256")
+                    == record.get("record_sha256")
+                    and eol_repair.get("superseded_artifact_physical_sha256")
+                    == payload.get("artifact_sha256")
+                )
+                if not (superseded_final or superseded_repair):
                     raise EvaluationVerificationError("final registry artifact hash changed")
         prefix += raw
         previous = record["record_sha256"]
     if hashlib.sha256(b"".join(lines[:7])).hexdigest().upper() != "C5626124C315D14639C52037EE33313418E309DA4C39426BEC59449A040A7A9E":
         raise EvaluationVerificationError("accepted seven-record registry prefix changed")
     final = records[-1]["payload"]
-    for path_key, hash_key in (
-        ("report_json_path", "report_json_sha256"),
-        ("report_markdown_path", "report_markdown_sha256"),
-    ):
-        path = campaign_root / final[path_key]
-        if file_sha256(path) != final[hash_key]:
-            raise EvaluationVerificationError(f"registered {path_key} hash changed")
+    if eol_repair is not None:
+        if (
+            eol_repair.get("supersedes_record_sha256") != repair_record.get("record_sha256")
+            or eol_repair.get("superseded_artifact_physical_sha256")
+            != repair.get("artifact_sha256")
+            or eol_repair.get("superseded_final_manifest_physical_sha256")
+            != repair.get("final_manifest_sha256")
+            or eol_repair.get("superseded_report_json_physical_sha256")
+            != repair.get("report_json_sha256")
+            or eol_repair.get("superseded_report_markdown_physical_sha256")
+            != repair.get("report_markdown_sha256")
+        ):
+            raise EvaluationVerificationError("EOL repair supersession identity changed")
+        json_targets = (
+            ("artifact_path", "artifact_canonical_sha256"),
+            ("final_manifest_path", "final_manifest_canonical_sha256"),
+            ("report_json_path", "report_json_canonical_sha256"),
+        )
+        for path_key, hash_key in json_targets:
+            path = campaign_root / str(eol_repair.get(path_key))
+            try:
+                value = json.loads(path.read_bytes())
+            except json.JSONDecodeError as exc:
+                raise EvaluationVerificationError(f"registered {path_key} is invalid JSON") from exc
+            if canonical_sha256(value) != eol_repair.get(hash_key):
+                raise EvaluationVerificationError(f"registered {path_key} canonical hash changed")
+        markdown = campaign_root / str(eol_repair.get("report_markdown_path"))
+        markdown_normalized = hashlib.sha256(
+            markdown.read_bytes().replace(b"\r\n", b"\n")
+        ).hexdigest().upper()
+        if markdown_normalized != eol_repair.get("report_markdown_normalized_sha256"):
+            raise EvaluationVerificationError("registered report markdown normalized hash changed")
+        physical = eol_repair.get("artifact_physical_sha256_checkout_local_at_repair")
+        if not isinstance(physical, str) or not re.fullmatch(r"[0-9A-F]{64}", physical):
+            raise EvaluationVerificationError("checkout-local physical hash is not labeled evidence")
+    else:
+        for path_key, hash_key in (
+            ("report_json_path", "report_json_sha256"),
+            ("report_markdown_path", "report_markdown_sha256"),
+        ):
+            path = campaign_root / final[path_key]
+            if file_sha256(path) != final[hash_key]:
+                raise EvaluationVerificationError(f"registered {path_key} hash changed")
     if repair is not None:
         if (
             repair.get("superseded_report_json_sha256")
-            != records[-2]["payload"].get("report_json_sha256")
+            != records[7]["payload"].get("report_json_sha256")
             or repair.get("superseded_report_markdown_sha256")
-            != records[-2]["payload"].get("report_markdown_sha256")
+            != records[7]["payload"].get("report_markdown_sha256")
         ):
             raise EvaluationVerificationError("final repair supersession identity changed")
-        manifest_path = campaign_root / str(repair.get("final_manifest_path"))
-        if file_sha256(manifest_path) != repair.get("final_manifest_sha256"):
-            raise EvaluationVerificationError("registered repaired final manifest changed")
+        if eol_repair is None:
+            manifest_path = campaign_root / str(repair.get("final_manifest_path"))
+            if file_sha256(manifest_path) != repair.get("final_manifest_sha256"):
+                raise EvaluationVerificationError("registered repaired final manifest changed")
     head = _read_json(campaign_root / "registry-head.json")
     expected_head = {
         "record_count": len(records),
@@ -769,10 +836,17 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "full-data-refit-lineage-correction",
     ]
     actual_ids = [record.get("record_id") for record in records]
+    if len(records) >= 8:
+        try:
+            final = _validate_final_registry(campaign_root)
+        except EvaluationVerificationError as exc:
+            raise RefitVerificationError(str(exc)) from exc
+        return {
+            "record_ids": final["record_ids"],
+            "prefix_sha256": final["registry_prefix_sha256"],
+        }
     allowed_ids = [
         expected_ids,
-        [*expected_ids, "final-evidence-report"],
-        [*expected_ids, "final-evidence-report", "final-repair"],
     ]
     if actual_ids not in allowed_ids:
         raise RefitVerificationError("registry does not have the exact full-refit sequence")

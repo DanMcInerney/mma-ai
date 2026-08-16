@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
+from libs.modeling.split_refit_experiment.protocol import canonical_sha256
 from libs.modeling.split_refit_experiment.verification import (
     BranchVerificationError,
     ArtifactHandoffVerificationError,
@@ -107,6 +108,8 @@ def test_handoff_replay_prefers_dedicated_copy_when_executor_paths_are_missing(
         "dedicated_destination",
         "dedicated_destination",
     ]
+    assert verified["manifest_canonical_sha256"] == canonical_sha256(document)
+    assert verified["manifest_physical_sha256_checkout_local"]
 
 
 def test_handoff_replay_rejects_wrong_dedicated_copy(tmp_path: Path):
@@ -132,9 +135,9 @@ def test_handoff_replay_rejects_wrong_dedicated_copy(tmp_path: Path):
 def test_refit_replay_accepts_only_the_appended_final_report_successor():
     registry = _validate_refit_registry(Path("experiments/split_refit_20260816"))
     assert registry["record_ids"][-3:] == [
-        "full-data-refit-lineage-correction",
         "final-evidence-report",
         "final-repair",
+        "eol-hash-repair",
     ]
 
 
