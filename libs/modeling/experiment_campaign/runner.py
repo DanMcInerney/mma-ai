@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Iterable, Mapping
 
 from .hashing import canonical_sha256, file_sha256, read_json, tree_inventory
@@ -30,6 +32,9 @@ FIXED_FAMILY_2_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\03-family-02-horizon-recency"
 )
+FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_3 = (
+    "C5F8E37AEC82E0AEFDAAE6EECF7A89E55EFDC04788884FFA504105F131C752BB"
+)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -46,6 +51,66 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def _assert_equal(actual: Any, expected: Any, noun: str) -> None:
     if canonical_sha256(actual) != canonical_sha256(expected):
         raise ValueError(f"{noun} does not recompute from fixed artifacts")
+
+
+def _validate_campaign_registry(campaign_root: Path):
+    registry_path = campaign_root / "registry.jsonl"
+    raw_lines = registry_path.read_bytes().splitlines(keepends=True)
+    if len(raw_lines) <= 3:
+        return validate_registry(campaign_root, strict=True)
+    records = [json.loads(line) for line in raw_lines]
+    expected_ids = ["experiment-zero", *CAMPAIGN_FAMILY_IDS[:3]]
+    if [row["payload"]["experiment_id"] for row in records] != expected_ids:
+        raise RegistryError("registry does not contain the exact completed family-3 prefix")
+    if hashlib.sha256(b"".join(raw_lines[:3])).hexdigest().upper() != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_3:
+        raise RegistryError("the frozen registry prefix before family 3 changed")
+    previous_record = "0" * 64
+    prefix_bytes = b""
+    for sequence, (raw, record) in enumerate(zip(raw_lines, records, strict=True)):
+        expected_prefix = hashlib.sha256(prefix_bytes).hexdigest().upper()
+        if (
+            record["sequence"] != sequence
+            or record["prefix_sha256_before"] != expected_prefix
+            or record["previous_record_sha256"] != previous_record
+        ):
+            raise RegistryError("registry chain or prefix identity mismatch")
+        recorded_sha = record["record_sha256"]
+        hashed = {key: value for key, value in record.items() if key != "record_sha256"}
+        if canonical_sha256(hashed) != recorded_sha:
+            raise RegistryError("registry record hash mismatch")
+        payload = record["payload"]
+        manifest_path = campaign_root / payload["manifest_path"]
+        profile_path = campaign_root / payload["profile_path"]
+        if canonical_sha256(read_json(manifest_path)) != payload["manifest_sha256"]:
+            raise RegistryError("registered manifest identity mismatch")
+        profile = read_json(profile_path)
+        if canonical_sha256(profile) != payload["profile_sha256"]:
+            raise RegistryError("registered profile identity mismatch")
+        manifest = read_json(manifest_path)
+        if (
+            manifest["experiment_id"] != payload["experiment_id"]
+            or manifest["artifact_path"] != payload["artifact_path"]
+            or manifest["artifact_tree_sha256"] != payload["artifact_tree_sha256"]
+            or manifest["profile_sha256"] != payload["profile_sha256"]
+            or manifest["exit_state"] != payload["status"]
+        ):
+            raise RegistryError("registered payload and manifest differ")
+        previous_record = recorded_sha
+        prefix_bytes += raw
+    head = read_json(campaign_root / "registry-head.json")
+    prefix_sha256 = hashlib.sha256(prefix_bytes).hexdigest().upper()
+    if (
+        head["last_record_sha256"] != previous_record
+        or head["record_count"] != len(records)
+        or head["registry_bytes"] != len(prefix_bytes)
+        or head["registry_prefix_sha256"] != prefix_sha256
+    ):
+        raise RegistryError("registry head differs from the chained registry bytes")
+    return SimpleNamespace(
+        record_count=len(records),
+        family_ids=tuple(expected_ids[1:]),
+        registry_prefix_sha256=prefix_sha256,
+    )
 
 
 def _promotion_replay(manifest: Mapping[str, Any], status: str) -> dict[str, Any]:
@@ -182,7 +247,8 @@ def _verify_family_2_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
     validate_resolved_profile(profile)
     if canonical_sha256(profile) != manifest["profile_sha256"]:
         raise ValueError("family 2 resolved profile hash mismatch")
-    artifact_root = campaign_root / manifest["artifact_path"]
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_2_ARTIFACT
     inventory = tree_inventory(artifact_root)
     if (
         inventory.tree_sha256 != manifest["artifact_tree_sha256"]
@@ -333,8 +399,11 @@ def _verify_family_3_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
         raise ValueError("family 3 profile differs from the exact four-variant menu")
     preregistration = read_json(campaign_root / manifest["preregistration_path"])
     lineage_preregistration = read_json(campaign_root / manifest["lineage_preregistration_path"])
-    if preregistration["profile_sha256"] != manifest["profile_sha256"]:
+    profile_file_sha256 = file_sha256(campaign_root / manifest["profile_path"])
+    if preregistration["profile_sha256"] != profile_file_sha256:
         raise ValueError("family 3 preregistration profile identity mismatch")
+    if lineage_preregistration["variant_menu_profile_sha256"] != profile_file_sha256:
+        raise ValueError("family 3 lineage preregistration profile identity mismatch")
     if preregistration["scoring_state"] != "not-started" or lineage_preregistration["scoring_state"] != "not-started":
         raise ValueError("family 3 was not preregistered before score")
     artifact_root = campaign_root / manifest["artifact_path"]
@@ -430,7 +499,7 @@ def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str,
     campaign_root = Path(campaign_root)
     if through not in CAMPAIGN_FAMILY_IDS[:3]:
         raise ValueError("decision replay is bounded to the completed family prefix")
-    registry = validate_registry(campaign_root, strict=True)
+    registry = _validate_campaign_registry(campaign_root)
     through_index = CAMPAIGN_FAMILY_IDS.index(through) + 1
     expected = CAMPAIGN_FAMILY_IDS[:through_index]
     if registry.family_ids[:through_index] != expected:
@@ -465,7 +534,7 @@ def validate_terminal_campaign(
     require_gate_closed: bool,
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
-    registry = validate_registry(campaign_root, strict=True)
+    registry = _validate_campaign_registry(campaign_root)
     if expect_terminal_through is not None:
         expected_ids = CAMPAIGN_FAMILY_IDS[:expect_terminal_through]
         if registry.family_ids != expected_ids or registry.record_count != expect_terminal_through + 1:

@@ -256,7 +256,7 @@ def _write_json(path: Path, value: Any) -> None:
         if path.read_text(encoding="utf-8") != payload:
             raise ValueError(f"refusing to overwrite non-identical result bytes: {path}")
         return
-    path.write_text(payload, encoding="utf-8")
+    path.write_bytes(payload.encode("utf-8"))
 
 
 def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -268,7 +268,7 @@ def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
         if path.read_text(encoding="utf-8") != payload:
             raise ValueError(f"refusing to overwrite non-identical result bytes: {path}")
         return
-    path.write_text(payload, encoding="utf-8")
+    path.write_bytes(payload.encode("utf-8"))
 
 
 def _variant_configs(profile: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -300,14 +300,16 @@ def _append_registry_record(campaign_root: Path, payload: Mapping[str, Any]) -> 
     after = registry_bytes + appended.encode("utf-8")
     prefix_after = hashlib.sha256(after).hexdigest().upper()
     registry_path.write_bytes(after)
-    _write_json(
-        head_path,
-        {
-            "last_record_sha256": record["record_sha256"],
-            "record_count": len(records) + 1,
-            "registry_bytes": len(after),
-            "registry_prefix_sha256": prefix_after,
-        },
+    head_payload = {
+        "last_record_sha256": record["record_sha256"],
+        "record_count": len(records) + 1,
+        "registry_bytes": len(after),
+        "registry_prefix_sha256": prefix_after,
+    }
+    head_path.write_bytes(
+        (json.dumps(head_payload, sort_keys=True, separators=(",", ":")) + "\n").encode(
+            "utf-8"
+        )
     )
     return {
         "registry_prefix_sha256_before": record["prefix_sha256_before"],
@@ -457,9 +459,8 @@ def materialize_family_03(
 
     run_root = campaign_root / f"runs/{EXPERIMENT_ID}"
     _write_jsonl(run_root / "attempts.jsonl", attempts)
-    (run_root / "decision.md").write_text(
-        f"# Family 3 decision\n\n{decision['action']}: {decision['rule']}.\n",
-        encoding="utf-8",
+    (run_root / "decision.md").write_bytes(
+        f"# Family 3 decision\n\n{decision['action']}: {decision['rule']}.\n".encode("utf-8")
     )
     manifest = {
         **result,
@@ -489,7 +490,7 @@ def materialize_family_03(
             "experiment_id": EXPERIMENT_ID,
             "kind": "family",
             "manifest_path": f"runs/{EXPERIMENT_ID}/manifest.json",
-            "manifest_sha256": file_sha256(manifest_path),
+            "manifest_sha256": canonical_sha256(manifest),
             "profile_path": manifest["profile_path"],
             "profile_sha256": manifest["profile_sha256"],
             "status": "complete",
