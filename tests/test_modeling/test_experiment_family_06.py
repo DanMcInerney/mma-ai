@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +16,7 @@ from libs.modeling.experiment_campaign.families.fighter_states import (
     PROFILE_IDS,
     build_preregistered_profile,
 )
+from libs.modeling.experiment_campaign.hashing import canonical_sha256, file_sha256
 from libs.modeling.experiment_campaign.feature_lineage import validate_feature_lineage_rows
 
 
@@ -167,3 +171,26 @@ def test_full_state_portfolio_has_count_aware_valid_lineage() -> None:
     assert target["high_count_striking_state"]["source_row_ids"] == ["1"]
     assert target["inactivity_days"]["value"] == 152.0
     assert target["age_win_interaction"]["source_dates"] == ["2024-01-01"]
+
+
+def test_actual_campaign_has_pre_score_eight_profile_preregistration() -> None:
+    campaign = Path("experiments/top10_20260815")
+    profile_path = campaign / "profiles/family-06-fighter-states.json"
+    preregistration_path = campaign / "runs/family-06-fighter-states/preregistration.json"
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    preregistration = json.loads(preregistration_path.read_text(encoding="utf-8"))
+    assert profile == build_preregistered_profile()
+    assert tuple(item["id"] for item in profile["profiles"]) == PROFILE_IDS
+    assert preregistration["scoring_state"] == "not-started"
+    assert tuple(preregistration["preregistered_profile_ids"]) == PROFILE_IDS
+    assert preregistration["profile_sha256"] == canonical_sha256(profile)
+    assert preregistration["profile_file_sha256"] == file_sha256(profile_path)
+    assert preregistration["registry_prefix_sha256_before"] == hashlib.sha256(
+        (campaign / "registry.jsonl").read_bytes()
+    ).hexdigest().upper()
+    assert preregistration["database_access"] == {"used": False, "sql": None, "urls": []}
+    assert preregistration["invocation"] == {
+        "gpu_lease_count": 1,
+        "retry_count": 0,
+        "serialized": True,
+    }

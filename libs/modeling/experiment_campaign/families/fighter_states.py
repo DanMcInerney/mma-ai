@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any
 
-from ..hashing import canonical_sha256
 from ..fighter_states import validate_preregistered_profiles
+from ..hashing import canonical_sha256, file_sha256, write_canonical_json
+from ..protocol import AccessLedger
 from .semantic_portfolio import V8_FEATURES
 
 
@@ -162,3 +165,45 @@ def build_preregistered_profile() -> dict[str, Any]:
     }
     validate_preregistered_profiles(profile)
     return profile
+
+
+def write_preregistration(campaign_root: Path, *, source_revision: str) -> dict[str, Any]:
+    """Persist the frozen menu while every construction and score path is absent."""
+
+    campaign_root = Path(campaign_root)
+    profile_path = campaign_root / "profiles/family-06-fighter-states.json"
+    preregistration_path = campaign_root / "runs/family-06-fighter-states/preregistration.json"
+    artifact_root = campaign_root / "artifacts/07-family-06-fighter-states"
+    data_root = campaign_root.parents[1] / "data/experiments/top10_20260815/family-06-fighter-states"
+    if profile_path.exists() or preregistration_path.exists() or artifact_root.exists() or data_root.exists():
+        raise ValueError("family 6 preregistration destinations must all be absent")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 6 preregistration requires the gate closed with zero access")
+    profile = build_preregistered_profile()
+    write_canonical_json(profile_path, profile)
+    preregistration = {
+        "experiment_id": EXPERIMENT_ID,
+        "family_number": 6,
+        "source_revision": source_revision,
+        "frozen_spec_sha256": FROZEN_SPEC_SHA256,
+        "profile_path": "profiles/family-06-fighter-states.json",
+        "profile_sha256": canonical_sha256(profile),
+        "profile_file_sha256": file_sha256(profile_path),
+        "preregistered_profile_ids": list(PROFILE_IDS),
+        "ordered_profile_hashes": {
+            item["id"]: item["ordered_feature_sha256"] for item in profile["profiles"]
+        },
+        "source_file_sha256": profile["source_sha256"],
+        "registry_prefix_sha256_before": hashlib.sha256(
+            (campaign_root / "registry.jsonl").read_bytes()
+        ).hexdigest().upper(),
+        "scoring_state": "not-started",
+        "selection": profile["selection"],
+        "database_access": profile["database_access"],
+        "invocation": profile["invocation"],
+        "gate_required_state": "closed-zero-access",
+        "terminal_failure_rule": "Any lineage, chronology, source, menu, safety, or destination mismatch terminates without retry.",
+    }
+    write_canonical_json(preregistration_path, preregistration)
+    return preregistration
