@@ -77,6 +77,7 @@ def _paths(campaign_root: Path) -> dict[str, Path]:
         "preregistration": run / "preregistration.json",
         "attempts": run / "attempts.jsonl",
         "result": run / "refit.json",
+        "correction": run / "refit-lineage-correction.json",
         "failure": run / "fit-failure.json",
     }
 
@@ -162,6 +163,22 @@ def _node_weights(info: Mapping[str, Any]) -> dict[str, float]:
     if isinstance(info.get("weights"), Mapping):
         return {str(key): float(value) for key, value in info["weights"].items()}
     return _find_weights(info) or {}
+
+
+def _align_dependency_weights(
+    weights: Mapping[str, float], dependencies: Sequence[str]
+) -> dict[str, float]:
+    dependencies = [str(value) for value in dependencies]
+    if set(weights) == set(dependencies):
+        return {name: float(weights[name]) for name in dependencies}
+    aligned = {
+        name: float(weights[name[:-5] if name.endswith("_FULL") else name])
+        for name in dependencies
+        if (name[:-5] if name.endswith("_FULL") else name) in weights
+    }
+    if len(aligned) != len(dependencies) or len(aligned) != len(weights):
+        raise RefitError("ensemble weights do not align to saved graph dependency names")
+    return aligned
 
 
 def classify_saved_lineage(
@@ -386,13 +403,18 @@ def _seed_runtime() -> None:
 
 def _standard_model_info(predictor: Any) -> dict[str, dict[str, Any]]:
     raw = predictor.info()["model_info"]
+    graph = predictor._trainer.model_graph
     result: dict[str, dict[str, Any]] = {}
     for name in predictor.model_names():
         info = raw[str(name)]
+        dependencies = [str(value) for value in graph.predecessors(str(name))]
+        weights = _find_weights(info) or {}
+        if weights or dependencies:
+            weights = _align_dependency_weights(weights, dependencies)
         result[str(name)] = {
             "model_type": str(info.get("model_type", "unknown")),
             "num_samples": int(info.get("num_samples", 0)),
-            "weights": _find_weights(info) or {},
+            "weights": weights,
         }
     return result
 
@@ -760,12 +782,75 @@ def recover_refit_evidence(campaign_root: Path) -> dict[str, Any]:
     }
 
 
+def correct_refit_lineage(campaign_root: Path) -> dict[str, Any]:
+    """Append a corrected graph projection without changing the predictor or prior record."""
+    from autogluon.tabular import TabularPredictor
+
+    paths = _paths(campaign_root)
+    if paths["correction"].exists():
+        raise RefitError("refit lineage correction is append-once")
+    original = _read_json(paths["result"])
+    if "post_fit_evidence_recovery" not in original:
+        raise RefitError("lineage correction requires the registered recovered result")
+    tree_before = tree_identity(paths["model"])
+    predictor = TabularPredictor.load(str(paths["model"]))
+    model_info = _standard_model_info(predictor)
+    prediction_hashes, probe = prediction_identities(predictor, paths["model"])
+    lineage = classify_saved_lineage(model_info, prediction_hashes, total_rows=3267)
+    names = [str(name) for name in predictor.model_names()]
+    corrected = dict(original)
+    corrected.update(
+        {
+            "corrected_at_utc": utc_now(),
+            "supersedes": {
+                "path": f"runs/{RUN_ID}/refit.json",
+                "sha256": file_sha256(paths["result"]),
+                "reason": "map FULL ensemble weights to saved FULL graph dependency names",
+            },
+            "model_graph": [
+                {
+                    "name": name,
+                    "model_type": model_info[name]["model_type"],
+                    "dependencies": sorted(model_info[name]["weights"]),
+                    "weights": model_info[name]["weights"],
+                }
+                for name in names
+            ],
+            "lineage": lineage,
+            "prediction_probe": probe,
+            "prediction_hashes": prediction_hashes,
+        }
+    )
+    if tree_identity(paths["model"]) != tree_before:
+        raise RefitError("read-only lineage correction mutated the model tree")
+    _write_json(paths["correction"], corrected)
+    correction_sha = file_sha256(paths["correction"])
+    append_registry_record(
+        paths["campaign"],
+        record_id="full-data-refit-lineage-correction",
+        payload={
+            "kind": "full-data-refit-lineage-correction",
+            "artifact_path": f"runs/{RUN_ID}/refit-lineage-correction.json",
+            "artifact_sha256": correction_sha,
+            "superseded_artifact_sha256": corrected["supersedes"]["sha256"],
+            "model_tree_sha256": corrected["complete_tree"]["sha256"],
+        },
+    )
+    return {
+        "status": "corrected",
+        "correction_sha256": correction_sha,
+        "model_tree_sha256": corrected["complete_tree"]["sha256"],
+        "retry_count": 0,
+    }
+
+
 def verify_refit_attempt(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
     if not strict:
         raise RefitError("refit attempt verification requires --strict")
     paths = _paths(campaign_root)
     attempts = read_jsonl(paths["attempts"])
-    result = _read_json(paths["result"]) if paths["result"].is_file() else {}
+    result_path = paths["correction"] if paths["correction"].is_file() else paths["result"]
+    result = _read_json(result_path) if result_path.is_file() else {}
     recovery = result.get("post_fit_evidence_recovery")
     assert_single_refit_attempt(attempts, require_success=recovery is None)
     if recovery is not None and (

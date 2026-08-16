@@ -364,6 +364,7 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "evaluation-result",
         "full-data-refit-failure",
         "full-data-refit-recovery",
+        "full-data-refit-lineage-correction",
     ]
     if [record.get("record_id") for record in records] != expected_ids:
         raise RefitVerificationError("registry does not have the exact full-refit sequence")
@@ -453,7 +454,8 @@ def verify_refit(campaign_root: Path, *, recompute_lineage: bool) -> dict[str, A
     preflight = _read_json(paths["preflight"])
     prereg = _read_json(paths["preregistration"])
     attempts = read_jsonl(paths["attempts"])
-    result = _read_json(paths["result"])
+    result_path = paths["correction"] if paths["correction"].is_file() else paths["result"]
+    result = _read_json(result_path)
     verified = validate_refit_documents(attempts=attempts, result=result)
     if result.get("profile_name") != PROFILE_NAME or result.get("profile") != prereg.get("profile"):
         raise RefitVerificationError("saved refit profile differs from preregistration")

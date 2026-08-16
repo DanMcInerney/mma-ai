@@ -8,6 +8,7 @@ import pytest
 from libs.modeling.split_refit_experiment.__main__ import _parser
 from libs.modeling.split_refit_experiment.refit import (
     RefitError,
+    _align_dependency_weights,
     _registered_file_sha256,
     assert_single_refit_attempt,
     build_refit_invocation,
@@ -25,6 +26,7 @@ from libs.modeling.split_refit_experiment.refit import (
         "fit-refit",
         "refit-child",
         "recover-refit-evidence",
+        "correct-refit-lineage",
         "verify-refit-attempt",
         "verify-refit",
     ],
@@ -57,6 +59,16 @@ def test_saved_population_requires_exact_membership_but_records_native_order():
     assert identity["expected_order_sha256"] != identity["saved_order_sha256"]
     with pytest.raises(RefitError, match="membership"):
         validate_saved_population(actual[:-1] + ["missing"], expected)
+
+
+def test_full_ensemble_weights_align_to_saved_full_graph_dependencies():
+    aligned = _align_dependency_weights(
+        {"Mitra": 0.96, "XGBoost": 0.04},
+        ["Mitra_FULL", "XGBoost_FULL"],
+    )
+    assert aligned == {"Mitra_FULL": 0.96, "XGBoost_FULL": 0.04}
+    with pytest.raises(RefitError, match="dependency"):
+        _align_dependency_weights({"Mitra": 1.0}, ["Mitra_FULL", "XGBoost_FULL"])
 
 
 def _profile() -> dict[str, object]:
