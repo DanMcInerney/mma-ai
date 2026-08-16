@@ -41,6 +41,40 @@ class RefitVerificationError(ValueError):
     pass
 
 
+class BranchVerificationError(ValueError):
+    pass
+
+
+EXPECTED_BRANCH_REVISIONS = {
+    "codex/weighted-v8-67-baseline": "545441975b86caf0abb6136e099e44e6b93caf22",
+    "codex/exp-80-10-10-v8-20260816": "7217012abcee3c22937dd378c0a904033564018d",
+    "codex/exp-full-refit-v8-20260816": "70559ac40300c62067f23b335050dda3e4931ce6",
+}
+
+
+def validate_branch_documents(
+    revisions: Mapping[str, str],
+    merge_bases: Mapping[str, str],
+    worktrees: Mapping[str, str],
+) -> None:
+    if dict(revisions) != EXPECTED_BRANCH_REVISIONS:
+        raise BranchVerificationError("branch target revisions changed")
+    rollback = EXPECTED_BRANCH_REVISIONS["codex/weighted-v8-67-baseline"]
+    experiments = (
+        "codex/exp-80-10-10-v8-20260816",
+        "codex/exp-full-refit-v8-20260816",
+    )
+    if set(merge_bases) != set(experiments) or any(
+        merge_bases[name] != rollback for name in experiments
+    ):
+        raise BranchVerificationError("experiment merge base changed")
+    if set(worktrees) != set(EXPECTED_BRANCH_REVISIONS):
+        raise BranchVerificationError("branch worktree mapping is incomplete")
+    normalized = [str(Path(worktrees[name]).resolve()).lower() for name in EXPECTED_BRANCH_REVISIONS]
+    if len(normalized) != len(set(normalized)):
+        raise BranchVerificationError("branch worktrees are not distinct")
+
+
 def has_database_token(text: str) -> bool:
     lowered = text.lower()
     return "clankerfights" in lowered or bool(
