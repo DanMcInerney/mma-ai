@@ -13,6 +13,11 @@ from libs.modeling.split_refit_experiment.report import (
     validate_report_documents,
     write_final_report,
 )
+from libs.modeling.split_refit_experiment.verification import (
+    EvaluationVerificationError,
+    validate_final_campaign,
+    verify_report,
+)
 
 
 CAMPAIGN = Path("experiments/split_refit_20260816")
@@ -99,8 +104,12 @@ def _copy_report_inputs(destination: Path) -> Path:
         "partitions/manifest.json",
         "runs/80-10-10-evaluation/evaluation.json",
         "runs/80-10-10-evaluation/selection.json",
+        "runs/80-10-10-evaluation/attempts.jsonl",
+        "runs/80-10-10-evaluation/test-access.jsonl",
+        "runs/80-10-10-evaluation/test-predictions.jsonl",
         "runs/full-data-refit/refit-lineage-correction.json",
         "runs/full-data-refit/fit-failure.json",
+        "runs/full-data-refit/attempts.jsonl",
         "registry.jsonl",
         "registry-head.json",
     ):
@@ -132,3 +141,20 @@ def test_final_report_write_is_append_once_and_does_not_open_predictions_or_mode
     assert not any("prediction" in path or "model" in path or "access" in path for path in opened)
     with pytest.raises(ReportError, match="already exists"):
         write_final_report(campaign)
+
+
+def test_strict_report_and_campaign_replay_recompute_registered_predictions(tmp_path: Path):
+    campaign = _copy_report_inputs(tmp_path / "campaign")
+    write_final_report(campaign)
+    report = verify_report(campaign, strict=True)
+    assert report["status"] == "PASS"
+    assert report["prediction_replay"]["correct_count"] == 202
+    assert report["prediction_replay"]["row_count"] == 307
+    campaign_result = validate_final_campaign(campaign, strict=True)
+    assert campaign_result["status"] == "PASS"
+    assert campaign_result["registry"]["record_count"] == 8
+
+    document = (campaign / "report.json").read_text(encoding="utf-8")
+    (campaign / "report.json").write_text(document.replace("202,", "201,", 1), encoding="utf-8")
+    with pytest.raises(EvaluationVerificationError):
+        verify_report(campaign, strict=True)
