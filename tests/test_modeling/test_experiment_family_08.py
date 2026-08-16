@@ -167,3 +167,19 @@ def test_preregistration_freezes_the_exact_menu_before_any_launch(tmp_path: Path
     assert preregistration["database_access"] == {"used": False, "sql": None, "urls": []}
     with pytest.raises(ValueError, match="destinations must all be absent"):
         write_preregistration(campaign, source_revision="retry")
+
+
+def test_actual_campaign_has_prelaunch_eight_profile_preregistration() -> None:
+    campaign = Path("experiments/top10_20260815")
+    profile_path = campaign / "profiles/family-08-catboost-specialist.json"
+    preregistration_path = campaign / "runs/family-08-catboost-specialist/preregistration.json"
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    preregistration = json.loads(preregistration_path.read_text(encoding="utf-8"))
+    validated = validate_preregistered_profile(profile)
+    assert profile == build_preregistered_profile()
+    assert tuple(validated["profile_ids"]) == PROFILE_IDS
+    assert preregistration["scoring_state"] == "not-started"
+    assert preregistration["profile_sha256"] == canonical_sha256(profile)
+    assert preregistration["profile_file_sha256"] == file_sha256(profile_path)
+    assert preregistration["ordered_profile_hashes"] == validated["profile_hashes"]
+    assert preregistration["representation_hashes"] == validated["representation_hashes"]
