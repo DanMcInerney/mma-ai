@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import pytest
 
+from libs.modeling.experiment_campaign.__main__ import _parser
 from libs.modeling.experiment_campaign.outcome_decomposition import (
     OutcomeDecompositionError,
     build_combined_records,
@@ -15,6 +16,8 @@ from libs.modeling.experiment_campaign.outcome_decomposition import (
     validate_gate_lineage,
 )
 from libs.modeling.experiment_campaign.families.outcome_decomposition import (
+    VARIANT_IDS,
+    _variant_records,
     build_preregistered_profile,
     validate_preregistered_profile,
     write_preregistration,
@@ -149,3 +152,65 @@ def test_preregistration_is_durable_before_any_launch(tmp_path) -> None:
     assert preregistration["gate_required_state"] == "closed-zero-access"
     with pytest.raises(ValueError, match="destinations must all be absent"):
         write_preregistration(campaign, source_revision="retry")
+
+
+def test_combined_variant_mapping_follows_preregistered_order() -> None:
+    control = [
+        {
+            **_component(str(index), 0.5),
+            "y_true": index % 2,
+            "event_id": str(index // 2),
+            "outcome_type": "decision",
+        }
+        for index in range(1_108)
+    ]
+    components = {
+        component_id: [
+            _component(str(index), probability)
+            for index in range(1_108)
+        ]
+        for component_id, probability in (
+            ("decision", 0.5),
+            ("decision-win", 0.6),
+            ("finish-win", 0.4),
+        )
+    }
+    evidence = {
+        "2025": {
+            component_id: {"prior": 0.5, "support": 1_000}
+            for component_id in components
+        }
+    }
+
+    variants = _variant_records(
+        build_preregistered_profile(),
+        control=control,
+        components=components,
+        fold_evidence=evidence,
+    )
+
+    assert tuple(variants) == VARIANT_IDS
+
+
+def test_completion_cli_flags_are_plumbed() -> None:
+    replay = _parser().parse_args([
+        "replay-decisions",
+        "--campaign",
+        "campaign",
+        "--through",
+        "family-10-outcome-decomposition",
+        "--require-development-only",
+    ])
+    assert replay.require_development_only is True
+
+    validate = _parser().parse_args([
+        "validate",
+        "--campaign",
+        "campaign",
+        "--strict",
+        "--expect-terminal-through",
+        "10",
+        "--require-unsealed",
+        "--require-gate-closed",
+    ])
+    assert validate.require_unsealed is True

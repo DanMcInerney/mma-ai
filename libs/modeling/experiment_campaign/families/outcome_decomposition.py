@@ -484,7 +484,6 @@ def _variant_records(
             clipping=(0.02, 0.98),
         ))
     variants["shrinkage-gated-three-component"] = shrunk
-    variants["constant-prior-fallback"] = constant
     variants["decision-finish-specialist-mixture"] = [
         {
             **candidate,
@@ -505,6 +504,7 @@ def _variant_records(
             "specialist_support_status": "supported" if supported else "sparse",
         })
     variants["support-trimmed-specialist-mixture"] = trimmed
+    variants["constant-prior-fallback"] = constant
     if tuple(variants) != VARIANT_IDS or any(len(rows) != 1_108 for rows in variants.values()):
         raise ValueError("variant output does not cover the exact preregistered denominator")
     return variants
