@@ -9,7 +9,13 @@ from typing import Any, Iterable, Mapping
 from .hashing import canonical_sha256, file_sha256, read_json, tree_inventory
 from .metrics import event_block_bootstrap_delta, metric_gap, reduce_predictions
 from .protocol import AccessLedger
-from .registry import CAMPAIGN_FAMILY_IDS, RegistryError, validate_registry
+from .registry import (
+    CAMPAIGN_FAMILY_IDS,
+    FAMILY_2_VARIANT_IDS,
+    RegistryError,
+    validate_registry,
+    validate_resolved_profile,
+)
 
 
 FIXED_CAMPAIGN_ARTIFACT = Path(
@@ -64,8 +70,10 @@ def verify_family_run(
     recompute_all: bool,
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
+    if experiment_id == CAMPAIGN_FAMILY_IDS[1]:
+        return _verify_family_2_run(campaign_root, recompute_all=recompute_all)
     if experiment_id != CAMPAIGN_FAMILY_IDS[0]:
-        raise ValueError("this verifier owns only family 1")
+        raise ValueError("verifier owns only the completed campaign family prefix")
     manifest_path = campaign_root / "runs" / experiment_id / "manifest.json"
     manifest = read_json(manifest_path)
     if manifest.get("experiment_id") != experiment_id:
@@ -147,6 +155,189 @@ def verify_family_run(
         "historical_baseline_2025_metrics": baseline_metrics,
         "paired_event_block_intervals": intervals,
         "train_outer_gap": train_gap,
+    }
+
+
+def _verify_family_2_run(campaign_root: Path, *, recompute_all: bool) -> dict[str, Any]:
+    from datetime import date
+
+    from .families.horizon_recency import (
+        FIXED_INCUMBENT_ARTIFACT,
+        _promotion_decision,
+        select_joint_variant,
+    )
+    from .families.weighted_v8 import validate_prediction_chronology
+
+    experiment_id = CAMPAIGN_FAMILY_IDS[1]
+    manifest = read_json(campaign_root / f"runs/{experiment_id}/manifest.json")
+    if manifest.get("experiment_id") != experiment_id:
+        raise ValueError("family 2 manifest experiment ID mismatch")
+    profile = read_json(campaign_root / manifest["profile_path"])
+    validate_resolved_profile(profile)
+    if canonical_sha256(profile) != manifest["profile_sha256"]:
+        raise ValueError("family 2 resolved profile hash mismatch")
+    artifact_root = campaign_root / manifest["artifact_path"]
+    inventory = tree_inventory(artifact_root)
+    if (
+        inventory.tree_sha256 != manifest["artifact_tree_sha256"]
+        or inventory.file_count != manifest["artifact_file_count"]
+    ):
+        raise ValueError("family 2 artifact inventory mismatch")
+
+    attempts = read_jsonl(campaign_root / manifest["attempts_path"])
+    launched = [record for record in attempts if record.get("state") == "launched"]
+    terminal = [record for record in attempts if record.get("state") != "launched"]
+    if len(launched) != len(terminal):
+        raise ValueError("every family 2 launch must have one terminal record")
+    launched_ids = [record["attempt_id"] for record in launched]
+    terminal_ids = [record["attempt_id"] for record in terminal]
+    if launched_ids != terminal_ids or len(set(launched_ids)) != len(launched_ids):
+        raise ValueError("family 2 attempt identities are retried, duplicated, or misaligned")
+    allowed_terminal = {"succeeded", "failed", "cancelled", "limited"}
+    if any(record["state"] not in allowed_terminal for record in terminal):
+        raise ValueError("family 2 attempt has an unsupported terminal state")
+    if any(record["variant_id"] not in FAMILY_2_VARIANT_IDS for record in launched):
+        raise ValueError("family 2 launched an unregistered variant")
+    for launch, end in zip(launched, terminal, strict=True):
+        if end["attempt_elapsed_seconds"] > profile["per_fit_time_cap_seconds"] + 1:
+            raise ValueError("family 2 attempt exceeded its preregistered cap")
+        if file_sha256(artifact_root / launch["stdout_path"]) != end["stdout_sha256"]:
+            raise ValueError("family 2 stdout identity mismatch")
+        if file_sha256(artifact_root / launch["stderr_path"]) != end["stderr_sha256"]:
+            raise ValueError("family 2 stderr identity mismatch")
+    acquired = read_json(artifact_root / "gpu-lease-acquired.json")
+    released = read_json(artifact_root / "gpu-lease-released.json")
+    if acquired["pid"] != released["pid"] or released["elapsed_seconds"] > profile["family_deadline_seconds"]:
+        raise ValueError("family 2 GPU lease evidence violates the frozen bound")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 2 verification requires the gate closed with zero access")
+
+    status = manifest["exit_state"]
+    common = {
+        "experiment_id": experiment_id,
+        "status": status,
+        "gate_access_count": gate["protected_access_count"],
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "attempt_count": len(launched),
+        "gpu_lease_elapsed_seconds": released["elapsed_seconds"],
+    }
+    if status != "complete":
+        failure = manifest["terminal_failure"]
+        if not failure or failure["exit_state"] not in {"failed", "cancelled", "limited"}:
+            raise ValueError("family 2 non-complete result lacks explicit terminal evidence")
+        return {**common, "terminal_failure": failure}
+    if len(launched) != len(FAMILY_2_VARIANT_IDS) * 4 or any(
+        record["state"] != "succeeded" for record in terminal
+    ):
+        raise ValueError("complete family 2 result requires all 32 unique fits to succeed")
+    expected_pairs = {
+        (year, variant_id) for year in (2022, 2023, 2024, 2025) for variant_id in FAMILY_2_VARIANT_IDS
+    }
+    if {(record["fold"], record["variant_id"]) for record in launched} != expected_pairs:
+        raise ValueError("family 2 launch matrix differs from the frozen menu")
+
+    predictions: list[dict[str, Any]] = []
+    selected_variants = manifest["selected_variants"]
+    if len(selected_variants) != 4:
+        raise ValueError("family 2 requires four inner-selected variants")
+    for year, selection in zip((2022, 2023, 2024, 2025), selected_variants, strict=True):
+        replayed = select_joint_variant(
+            selection["inner_scores"],
+            outer_min_date=date.fromisoformat(selection["inner_scores"][0]["outer_min_date"]),
+            embargo_days=profile["embargo_days"],
+        )
+        _assert_equal(replayed, {key: selection[key] for key in replayed}, f"family 2 fold {year} selection")
+        entry = next(item for item in manifest["fold_predictions"] if item["year"] == year)
+        path = artifact_root / entry["path"]
+        if file_sha256(path) != entry["sha256"]:
+            raise ValueError("family 2 outer prediction identity mismatch")
+        rows = read_jsonl(path)
+        if len(rows) != entry["row_count"] or any(row["selected_variant"] != replayed["variant_id"] for row in rows):
+            raise ValueError("family 2 selected outer set is inconsistent")
+        predictions.extend(rows)
+    validate_prediction_chronology(predictions)
+    metrics = reduce_predictions(predictions).as_dict()
+    incumbent = [
+        row
+        for year in (2022, 2023, 2024, 2025)
+        for row in read_jsonl(FIXED_INCUMBENT_ARTIFACT / f"fold-{year}/outer-predictions.jsonl")
+    ]
+    incumbent_metrics = reduce_predictions(incumbent).as_dict()
+    intervals = event_block_bootstrap_delta(
+        predictions,
+        incumbent,
+        iterations=profile["bootstrap"]["iterations"],
+        seed=profile["bootstrap"]["seed"],
+    )
+    fold_losses = metrics["fold_metrics"]
+    drift = {
+        "fold_log_loss": {str(year): fold_losses[str(year)]["log_loss"] for year in (2022, 2023, 2024, 2025)},
+        "year_over_year_log_loss_delta": {
+            str(year): fold_losses[str(year)]["log_loss"] - fold_losses[str(year - 1)]["log_loss"]
+            for year in (2023, 2024, 2025)
+        },
+    }
+    decision = _promotion_decision(metrics, intervals, complete=True)
+    selected_inner = {
+        "status": "selection-context",
+        "fold_log_loss": {
+            str(year): selected_variants[index]["inner_log_loss"]
+            for index, year in enumerate((2022, 2023, 2024, 2025))
+        },
+        "row_count": sum(selection["inner_scores"][0]["row_count"] for selection in selected_variants),
+    }
+    if recompute_all:
+        _assert_equal(metrics, manifest["metrics"], "family 2 metrics")
+        _assert_equal(incumbent_metrics, manifest["incumbent_metrics"], "family 2 incumbent metrics")
+        _assert_equal(intervals, manifest["paired_event_block_intervals"], "family 2 paired intervals")
+        _assert_equal(drift, manifest["drift_summary"], "family 2 drift summary")
+        _assert_equal(selected_inner, manifest["selected_inner_metrics"], "family 2 inner selection summary")
+        _assert_equal(decision, manifest["promotion_decision"], "family 2 promotion decision")
+    return {
+        **common,
+        "outer_years": [2022, 2023, 2024, 2025],
+        "fold_prediction_count": 4,
+        "selected_variants": [selection["variant_id"] for selection in selected_variants],
+        "metrics": metrics,
+        "incumbent_metrics": incumbent_metrics,
+        "paired_event_block_intervals": intervals,
+        "drift_summary": drift,
+        "selected_inner_metrics": selected_inner,
+        "inner_outer_gap": manifest["inner_outer_gap"],
+        "promotion_decision": decision,
+        "adaptive_signal_for_family_03": manifest["adaptive_signal_for_family_03"],
+    }
+
+
+def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str, Any]:
+    campaign_root = Path(campaign_root)
+    if through not in CAMPAIGN_FAMILY_IDS[:2]:
+        raise ValueError("decision replay is bounded to the completed family prefix")
+    registry = validate_registry(campaign_root, strict=True)
+    through_index = CAMPAIGN_FAMILY_IDS.index(through) + 1
+    expected = CAMPAIGN_FAMILY_IDS[:through_index]
+    if registry.family_ids[:through_index] != expected:
+        raise ValueError("registry does not contain the requested replay prefix")
+    decisions = []
+    for experiment_id in expected:
+        verified = verify_family_run(campaign_root, experiment_id, recompute_all=True)
+        decisions.append({
+            "experiment_id": experiment_id,
+            "status": verified["status"],
+            "promotion_decision": verified["promotion_decision"],
+            "metrics": verified.get("metrics"),
+            "paired_event_block_intervals": verified.get("paired_event_block_intervals"),
+            "drift_summary": verified.get("drift_summary"),
+            "adaptive_signal_for_next_family": verified.get("adaptive_signal_for_family_03"),
+        })
+    return {
+        "through": through,
+        "registry_prefix_sha256": registry.registry_prefix_sha256,
+        "decisions": decisions,
+        "incumbent_after": decisions[-1]["promotion_decision"]["incumbent_after"],
+        "gate_access_count": AccessLedger(campaign_root).gate_status()["protected_access_count"],
     }
 
 

@@ -22,6 +22,9 @@ def _parser() -> argparse.ArgumentParser:
     verify_run.add_argument("--campaign", type=Path, required=True)
     verify_run.add_argument("--experiment", required=True)
     verify_run.add_argument("--recompute-all", action="store_true")
+    replay = subparsers.add_parser("replay-decisions")
+    replay.add_argument("--campaign", type=Path, required=True)
+    replay.add_argument("--through", required=True)
     gate = subparsers.add_parser("gate-status")
     gate.add_argument("--campaign", type=Path, required=True)
     gate.add_argument("--require-closed", action="store_true")
@@ -104,6 +107,10 @@ def main() -> int:
             args.experiment,
             recompute_all=args.recompute_all,
         )
+    elif args.command == "replay-decisions":
+        from .runner import replay_campaign_decisions
+
+        result = replay_campaign_decisions(args.campaign, through=args.through)
     elif args.command == "gate-status":
         result = AccessLedger(args.campaign).gate_status()
         if args.require_closed and (
