@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from libs.modeling.experiment_campaign.__main__ import _parser
+from libs.modeling.experiment_campaign import runner
 from libs.modeling.experiment_campaign.outcome_decomposition import (
     OutcomeDecompositionError,
     build_combined_records,
@@ -214,3 +217,31 @@ def test_completion_cli_flags_are_plumbed() -> None:
         "--require-gate-closed",
     ])
     assert validate.require_unsealed is True
+
+
+def test_actual_successor_result_recomputes_without_retry_or_gate_access() -> None:
+    verified = runner.verify_family_run(
+        Path("experiments/top10_20260815"),
+        "family-10-outcome-decomposition",
+        recompute_all=True,
+    )
+    assert verified["status"] == "complete"
+    assert verified["component_fit_count"] == 12
+    assert verified["component_prediction_count"] == 3_324
+    assert verified["combined_prediction_count"] == 6_648
+    assert verified["retry_count"] == 0
+    assert verified["gate_access_count"] == 0
+
+
+def test_family_10_verifier_rejects_artifact_tree_mismatch(monkeypatch) -> None:
+    monkeypatch.setattr(
+        runner,
+        "tree_inventory",
+        lambda _: SimpleNamespace(tree_sha256="BAD", file_count=49, total_bytes=0),
+    )
+    with pytest.raises(ValueError, match="artifact tree"):
+        runner.verify_family_run(
+            Path("experiments/top10_20260815"),
+            "family-10-outcome-decomposition",
+            recompute_all=True,
+        )

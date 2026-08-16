@@ -60,11 +60,16 @@ FIXED_FAMILY_9_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\10-family-09-capacity-foundation"
 )
+FIXED_FAMILY_10_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\11-family-10-outcome-decomposition"
+)
 FAMILY_5_RUN_ALIAS = "family-05-semantic-portfolio"
 FAMILY_6_RUN_ALIAS = "family-06-fighter-states"
 FAMILY_7_RUN_ALIAS = "family-07-matchup-geometry"
 FAMILY_8_RUN_ALIAS = "family-08-catboost-specialist"
 FAMILY_9_RUN_ALIAS = "family-09-capacity-foundation"
+FAMILY_10_RUN_ALIAS = "family-10-outcome-decomposition"
 
 
 def _canonical_family_id(experiment_id: str) -> str:
@@ -78,6 +83,8 @@ def _canonical_family_id(experiment_id: str) -> str:
         return CAMPAIGN_FAMILY_IDS[7]
     if experiment_id == FAMILY_9_RUN_ALIAS:
         return CAMPAIGN_FAMILY_IDS[8]
+    if experiment_id == FAMILY_10_RUN_ALIAS:
+        return CAMPAIGN_FAMILY_IDS[9]
     return experiment_id
 
 
@@ -107,6 +114,9 @@ FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_8 = (
 FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_9 = (
     "5DC5D278A65C8633A3ECF2C72FE886604B202FCBF29AEE2A8C4B04DC9AD02E0F"
 )
+FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_10 = (
+    "A1A7FC3F8486D8A07C82ED73F77626B93381A57F81CD8907796BC88ED10CB622"
+)
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -131,8 +141,8 @@ def _validate_campaign_registry(campaign_root: Path):
     if len(raw_lines) <= 3:
         return validate_registry(campaign_root, strict=True)
     records = [json.loads(line) for line in raw_lines]
-    if len(records) > 10:
-        raise RegistryError("registry extends beyond the completed family-9 prefix")
+    if len(records) > 11:
+        raise RegistryError("registry extends beyond the completed family-10 prefix")
     expected_ids = ["experiment-zero", *CAMPAIGN_FAMILY_IDS[: len(records) - 1]]
     if [row["payload"]["experiment_id"] for row in records] != expected_ids:
         raise RegistryError("registry does not contain the exact completed family prefix")
@@ -174,6 +184,12 @@ def _validate_campaign_registry(campaign_root: Path):
         != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_9
     ):
         raise RegistryError("the frozen registry prefix before family 9 changed")
+    if (
+        len(raw_lines) > 10
+        and hashlib.sha256(b"".join(raw_lines[:10])).hexdigest().upper()
+        != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_10
+    ):
+        raise RegistryError("the frozen registry prefix before family 10 changed")
     previous_record = "0" * 64
     prefix_bytes = b""
     for sequence, (raw, record) in enumerate(zip(raw_lines, records, strict=True)):
@@ -250,6 +266,8 @@ def verify_family_run(
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
     experiment_id = _canonical_family_id(experiment_id)
+    if experiment_id == CAMPAIGN_FAMILY_IDS[9]:
+        return _verify_family_10_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[8]:
         return _verify_family_9_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[7]:
@@ -1562,6 +1580,284 @@ def _verify_family_9_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
     }
 
 
+def _verify_family_10_run(campaign_root: Path, *, recompute_all: bool) -> dict[str, Any]:
+    from .families.outcome_decomposition import (
+        COMPONENT_IDS,
+        VARIANT_IDS,
+        build_preregistered_profile,
+        validate_preregistered_profile,
+    )
+    from .outcome_decomposition import combine_law_of_total_probability
+
+    campaign_root = Path(campaign_root)
+    experiment_id = CAMPAIGN_FAMILY_IDS[9]
+    manifest = read_json(campaign_root / "runs/family-10-outcome-decomposition/manifest.json")
+    if manifest["experiment_id"] != experiment_id:
+        raise ValueError("family 10 manifest experiment ID differs")
+    profile_path = campaign_root / manifest["profile_path"]
+    profile = read_json(profile_path)
+    validated = validate_preregistered_profile(profile)
+    if (
+        profile != build_preregistered_profile()
+        or canonical_sha256(profile) != manifest["profile_sha256"]
+        or file_sha256(profile_path) != manifest["profile_file_sha256"]
+        or not manifest["preregistration_commit"]
+        or validated["variant_ids"] != list(VARIANT_IDS)
+    ):
+        raise ValueError("family 10 preregistration identity differs")
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_10_ARTIFACT
+    inventory = tree_inventory(artifact_root)
+    if (
+        inventory.tree_sha256 != manifest["artifact_tree_sha256"]
+        or inventory.file_count != manifest["artifact_file_count"]
+        or inventory.total_bytes != manifest["artifact_total_bytes"]
+    ):
+        raise ValueError("family 10 artifact tree inventory differs")
+    attempts = read_jsonl(campaign_root / manifest["attempts_path"])
+    launched = [row for row in attempts if row.get("state") == "launched"]
+    exited = [row for row in attempts if row.get("state") == "exited"]
+    expected_fits = [
+        (str(year), component)
+        for year in (2022, 2023, 2024, 2025)
+        for component in COMPONENT_IDS
+    ]
+    if (
+        len(launched) != 12
+        or len(exited) != 12
+        or [(row["fold"], row["component_id"]) for row in launched] != expected_fits
+        or [(row["fold"], row["component_id"]) for row in exited] != expected_fits
+        or any(row.get("retry") is not False for row in attempts)
+        or any(row.get("exit_code") != 0 for row in exited)
+    ):
+        raise ValueError("family 10 serialized component attempt ledger differs")
+    acquired = read_json(artifact_root / "production-lease-acquired.json")
+    released = read_json(artifact_root / "production-lease-released.json")
+    safety = read_json(artifact_root / "safety.json")
+    if (
+        acquired["lease_id"] != released["lease_id"]
+        or acquired["pid"] != released["pid"]
+        or safety["production_lease_count"] != 1
+        or safety["production_process_count"] != 1
+        or safety["component_fit_launch_count"] != 12
+        or safety["retry_count"] != 0
+        or safety["serialized"] is not True
+        or safety["retired_label_reads"] != 0
+        or safety["database_access"] != {"used": False, "sql": None, "urls": []}
+    ):
+        raise ValueError("family 10 safety evidence differs")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 10 requires the gate closed with zero access")
+    safe_population = {
+        "asserted_before_target_decode": True,
+        "development_safe_id_count": 3_089,
+        "development_max_date": "2025-12-13",
+        "retired_id_count": 178,
+    }
+    if manifest["development_safe_population"] != safe_population:
+        raise ValueError("family 10 safe population evidence differs")
+    result = read_json(artifact_root / "result.json")
+    result_keys = (
+        "status",
+        "terminal_failure",
+        "variant_results",
+        "component_fit_lineage_and_support",
+        "component_train_outer_gaps",
+        "component_prediction_identities",
+        "combined_prediction_identities",
+        "control_metrics",
+        "paired_event_block_intervals",
+        "promotion_decision",
+        "development_final_incumbent_identity",
+        "development_safe_population",
+        "comparison_scope",
+        "gate_access_count",
+    )
+    for key in result_keys:
+        _assert_equal(result[key], manifest[key], f"family 10 {key}")
+    lineage = manifest["component_fit_lineage_and_support"]
+    row_counts = {"2022": 282, "2023": 251, "2024": 293, "2025": 282}
+    for year, expected_count in row_counts.items():
+        if set(lineage[year]) != set(COMPONENT_IDS):
+            raise ValueError("family 10 component lineage menu differs")
+        for component_id in COMPONENT_IDS:
+            evidence = lineage[year][component_id]
+            identity = evidence["outer_prediction_identity"]
+            prediction_path = artifact_root / identity["path"]
+            records = read_jsonl(prediction_path)
+            model = evidence["model_identity"]
+            model_path = prediction_path.parent / model["path"]
+            if (
+                identity["row_count"] != expected_count
+                or len(records) != expected_count
+                or file_sha256(prediction_path) != identity["sha256"]
+                or file_sha256(model_path) != model["sha256"]
+                or evidence["fit_scope"] != "prior-only"
+                or evidence["outer_label_fit_count"] != 0
+                or evidence["fallback_used"] is not False
+                or evidence["support"] < 120
+                or any(row.get("outer_label_reads") != 0 for row in records)
+            ):
+                raise ValueError("family 10 component prediction or support evidence differs")
+
+    status = manifest["exit_state"]
+    recomputed_metrics: dict[str, dict[str, Any]] = {}
+    recomputed_intervals: dict[str, Any] = {}
+    variant_rows: dict[str, list[dict[str, Any]]] = {}
+    if status == "complete":
+        if manifest["terminal_failure"] is not None:
+            raise ValueError("complete family 10 result contains terminal failure evidence")
+        if [row["variant_id"] for row in manifest["variant_results"]] != list(VARIANT_IDS):
+            raise ValueError("family 10 result order differs from preregistration")
+        profile_hashes = {row["id"]: row["profile_sha256"] for row in profile["variants"]}
+        expected_identity: list[tuple[str, str]] | None = None
+        for variant_result in manifest["variant_results"]:
+            variant_id = variant_result["variant_id"]
+            identity = manifest["combined_prediction_identities"][variant_id]
+            if (
+                variant_result["prediction_identity"] != identity
+                or variant_result["profile_sha256"] != profile_hashes[variant_id]
+                or identity["row_count"] != 1_108
+                or identity["boundary"] != "Original"
+                or identity["outer_years"] != [2022, 2023, 2024, 2025]
+            ):
+                raise ValueError("family 10 combined prediction identity differs")
+            path = artifact_root / identity["path"]
+            rows = read_jsonl(path)
+            row_identity = [(str(row["fight_id"]), str(row["fold"])) for row in rows]
+            if (
+                len(rows) != 1_108
+                or len(set(row_identity)) != 1_108
+                or file_sha256(path) != identity["sha256"]
+                or any(row.get("candidate_id") != variant_id for row in rows)
+                or any(row.get("boundary") != "Original" for row in rows)
+                or any(row.get("fit_scope") != "prior-only" for row in rows)
+                or any(row.get("outer_label_reads") != 0 for row in rows)
+            ):
+                raise ValueError("family 10 combined prediction rows differ")
+            if expected_identity is None:
+                expected_identity = row_identity
+            elif row_identity != expected_identity:
+                raise ValueError("family 10 variant label/ID/fold identity mismatch")
+            if variant_id in {
+                "three-component",
+                "shrinkage-gated-three-component",
+                "constant-prior-fallback",
+            }:
+                for row in rows:
+                    components = row["component_probabilities"]
+                    expected_probability = combine_law_of_total_probability(
+                        components["decision"],
+                        components["decision-win"],
+                        components["finish-win"],
+                    )
+                    if abs(row["probability"] - min(0.98, max(0.02, expected_probability))) > 1e-12:
+                        raise ValueError("family 10 law-of-total-probability result differs")
+            metrics = reduce_predictions(rows).as_dict()
+            _assert_equal(metrics, variant_result["metrics"], f"family 10 {variant_id} metrics")
+            recomputed_metrics[variant_id] = metrics
+            variant_rows[variant_id] = rows
+        control_id = "direct-incumbent-control"
+        _assert_equal(recomputed_metrics[control_id], manifest["control_metrics"], "family 10 control metrics")
+        for variant_result in manifest["variant_results"]:
+            variant_id = variant_result["variant_id"]
+            if variant_id == control_id:
+                if variant_result["paired_event_block_intervals"] is not None:
+                    raise ValueError("family 10 control unexpectedly has a paired interval")
+                continue
+            interval = event_block_bootstrap_delta(
+                variant_rows[variant_id],
+                variant_rows[control_id],
+                iterations=2_000,
+                seed=20260815,
+            )
+            _assert_equal(
+                interval,
+                variant_result["paired_event_block_intervals"],
+                f"family 10 {variant_id} interval",
+            )
+            recomputed_intervals[variant_id] = interval
+        _assert_equal(recomputed_intervals, manifest["paired_event_block_intervals"], "family 10 intervals")
+        best_id = min(
+            VARIANT_IDS[1:],
+            key=lambda value: (recomputed_metrics[value]["log_loss"], VARIANT_IDS.index(value)),
+        )
+        best_metrics = recomputed_metrics[best_id]
+        best_interval = recomputed_intervals[best_id]
+        promoted = (
+            best_metrics["log_loss"] < recomputed_metrics[control_id]["log_loss"]
+            and best_interval["log_loss_delta"]["upper"] < 0.0
+            and best_metrics["brier"] <= recomputed_metrics[control_id]["brier"]
+            and best_metrics["accuracy"] >= recomputed_metrics[control_id]["accuracy"] - 0.005
+        )
+        incumbent_after = best_id if promoted else "family-01-weighted-v8-control"
+        expected_promotion = {
+            "action": "promote-family-10" if promoted else "retain-family-01-weighted-v8-control",
+            "incumbent_before": "family-01-weighted-v8-control",
+            "incumbent_after": incumbent_after,
+            "promoted": promoted,
+            "selected_decomposition_variant": best_id,
+            "rule": (
+                "full-1,108-row log loss improvement with paired 95% upper bound below zero, "
+                "non-worse Brier, and accuracy no more than 0.5 percentage points lower"
+            ),
+        }
+        _assert_equal(expected_promotion, manifest["promotion_decision"], "family 10 promotion")
+        chosen_id = best_id if promoted else control_id
+        expected_final = {
+            "incumbent_id": incumbent_after,
+            "candidate_prediction_identity": manifest["combined_prediction_identities"][chosen_id],
+            "development_metrics": recomputed_metrics[chosen_id],
+            "sealed": False,
+            "gate_access_count": 0,
+        }
+        _assert_equal(
+            expected_final,
+            manifest["development_final_incumbent_identity"],
+            "family 10 development final incumbent",
+        )
+        if manifest["comparison_scope"] != {
+            "outer_years": [2022, 2023, 2024, 2025],
+            "outer_row_count": 1_108,
+            "family_1_comparable": True,
+            "family_9_predictions_used": False,
+            "development_only": True,
+        }:
+            raise ValueError("family 10 comparison scope differs")
+    elif status == "failed":
+        failure = manifest["terminal_failure"]
+        error_path = artifact_root / failure["stderr_path"]
+        if file_sha256(error_path) != failure["stderr_sha256"] or failure["retry"] is not False:
+            raise ValueError("family 10 terminal failure evidence differs")
+    else:
+        raise ValueError("unsupported family 10 exit state")
+    return {
+        "experiment_id": experiment_id,
+        "status": status,
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "component_fit_count": len(launched),
+        "component_prediction_count": sum(
+            identity["row_count"]
+            for identities in manifest["component_prediction_identities"].values()
+            for identity in identities
+        ),
+        "combined_prediction_count": sum(
+            identity["row_count"] for identity in manifest["combined_prediction_identities"].values()
+        ),
+        "retry_count": 0,
+        "terminal_failure": manifest["terminal_failure"],
+        "metrics": recomputed_metrics,
+        "paired_event_block_intervals": recomputed_intervals,
+        "promotion_decision": manifest["promotion_decision"],
+        "development_final_incumbent_identity": manifest["development_final_incumbent_identity"],
+        "development_safe_population": safe_population,
+        "gate_access_count": 0,
+        "preregistration_commit": manifest["preregistration_commit"],
+    }
+
+
 def verify_feature_lineage(
     campaign_root: Path,
     experiment_id: str,
@@ -1645,9 +1941,13 @@ def audit_campaign_safety(
 
     campaign_root = Path(campaign_root)
     through = _canonical_family_id(through)
-    if through not in CAMPAIGN_FAMILY_IDS[5:9]:
-        raise ValueError("safety audit is bounded through families 6 through 9")
-    if through == CAMPAIGN_FAMILY_IDS[8]:
+    if through not in CAMPAIGN_FAMILY_IDS[5:10]:
+        raise ValueError("safety audit is bounded through families 6 through 10")
+    if through == CAMPAIGN_FAMILY_IDS[9]:
+        verified = _verify_family_10_run(campaign_root, recompute_all=True)
+        manifest = read_json(campaign_root / "runs/family-10-outcome-decomposition/manifest.json")
+        fixed_artifact = FIXED_FAMILY_10_ARTIFACT
+    elif through == CAMPAIGN_FAMILY_IDS[8]:
         verified = _verify_family_9_run(campaign_root, recompute_all=True)
         manifest = read_json(campaign_root / "runs/family-09-capacity-foundation/manifest.json")
         fixed_artifact = FIXED_FAMILY_9_ARTIFACT
@@ -1677,11 +1977,9 @@ def audit_campaign_safety(
     gate = AccessLedger(campaign_root).gate_status()
     if require_gate_closed and (gate["state"] != "closed" or gate["protected_access_count"] != 0):
         raise ValueError("campaign gate is not closed with zero access")
-    return {
+    common = {
         "through": through,
         "status": verified["status"],
-        "gpu_lease_count": safety["gpu_lease_count"],
-        "production_attempt_count": safety["production_attempt_count"],
         "retry_count": safety["retry_count"],
         "serialized": safety["serialized"],
         "database_access": safety["database_access"],
@@ -1689,12 +1987,25 @@ def audit_campaign_safety(
         "gate_state": gate["state"],
         "gate_access_count": gate["protected_access_count"],
     }
+    if through == CAMPAIGN_FAMILY_IDS[9]:
+        return {
+            **common,
+            "gpu_lease_count": safety["gpu_fit_count"],
+            "production_lease_count": safety["production_lease_count"],
+            "production_attempt_count": safety["production_process_count"],
+            "component_fit_launch_count": safety["component_fit_launch_count"],
+        }
+    return {
+        **common,
+        "gpu_lease_count": safety["gpu_lease_count"],
+        "production_attempt_count": safety["production_attempt_count"],
+    }
 
 
 def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
     through = _canonical_family_id(through)
-    if through not in CAMPAIGN_FAMILY_IDS[:9]:
+    if through not in CAMPAIGN_FAMILY_IDS[:10]:
         raise ValueError("decision replay is bounded to the completed family prefix")
     registry = _validate_campaign_registry(campaign_root)
     through_index = CAMPAIGN_FAMILY_IDS.index(through) + 1
