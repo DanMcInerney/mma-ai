@@ -61,13 +61,14 @@ def _read_records(path: Path) -> list[tuple[bytes, dict[str, Any]]]:
     for number, raw in enumerate(raw_registry.splitlines(keepends=True), start=1):
         if not raw.endswith(b"\n"):
             raise RegistryError(f"registry line {number} is not newline terminated")
+        canonical_line = raw.replace(b"\r\n", b"\n")
         try:
-            record = json.loads(raw)
+            record = json.loads(canonical_line)
         except json.JSONDecodeError as exc:
             raise RegistryError(f"registry line {number} is invalid JSON") from exc
-        if raw != canonical_json_bytes(record) + b"\n":
+        if canonical_line != canonical_json_bytes(record) + b"\n":
             raise RegistryError(f"registry line {number} is noncanonical")
-        records.append((raw, record))
+        records.append((canonical_line, record))
     return records
 
 
@@ -94,7 +95,8 @@ def append_registry_record(
     records = [record for _, record in lines]
     if any(record.get("record_id") == record_id for record in records):
         raise RegistryError(f"duplicate registry record ID: {record_id}")
-    before = registry_path.read_bytes()
+    physical_before = registry_path.read_bytes()
+    before = b"".join(raw for raw, _ in lines)
     core = {
         "sequence": len(records),
         "record_id": record_id,
@@ -103,9 +105,10 @@ def append_registry_record(
         "payload": dict(payload),
     }
     record = {**core, "record_sha256": canonical_sha256(core)}
-    appended = before + canonical_json_bytes(record) + b"\n"
-    registry_path.write_bytes(appended)
-    _write_head(campaign_root, appended, [*records, record])
+    physical_appended = physical_before + canonical_json_bytes(record) + b"\n"
+    canonical_appended = before + canonical_json_bytes(record) + b"\n"
+    registry_path.write_bytes(physical_appended)
+    _write_head(campaign_root, canonical_appended, [*records, record])
     return record
 
 
@@ -148,6 +151,14 @@ def _resolve(campaign_root: Path, relative: str) -> Path:
     return candidate
 
 
+def _matches_registered_sha256(path: Path, expected: str) -> bool:
+    raw = path.read_bytes()
+    return expected in {
+        hashlib.sha256(raw).hexdigest().upper(),
+        hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest().upper(),
+    }
+
+
 def validate_registry(
     campaign_root: Path, *, strict: bool, through: str = "split"
 ) -> RegistryValidation:
@@ -181,11 +192,11 @@ def validate_registry(
         if not isinstance(artifact_path, str) or not isinstance(artifact_sha256, str):
             raise RegistryError("registry artifact identity is missing")
         artifact = _resolve(campaign_root, artifact_path)
-        if file_sha256(artifact) != artifact_sha256:
+        if not _matches_registered_sha256(artifact, artifact_sha256):
             raise RegistryError(f"registered artifact hash mismatch: {artifact_path}")
         if payload.get("kind") == "split":
             profile = _resolve(campaign_root, str(payload.get("profile_path")))
-            if file_sha256(profile) != payload.get("profile_sha256"):
+            if not _matches_registered_sha256(profile, str(payload.get("profile_sha256"))):
                 raise RegistryError("registered profile hash mismatch")
         ids.append(record_id)
         records.append(record)
