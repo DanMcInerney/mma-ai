@@ -17,6 +17,7 @@ def _parser() -> argparse.ArgumentParser:
     validate.add_argument("--campaign", type=Path, required=True)
     validate.add_argument("--strict", action="store_true")
     validate.add_argument("--expect-terminal-through", type=int)
+    validate.add_argument("--require-unsealed", action="store_true")
     validate.add_argument("--require-gate-closed", action="store_true")
     verify_run = subparsers.add_parser("verify-run")
     verify_run.add_argument("--campaign", type=Path, required=True)
@@ -33,6 +34,7 @@ def _parser() -> argparse.ArgumentParser:
     replay = subparsers.add_parser("replay-decisions")
     replay.add_argument("--campaign", type=Path, required=True)
     replay.add_argument("--through", required=True)
+    replay.add_argument("--require-development-only", action="store_true")
     gate = subparsers.add_parser("gate-status")
     gate.add_argument("--campaign", type=Path, required=True)
     gate.add_argument("--require-closed", action="store_true")
@@ -97,7 +99,7 @@ def _bootstrap(args: argparse.Namespace) -> dict:
 def main() -> int:
     args = _parser().parse_args()
     if args.command == "validate":
-        if args.expect_terminal_through is not None or args.require_gate_closed:
+        if args.expect_terminal_through is not None or args.require_unsealed or args.require_gate_closed:
             from .runner import validate_terminal_campaign
 
             result = validate_terminal_campaign(
@@ -105,6 +107,10 @@ def main() -> int:
                 expect_terminal_through=args.expect_terminal_through,
                 require_gate_closed=args.require_gate_closed,
             )
+            if args.require_unsealed:
+                gate = AccessLedger(args.campaign).gate_status()
+                if gate["state"] != "closed" or gate["candidate_id"] is not None:
+                    raise SystemExit("campaign has a sealed candidate")
         else:
             result = validate_campaign(args.campaign, strict=args.strict).__dict__
     elif args.command == "verify-run":
@@ -135,6 +141,10 @@ def main() -> int:
         from .runner import replay_campaign_decisions
 
         result = replay_campaign_decisions(args.campaign, through=args.through)
+        if args.require_development_only:
+            gate = AccessLedger(args.campaign).gate_status()
+            if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+                raise SystemExit("decision replay is not development-only")
     elif args.command == "gate-status":
         result = AccessLedger(args.campaign).gate_status()
         if args.require_closed and (
