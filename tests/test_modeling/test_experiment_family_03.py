@@ -12,6 +12,7 @@ from libs.modeling.experiment_campaign.calibration import (
 from libs.modeling.experiment_campaign.families.temporal_calibration import (
     SourceLineageError,
     audit_registered_rows,
+    select_and_calibrate_outer,
 )
 
 
@@ -239,3 +240,57 @@ def test_registered_source_audit_accepts_original_oof_with_cross_row_training() 
     audit = audit_registered_rows(inner_rows, outer_rows, outer_year=2022)
     assert audit["status"] == "eligible"
     assert audit["same_fit_row_count"] == 0
+
+
+def test_earliest_outer_fold_is_deliberately_identity_only_without_fit() -> None:
+    outer = [
+        {
+            "boundary": "Original",
+            "event_date": "2022-01-01",
+            "event_id": "outer-a",
+            "fight_id": "fight-a",
+            "probability": 0.23456789,
+            "y_true": 0,
+        }
+    ]
+    result = select_and_calibrate_outer([], outer, outer_year=2022, variant_configs=PROFILE)
+    assert result["selection"]["variant_id"] == "identity"
+    assert result["selection"]["selection_basis"] == "identity-only-no-fit"
+    assert result["selection"]["fit_row_count"] == 0
+    assert result["predictions"][0]["probability"] == 0.23456789
+
+
+def test_outer_labels_cannot_change_chronological_variant_selection_or_probabilities() -> None:
+    history = []
+    for index in range(20):
+        history.append(
+            {
+                "boundary": "Original",
+                "event_date": f"2022-01-{index + 1:02d}",
+                "event_id": f"history-event-{index}",
+                "fight_id": f"history-fight-{index}",
+                "fit_event_ids": ["older-model-event"],
+                "probability": 0.1 + (0.8 * index / 19),
+                "y_true": int(index >= 10),
+            }
+        )
+    outer = [
+        {
+            "boundary": "Original",
+            "event_date": "2023-01-01",
+            "event_id": "outer-event",
+            "fight_id": "outer-fight",
+            "probability": 0.61,
+            "y_true": 0,
+        }
+    ]
+    changed_labels = [{**outer[0], "y_true": 1}]
+
+    first = select_and_calibrate_outer(history, outer, outer_year=2023, variant_configs=PROFILE)
+    second = select_and_calibrate_outer(
+        history, changed_labels, outer_year=2023, variant_configs=PROFILE
+    )
+    assert first["selection"]["variant_scores"].keys() == set(CALIBRATION_VARIANT_IDS)
+    assert first["selection"]["variant_id"] == second["selection"]["variant_id"]
+    assert first["predictions"][0]["probability"] == second["predictions"][0]["probability"]
+    assert first["selection"]["selection_max_date"] < outer[0]["event_date"]
