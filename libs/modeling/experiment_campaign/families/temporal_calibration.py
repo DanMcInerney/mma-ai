@@ -3,10 +3,27 @@
 from __future__ import annotations
 
 from datetime import date
+import hashlib
+import json
 import math
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from ..calibration import CALIBRATION_VARIANT_IDS, fit_temporal_calibrator
+from ..hashing import canonical_sha256, file_sha256, read_json, tree_inventory
+from ..metrics import event_block_bootstrap_delta, reduce_predictions
+from ..protocol import AccessLedger
+
+
+EXPERIMENT_ID = "family-03-temporal-calibration"
+FIXED_FAMILY_1_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\02-family-01-weighted-v8-control"
+)
+FIXED_FAMILY_2_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\03-family-02-horizon-recency"
+)
 
 
 class SourceLineageError(ValueError):
@@ -207,3 +224,259 @@ def select_and_calibrate_outer(
         },
         "predictions": predictions,
     }
+
+
+def promotion_decision(
+    metrics: Mapping[str, Any],
+    intervals: Mapping[str, Any],
+) -> dict[str, Any]:
+    promote = (
+        float(metrics["log_loss_delta"]) < 0.0
+        and float(intervals["log_loss_delta"]["upper"]) < 0.0
+    )
+    return {
+        "action": "promote-temporal-calibration" if promote else "retain-family-01-weighted-v8-control",
+        "incumbent_before": "family-01-weighted-v8-control",
+        "incumbent_after": (
+            EXPERIMENT_ID if promote else "family-01-weighted-v8-control"
+        ),
+        "promoted": promote,
+        "rule": "pooled log-loss delta and paired event-block interval upper bound must both be below zero",
+    }
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+
+def _write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+
+def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = "".join(
+        json.dumps(dict(row), sort_keys=True, separators=(",", ":")) + "\n" for row in rows
+    )
+    path.write_text(payload, encoding="utf-8")
+
+
+def _variant_configs(profile: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    variants = profile["calibration_variants"]
+    configs = {str(item["id"]): item for item in variants}
+    if tuple(configs) != CALIBRATION_VARIANT_IDS:
+        raise ValueError("resolved profile differs from the frozen calibration menu")
+    return configs
+
+
+def _append_registry_record(campaign_root: Path, payload: Mapping[str, Any]) -> dict[str, Any]:
+    registry_path = campaign_root / "registry.jsonl"
+    head_path = campaign_root / "registry-head.json"
+    registry_bytes = registry_path.read_bytes()
+    records = [json.loads(line) for line in registry_bytes.splitlines()]
+    if any(row["payload"]["experiment_id"] == EXPERIMENT_ID for row in records):
+        raise ValueError("family 3 already exists in the registry")
+    head = read_json(head_path)
+    if hashlib.sha256(registry_bytes).hexdigest().upper() != head["registry_prefix_sha256"]:
+        raise ValueError("registry head does not match the immutable prefix")
+    record = {
+        "payload": dict(payload),
+        "prefix_sha256_before": head["registry_prefix_sha256"],
+        "previous_record_sha256": head["last_record_sha256"],
+        "sequence": head["record_count"],
+    }
+    record["record_sha256"] = canonical_sha256(record)
+    appended = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
+    after = registry_bytes + appended.encode("utf-8")
+    prefix_after = hashlib.sha256(after).hexdigest().upper()
+    registry_path.write_bytes(after)
+    _write_json(
+        head_path,
+        {
+            "last_record_sha256": record["record_sha256"],
+            "record_count": len(records) + 1,
+            "registry_bytes": len(after),
+            "registry_prefix_sha256": prefix_after,
+        },
+    )
+    return {
+        "registry_prefix_sha256_before": record["prefix_sha256_before"],
+        "registry_prefix_sha256_after": prefix_after,
+        "record_sha256": record["record_sha256"],
+    }
+
+
+def materialize_family_03(
+    campaign_root: Path,
+    *,
+    source_revision: str,
+    family_1_artifact: Path = FIXED_FAMILY_1_ARTIFACT,
+    family_2_artifact: Path = FIXED_FAMILY_2_ARTIFACT,
+) -> dict[str, Any]:
+    campaign_root = Path(campaign_root)
+    artifact_root = campaign_root / "artifacts/04-family-03-temporal-calibration"
+    if artifact_root.exists():
+        raise ValueError("family 3 artifact destination already exists")
+    profile_path = campaign_root / "profiles/family-03-temporal-calibration.json"
+    profile = read_json(profile_path)
+    configs = _variant_configs(profile)
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 3 requires the gate closed with zero access")
+
+    negative_control = []
+    for year in (2022, 2023, 2024, 2025):
+        inner = _read_jsonl(family_2_artifact / f"fold-{year}/selected-inner-predictions.jsonl")
+        outer = _read_jsonl(family_2_artifact / f"fold-{year}/outer-predictions.jsonl")
+        try:
+            audit_registered_rows(inner, outer, outer_year=year)
+        except SourceLineageError as exc:
+            negative_control.append(exc.audit)
+        else:
+            raise ValueError("family 2 selected-inner negative control unexpectedly passed")
+
+    all_predictions: list[dict[str, Any]] = []
+    incumbent_predictions: list[dict[str, Any]] = []
+    selections = []
+    fold_predictions = []
+    attempts = []
+    for year in (2022, 2023, 2024, 2025):
+        history = [
+            row
+            for source_year in range(2022, year)
+            for row in _read_jsonl(family_1_artifact / f"fold-{source_year}/outer-predictions.jsonl")
+        ]
+        outer = _read_jsonl(family_2_artifact / f"fold-{year}/outer-predictions.jsonl")
+        incumbent_predictions.extend(outer)
+        calibrated = select_and_calibrate_outer(
+            history,
+            outer,
+            outer_year=year,
+            variant_configs=configs,
+        )
+        selection = {"outer_year": year, **calibrated["selection"]}
+        selections.append(selection)
+        predictions = calibrated["predictions"]
+        all_predictions.extend(predictions)
+        fold_root = artifact_root / f"fold-{year}"
+        prediction_path = fold_root / "outer-predictions.jsonl"
+        selection_path = fold_root / "selection.json"
+        _write_jsonl(prediction_path, predictions)
+        _write_json(selection_path, selection)
+        fold_predictions.append(
+            {
+                "year": year,
+                "path": f"fold-{year}/outer-predictions.jsonl",
+                "row_count": len(predictions),
+                "sha256": file_sha256(prediction_path),
+                "variant_id": selection["variant_id"],
+                "calibration_fit_row_count": selection["fit_row_count"],
+            }
+        )
+        if year == 2022:
+            attempts.append(
+                {
+                    "fold": year,
+                    "state": "identity-only-no-fit",
+                    "variant_id": "identity",
+                    "score": None,
+                }
+            )
+        else:
+            attempts.extend(
+                {
+                    "fold": year,
+                    "state": "scored-prior-oof",
+                    "variant_id": variant_id,
+                    "score": selection["variant_scores"][variant_id],
+                }
+                for variant_id in CALIBRATION_VARIANT_IDS
+            )
+
+    candidate_metrics = reduce_predictions(all_predictions).as_dict()
+    incumbent_metrics = reduce_predictions(incumbent_predictions).as_dict()
+    intervals = event_block_bootstrap_delta(
+        all_predictions,
+        incumbent_predictions,
+        iterations=int(profile["bootstrap"]["iterations"]),
+        seed=int(profile["bootstrap"]["seed"]),
+    )
+    metric_deltas = {
+        name: candidate_metrics[name] - incumbent_metrics[name]
+        for name in ("log_loss", "brier", "calibration_intercept", "calibration_slope", "ece", "accuracy")
+    }
+    decision = promotion_decision(metric_deltas, intervals)
+    adaptive_signal = {
+        "selected_variants": [selection["variant_id"] for selection in selections],
+        "fold_log_loss": {
+            str(year): candidate_metrics["fold_metrics"][str(year)]["log_loss"]
+            for year in (2022, 2023, 2024, 2025)
+        },
+        "pooled_log_loss_delta": metric_deltas["log_loss"],
+        "pooled_ece_delta": metric_deltas["ece"],
+    }
+    lineage_audit = {
+        "negative_control": negative_control,
+        "accepted_fold_lineage": [selection.get("lineage_audit") for selection in selections],
+        "base_model_retrain_count": 0,
+        "gate_access_count": gate["protected_access_count"],
+    }
+    _write_json(artifact_root / "lineage-audit.json", lineage_audit)
+    result = {
+        "experiment_id": EXPERIMENT_ID,
+        "status": "complete",
+        "metrics": candidate_metrics,
+        "incumbent_metrics": incumbent_metrics,
+        "metric_deltas": metric_deltas,
+        "paired_event_block_intervals": intervals,
+        "promotion_decision": decision,
+        "selected_variants": [selection["variant_id"] for selection in selections],
+        "adaptive_signal_for_family_04": adaptive_signal,
+        "gate_access_count": gate["protected_access_count"],
+        "base_model_retrain_count": 0,
+    }
+    _write_json(artifact_root / "result.json", result)
+    inventory = tree_inventory(artifact_root)
+
+    run_root = campaign_root / f"runs/{EXPERIMENT_ID}"
+    _write_jsonl(run_root / "attempts.jsonl", attempts)
+    (run_root / "decision.md").write_text(
+        f"# Family 3 decision\n\n{decision['action']}: {decision['rule']}.\n",
+        encoding="utf-8",
+    )
+    manifest = {
+        **result,
+        "kind": "family",
+        "exit_state": "complete",
+        "artifact_path": "artifacts/04-family-03-temporal-calibration",
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "profile_path": "profiles/family-03-temporal-calibration.json",
+        "profile_sha256": canonical_sha256(profile),
+        "preregistration_path": f"runs/{EXPERIMENT_ID}/preregistration.json",
+        "lineage_preregistration_path": f"runs/{EXPERIMENT_ID}/lineage-preregistration.json",
+        "attempts_path": f"runs/{EXPERIMENT_ID}/attempts.jsonl",
+        "fold_predictions": fold_predictions,
+        "selections": selections,
+        "lineage_audit_path": "lineage-audit.json",
+        "source_revision": source_revision,
+        "terminal_failure": None,
+    }
+    manifest_path = run_root / "manifest.json"
+    _write_json(manifest_path, manifest)
+    registry = _append_registry_record(
+        campaign_root,
+        {
+            "artifact_path": manifest["artifact_path"],
+            "artifact_tree_sha256": inventory.tree_sha256,
+            "experiment_id": EXPERIMENT_ID,
+            "kind": "family",
+            "manifest_path": f"runs/{EXPERIMENT_ID}/manifest.json",
+            "manifest_sha256": file_sha256(manifest_path),
+            "profile_path": manifest["profile_path"],
+            "profile_sha256": manifest["profile_sha256"],
+            "status": "complete",
+        },
+    )
+    return {**result, **registry, "artifact_tree_sha256": inventory.tree_sha256}
