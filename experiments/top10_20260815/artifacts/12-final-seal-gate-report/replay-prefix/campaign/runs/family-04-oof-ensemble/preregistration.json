@@ -1,0 +1,36 @@
+{
+  "constituent_artifact_tree_sha256": {
+    "horizon-recency": "698E4AC135A8ABEB77716E7C4C5A56DD20DB57F9EF60623182BC24AB837522DA",
+    "temporal-calibrated": "4B66DF347714A9A1656BAEB1D70C4B752B1605DA864D7CACFE46F58F3B6991E8",
+    "weighted-v8-control": "B2E83125540C7DACF6B1138C9E2C5DEB0DEE0C619217C472D6EA76D5B482BA09"
+  },
+  "experiment_id": "family-04-chronological-oof-ensemble",
+  "family_number": 4,
+  "fit_role": "inner-chronological-oof",
+  "foundation_aggregate_cap": 0.6,
+  "frozen_spec_sha256": "93FB5CC31AD810B1867FFC8A250DD257AAF74732998D103D56AB8D3A2D309A23",
+  "gate_required_state": "closed-zero-access",
+  "outer_label_roles": [
+    "final-metrics-only"
+  ],
+  "preregistered_recipe_ids": [
+    "best-single",
+    "current-autogluon-tune-ensemble",
+    "median-probability-blend",
+    "rank-probability-blend",
+    "regularized-nonnegative-oof-blend"
+  ],
+  "profile_path": "profiles/family-04-oof-ensemble.json",
+  "profile_sha256": "A4D73965F44224BABD442C9555F025045706384504C2B4A0BCF9DADE189F3C52",
+  "registry_prefix_sha256_before": "BAB7A9FBBFCFEA0D024DBBA8F338805CB1EBAB1B578AE663CF5E3862239C7C7D",
+  "regularization_shrinkage": 0.15,
+  "scoring_state": "not-started",
+  "solver": {
+    "algorithm": "projected-gradient-log-loss",
+    "learning_rate": 0.05,
+    "max_iterations": 4000,
+    "seed": null,
+    "tolerance": 1e-12
+  },
+  "terminal_failure_rule": "Missing, mismatched, future, FULL, context-contaminated, unregistered, or cap-violating constituents terminate before fit or score with no retry."
+}
