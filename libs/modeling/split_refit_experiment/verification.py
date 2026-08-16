@@ -631,7 +631,9 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "full-data-refit-recovery",
         "full-data-refit-lineage-correction",
     ]
-    if [record.get("record_id") for record in records] != expected_ids:
+    actual_ids = [record.get("record_id") for record in records]
+    allowed_ids = [expected_ids, [*expected_ids, "final-evidence-report"]]
+    if actual_ids not in allowed_ids:
         raise RefitVerificationError("registry does not have the exact full-refit sequence")
     if hashlib.sha256(b"".join(lines[:4])).hexdigest().upper() != EXPECTED_REGISTRY_PREFIX:
         raise RefitVerificationError("post-evaluation registry prefix changed")
@@ -668,7 +670,7 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "last_record_sha256": previous,
     }
     _same(head, expected_head, "full-refit registry head")
-    return {"record_ids": expected_ids, "prefix_sha256": expected_head["registry_prefix_sha256"]}
+    return {"record_ids": actual_ids, "prefix_sha256": expected_head["registry_prefix_sha256"]}
 
 
 def _refit_git_scope(repo: Path) -> list[str]:
@@ -688,8 +690,13 @@ def _refit_git_scope(repo: Path) -> list[str]:
         "libs/modeling/split_refit_experiment/verification.py",
         "tests/test_modeling/test_split_refit_refit.py",
         "tests/test_modeling/test_split_refit_verification.py",
+        "tests/test_modeling/test_split_refit_report.py",
+        "libs/modeling/split_refit_experiment/report.py",
         "experiments/split_refit_20260816/registry.jsonl",
         "experiments/split_refit_20260816/registry-head.json",
+        "experiments/split_refit_20260816/report.json",
+        "experiments/split_refit_20260816/report.md",
+        "experiments/split_refit_20260816/final-manifest.json",
     }
     allowed_prefix = "experiments/split_refit_20260816/runs/full-data-refit/"
     unexpected = [path for path in paths if path not in allowed_files and not path.startswith(allowed_prefix)]

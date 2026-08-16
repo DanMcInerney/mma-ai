@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import shutil
 from pathlib import Path
 
@@ -119,6 +121,25 @@ def _copy_report_inputs(destination: Path) -> Path:
         target = destination / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(CAMPAIGN / relative, target)
+    registry_path = destination / "registry.jsonl"
+    lines = [line.replace(b"\r\n", b"\n") for line in registry_path.read_bytes().splitlines(keepends=True)[:7]]
+    prefix = b"".join(lines)
+    registry_path.write_bytes(prefix)
+    records = [json.loads(line) for line in lines]
+    (destination / "registry-head.json").write_text(
+        json.dumps(
+            {
+                "last_record_sha256": records[-1]["record_sha256"],
+                "record_count": 7,
+                "registry_bytes": len(prefix),
+                "registry_prefix_sha256": hashlib.sha256(prefix).hexdigest().upper(),
+            },
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     return destination
 
 
