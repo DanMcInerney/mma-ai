@@ -207,6 +207,22 @@ def test_refit_documents_admit_full_data_without_validation_claim():
     assert verified["validation_claims"] == []
 
 
+def test_refit_documents_admit_preserved_post_fit_evidence_failure_without_retry():
+    attempts, result = _refit_documents()
+    attempts[-1]["exit_code"] = 1
+    result["post_fit_evidence_recovery"] = {
+        "training_completed": True,
+        "refit_full_completed": True,
+        "retry_count": 0,
+        "failure_preserved": True,
+    }
+    verified = validate_refit_documents(attempts=attempts, result=result)
+    assert verified["post_fit_evidence_recovery"] is True
+    result["post_fit_evidence_recovery"]["retry_count"] = 1
+    with pytest.raises(RefitVerificationError, match="recovery"):
+        validate_refit_documents(attempts=attempts, result=result)
+
+
 @pytest.mark.parametrize(
     "mutation", ["rows", "retry", "validation", "clone", "context", "database"]
 )

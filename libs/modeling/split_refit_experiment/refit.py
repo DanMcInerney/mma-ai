@@ -100,6 +100,22 @@ def validate_full_population(fight_ids: Sequence[Any]) -> list[str]:
     return values
 
 
+def validate_saved_population(
+    saved_fight_ids: Sequence[Any], expected_fight_ids: Sequence[Any]
+) -> dict[str, Any]:
+    saved = validate_full_population(saved_fight_ids)
+    expected = validate_full_population(expected_fight_ids)
+    if set(saved) != set(expected):
+        raise RefitError("saved full-data population membership differs from preregistration")
+    return {
+        "membership_equal": True,
+        "order_equal": saved == expected,
+        "expected_order_sha256": canonical_sha256(expected),
+        "saved_order_sha256": canonical_sha256(saved),
+        "membership_sha256": canonical_sha256(sorted(saved)),
+    }
+
+
 def build_refit_invocation(
     *,
     source_csv: str | Path,
@@ -414,6 +430,95 @@ def _native_tree(model_root: Path) -> dict[str, Any]:
     return {"file_count": len(included), "sha256": canonical_sha256(included), "files": included}
 
 
+def _build_refit_result(
+    *,
+    paths: Mapping[str, Path],
+    source_csv: Path,
+    predictor: Any,
+    prereg: Mapping[str, Any],
+    preflight: Mapping[str, Any],
+    runtime: Mapping[str, Any],
+    recovery: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    source_before = file_sha256(source_csv)
+    saved_training = pd.read_csv(
+        paths["model"] / "training_data.csv",
+        usecols=["fight_id"],
+        dtype={"fight_id": "string"},
+    )
+    saved_ids = validate_full_population(saved_training["fight_id"].astype(str).tolist())
+    expected_ids = _load_population_ids(paths["campaign"])
+    population = validate_saved_population(saved_ids, expected_ids)
+    if population["expected_order_sha256"] != prereg["fight_ids_sha256"]:
+        raise RefitError("preregistered full-data population identity changed")
+    names = [str(name) for name in predictor.model_names()]
+    originals = [
+        name
+        for name in names
+        if not name.endswith("_FULL") and not name.startswith("WeightedEnsemble")
+    ]
+    if tuple(originals) != EXPECTED_BASE_MODELS:
+        raise RefitError("saved Original graph differs from ten-model weighted-v8 portfolio")
+    if not any(name.endswith("_FULL") for name in names):
+        raise RefitError("named production profile did not create FULL nodes")
+    model_info = _standard_model_info(predictor)
+    prediction_hashes, probe = prediction_identities(predictor, paths["model"])
+    lineage = classify_saved_lineage(model_info, prediction_hashes, total_rows=len(saved_ids))
+    graph = [
+        {
+            "name": name,
+            "model_type": model_info[name]["model_type"],
+            "dependencies": sorted(model_info[name]["weights"]),
+            "weights": model_info[name]["weights"],
+        }
+        for name in names
+    ]
+    scaler_path = paths["model"] / "scaler.pkl"
+    if not scaler_path.is_file():
+        raise RefitError("full-data predictor scaler is missing")
+    result = {
+        "schema_version": 1,
+        "state": "complete",
+        "created_at_utc": utc_now(),
+        "profile_name": PROFILE_NAME,
+        "profile_sha256": prereg["profile_sha256"],
+        "profile": prereg["profile"],
+        "feature_count": 40,
+        "feature_sha256": prereg["feature_sha256"],
+        "source_csv_path": str(source_csv),
+        "source_sha256": source_before,
+        "source_rows": len(saved_ids),
+        "fight_ids_sha256": population["saved_order_sha256"],
+        "population": population,
+        "fit_invocation_count": 1,
+        "invocation": prereg["invocation"],
+        "test_guided_config_delta": False,
+        "evaluation_result_is_config_input": False,
+        "model_root": str(paths["model"].resolve()),
+        "selected_node": str(predictor.model_best),
+        "classes": [_json_safe(value) for value in predictor.class_labels],
+        "model_graph": graph,
+        "lineage": lineage,
+        "prediction_probe": probe,
+        "prediction_hashes": prediction_hashes,
+        "scaler_path": str(scaler_path.resolve()),
+        "scaler_sha256": file_sha256(scaler_path),
+        "runtime": dict(runtime),
+        "seeds": SEEDS,
+        "complete_tree": tree_identity(paths["model"]),
+        "native_tree": _native_tree(paths["model"]),
+        "validation_claims": [],
+        "full_and_context_metrics_admissible": False,
+        "database_access": False,
+        "registry_before_sha256": preflight["registry_before_sha256"],
+        "preservation_before": preflight["preservation"],
+    }
+    if recovery is not None:
+        result["post_fit_evidence_recovery"] = dict(recovery)
+    _write_json(paths["result"], result)
+    return result
+
+
 def refit_child(campaign_root: Path, *, source_csv: Path) -> dict[str, Any]:
     from libs.modeling import training_profiles
     from libs.modeling.train import FileManager, training_runtime_preflight
@@ -452,69 +557,14 @@ def refit_child(campaign_root: Path, *, source_csv: Path) -> dict[str, Any]:
             os.environ["MMA_AI_DATA_DIR"] = old_data_dir
     if file_sha256(source_csv) != source_before:
         raise RefitError("sealed source changed during production invocation")
-    saved_training = pd.read_csv(paths["model"] / "training_data.csv", usecols=["fight_id"])
-    saved_ids = validate_full_population(saved_training["fight_id"].astype(str).tolist())
-    if canonical_sha256(saved_ids) != prereg["fight_ids_sha256"]:
-        raise RefitError("saved full-data population/order differs from preregistration")
-    names = [str(name) for name in predictor.model_names()]
-    originals = [name for name in names if not name.endswith("_FULL") and not name.startswith("WeightedEnsemble")]
-    if tuple(originals) != EXPECTED_BASE_MODELS:
-        raise RefitError("saved Original graph differs from ten-model weighted-v8 portfolio")
-    if not any(name.endswith("_FULL") for name in names):
-        raise RefitError("named production profile did not create FULL nodes")
-    model_info = _standard_model_info(predictor)
-    prediction_hashes, probe = prediction_identities(predictor, paths["model"])
-    lineage = classify_saved_lineage(model_info, prediction_hashes, total_rows=len(saved_ids))
-    graph = [
-        {
-            "name": name,
-            "model_type": model_info[name]["model_type"],
-            "dependencies": sorted(model_info[name]["weights"]),
-            "weights": model_info[name]["weights"],
-        }
-        for name in names
-    ]
-    scaler_path = paths["model"] / "scaler.pkl"
-    if not scaler_path.is_file():
-        raise RefitError("full-data predictor scaler is missing")
-    result = {
-        "schema_version": 1,
-        "state": "complete",
-        "created_at_utc": utc_now(),
-        "profile_name": PROFILE_NAME,
-        "profile_sha256": prereg["profile_sha256"],
-        "profile": profile,
-        "feature_count": 40,
-        "feature_sha256": prereg["feature_sha256"],
-        "source_csv_path": str(source_csv),
-        "source_sha256": source_before,
-        "source_rows": len(saved_ids),
-        "fight_ids_sha256": canonical_sha256(saved_ids),
-        "fit_invocation_count": 1,
-        "invocation": prereg["invocation"],
-        "test_guided_config_delta": False,
-        "evaluation_result_is_config_input": False,
-        "model_root": str(paths["model"].resolve()),
-        "selected_node": str(predictor.model_best),
-        "classes": [_json_safe(value) for value in predictor.class_labels],
-        "model_graph": graph,
-        "lineage": lineage,
-        "prediction_probe": probe,
-        "prediction_hashes": prediction_hashes,
-        "scaler_path": str(scaler_path.resolve()),
-        "scaler_sha256": file_sha256(scaler_path),
-        "runtime": runtime,
-        "seeds": SEEDS,
-        "complete_tree": tree_identity(paths["model"]),
-        "native_tree": _native_tree(paths["model"]),
-        "validation_claims": [],
-        "full_and_context_metrics_admissible": False,
-        "database_access": False,
-        "registry_before_sha256": preflight["registry_before_sha256"],
-        "preservation_before": preflight["preservation"],
-    }
-    _write_json(paths["result"], result)
-    return result
+    return _build_refit_result(
+        paths=paths,
+        source_csv=source_csv,
+        predictor=predictor,
+        prereg=prereg,
+        preflight=preflight,
+        runtime=runtime,
+    )
 
 
 def launch_refit(
@@ -642,14 +692,95 @@ def launch_refit(
     }
 
 
+def recover_refit_evidence(campaign_root: Path) -> dict[str, Any]:
+    """Register an already-complete tree after a post-fit evidence-only failure."""
+    from autogluon.tabular import TabularPredictor
+
+    paths = _paths(campaign_root)
+    if paths["result"].exists():
+        raise RefitError("post-fit evidence recovery is append-once")
+    attempts = read_jsonl(paths["attempts"])
+    assert_single_refit_attempt(attempts, require_success=False)
+    if attempts[-1].get("exit_code") != 1 or not paths["failure"].is_file():
+        raise RefitError("recovery requires the preserved post-fit evidence failure")
+    stderr = Path(attempts[-1]["stderr_path"]).read_text(encoding="utf-8", errors="replace")
+    required = (
+        'AutoGluon training complete',
+        'Refit complete',
+        'Completed 5 of 5 shuffle sets',
+        'saved full-data population/order differs from preregistration',
+    )
+    if any(token not in stderr for token in required):
+        raise RefitError("preserved log does not prove completed fit/refit/importance before failure")
+    prereg = _read_json(paths["preregistration"])
+    preflight = _read_json(paths["preflight"])
+    source_csv = Path(prereg["source_csv_path"])
+    tree_before = tree_identity(paths["model"])
+    predictor = TabularPredictor.load(str(paths["model"]))
+    recovery = {
+        "training_completed": True,
+        "refit_full_completed": True,
+        "permutation_importance_completed": True,
+        "production_process_exit_code": 1,
+        "failure_stage": "post-fit population-order evidence assertion",
+        "failure_preserved": True,
+        "failure_sha256": file_sha256(paths["failure"]),
+        "retry_count": 0,
+        "model_mutation": False,
+    }
+    result = _build_refit_result(
+        paths=paths,
+        source_csv=source_csv,
+        predictor=predictor,
+        prereg=prereg,
+        preflight=preflight,
+        runtime=preflight["runtime"],
+        recovery=recovery,
+    )
+    if tree_identity(paths["model"]) != tree_before:
+        raise RefitError("read-only post-fit recovery mutated the model tree")
+    result_sha = file_sha256(paths["result"])
+    append_registry_record(
+        paths["campaign"],
+        record_id="full-data-refit-recovery",
+        payload={
+            "kind": "full-data-refit-recovery",
+            "artifact_path": f"runs/{RUN_ID}/refit.json",
+            "artifact_sha256": result_sha,
+            "model_tree_sha256": result["complete_tree"]["sha256"],
+            "preserved_failure_path": f"runs/{RUN_ID}/fit-failure.json",
+            "preserved_failure_sha256": recovery["failure_sha256"],
+        },
+    )
+    return {
+        "status": "complete-model-after-post-fit-evidence-failure",
+        "result_sha256": result_sha,
+        "model_tree_sha256": result["complete_tree"]["sha256"],
+        "retry_count": 0,
+    }
+
+
 def verify_refit_attempt(campaign_root: Path, *, strict: bool) -> dict[str, Any]:
     if not strict:
         raise RefitError("refit attempt verification requires --strict")
     paths = _paths(campaign_root)
     attempts = read_jsonl(paths["attempts"])
-    assert_single_refit_attempt(attempts, require_success=True)
+    result = _read_json(paths["result"]) if paths["result"].is_file() else {}
+    recovery = result.get("post_fit_evidence_recovery")
+    assert_single_refit_attempt(attempts, require_success=recovery is None)
+    if recovery is not None and (
+        attempts[-1].get("exit_code") != 1
+        or recovery.get("retry_count") != 0
+        or recovery.get("failure_preserved") is not True
+    ):
+        raise RefitError("post-fit evidence recovery contract changed")
     for noun in ("stdout", "stderr"):
         path = Path(attempts[-1][f"{noun}_path"])
         if file_sha256(path) != attempts[-1][f"{noun}_sha256"]:
             raise RefitError(f"refit {noun} log identity changed")
-    return {"status": "PASS", "attempts": attempts}
+    return {
+        "status": "PASS",
+        "attempts": attempts,
+        "post_fit_evidence_recovery": recovery is not None,
+        "retry_count": 0,
+    }

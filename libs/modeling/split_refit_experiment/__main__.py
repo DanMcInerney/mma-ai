@@ -49,6 +49,8 @@ def _parser() -> argparse.ArgumentParser:
     refit_child = commands.add_parser("refit-child", help=argparse.SUPPRESS)
     refit_child.add_argument("--campaign", type=Path, required=True)
     refit_child.add_argument("--source-csv", type=Path, required=True)
+    recover_refit = commands.add_parser("recover-refit-evidence")
+    recover_refit.add_argument("--campaign", type=Path, required=True)
     verify_attempt = commands.add_parser("verify-refit-attempt")
     verify_attempt.add_argument("--campaign", type=Path, required=True)
     verify_attempt.add_argument("--strict", action="store_true")
@@ -117,6 +119,10 @@ def main() -> int:
         from .refit import refit_child
 
         result = refit_child(args.campaign, source_csv=args.source_csv)
+    elif args.command == "recover-refit-evidence":
+        from .refit import recover_refit_evidence
+
+        result = recover_refit_evidence(args.campaign)
     elif args.command == "verify-refit-attempt":
         from .refit import verify_refit_attempt
 

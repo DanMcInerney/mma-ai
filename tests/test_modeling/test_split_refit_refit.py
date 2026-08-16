@@ -14,12 +14,20 @@ from libs.modeling.split_refit_experiment.refit import (
     classify_saved_lineage,
     validate_full_population,
     validate_named_profile,
+    validate_saved_population,
 )
 
 
 @pytest.mark.parametrize(
     "command",
-    ["preflight-refit", "fit-refit", "refit-child", "verify-refit-attempt", "verify-refit"],
+    [
+        "preflight-refit",
+        "fit-refit",
+        "refit-child",
+        "recover-refit-evidence",
+        "verify-refit-attempt",
+        "verify-refit",
+    ],
 )
 def test_refit_cli_commands_are_explicit_named_entrypoints(command: str):
     arguments = [command, "--campaign", "campaign"]
@@ -37,6 +45,18 @@ def test_registered_identity_canonicalizes_tracked_crlf_json(tmp_path):
     artifact.write_bytes(b'{"a":1}\r\n')
     expected = hashlib.sha256(b'{"a":1}\n').hexdigest().upper()
     assert _registered_file_sha256(artifact) == expected
+
+
+def test_saved_population_requires_exact_membership_but_records_native_order():
+    expected = [str(value) for value in range(3267)]
+    actual = expected.copy()
+    actual[169], actual[170] = actual[170], actual[169]
+    identity = validate_saved_population(actual, expected)
+    assert identity["membership_equal"] is True
+    assert identity["order_equal"] is False
+    assert identity["expected_order_sha256"] != identity["saved_order_sha256"]
+    with pytest.raises(RefitError, match="membership"):
+        validate_saved_population(actual[:-1] + ["missing"], expected)
 
 
 def _profile() -> dict[str, object]:

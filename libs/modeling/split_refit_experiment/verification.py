@@ -117,10 +117,19 @@ def validate_refit_documents(
 ) -> dict[str, Any]:
     from .refit import RefitError, assert_single_refit_attempt
 
+    recovery = result.get("post_fit_evidence_recovery")
     try:
-        assert_single_refit_attempt(attempts, require_success=True)
+        assert_single_refit_attempt(attempts, require_success=recovery is None)
     except RefitError as exc:
         raise RefitVerificationError(str(exc)) from exc
+    if recovery is not None and (
+        attempts[-1].get("exit_code") != 1
+        or recovery.get("training_completed") is not True
+        or recovery.get("refit_full_completed") is not True
+        or recovery.get("failure_preserved") is not True
+        or recovery.get("retry_count") != 0
+    ):
+        raise RefitVerificationError("post-fit evidence recovery contract changed")
     if result.get("state") != "complete":
         raise RefitVerificationError("refit result is not complete")
     if result.get("profile_name") != "v8-hybrid-weighted":
@@ -150,6 +159,7 @@ def validate_refit_documents(
         "feature_count": 40,
         "validation_claims": [],
         "node_count": len(lineage),
+        "post_fit_evidence_recovery": recovery is not None,
     }
 
 
@@ -352,7 +362,8 @@ def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
         "split-materialization",
         "evaluation-selection",
         "evaluation-result",
-        "full-data-refit",
+        "full-data-refit-failure",
+        "full-data-refit-recovery",
     ]
     if [record.get("record_id") for record in records] != expected_ids:
         raise RefitVerificationError("registry does not have the exact full-refit sequence")
