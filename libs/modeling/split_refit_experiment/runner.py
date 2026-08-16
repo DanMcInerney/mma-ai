@@ -324,7 +324,12 @@ def gpu_process_snapshot() -> dict[str, Any]:
         check=False,
     )
     rows = [line.strip() for line in completed.stdout.splitlines() if line.strip()]
-    python_rows = [line for line in rows if "python" in line.lower()]
+    own_prefix = f"{os.getpid()},"
+    python_rows = [
+        line
+        for line in rows
+        if "python" in line.lower() and not line.startswith(own_prefix)
+    ]
     if completed.returncode or python_rows:
         raise EvaluationError(f"GPU process preflight failed; active Python rows: {python_rows}")
     return {"exit_code": completed.returncode, "rows": rows, "python_rows": python_rows}
