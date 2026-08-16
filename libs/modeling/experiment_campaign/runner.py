@@ -44,6 +44,7 @@ FIXED_FAMILY_5_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\06-family-05-semantic-portfolio"
 )
+FAMILY_5_RUN_ALIAS = "family-05-semantic-portfolio"
 FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_3 = (
     "C5F8E37AEC82E0AEFDAAE6EECF7A89E55EFDC04788884FFA504105F131C752BB"
 )
@@ -171,7 +172,7 @@ def verify_family_run(
     recompute_all: bool,
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
-    if experiment_id == CAMPAIGN_FAMILY_IDS[4]:
+    if experiment_id in (CAMPAIGN_FAMILY_IDS[4], FAMILY_5_RUN_ALIAS):
         return _verify_family_5_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[3]:
         return _verify_family_4_run(campaign_root, recompute_all=recompute_all)

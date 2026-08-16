@@ -191,3 +191,13 @@ def test_actual_campaign_has_terminal_semantic_portfolio_result() -> None:
     assert result["outer_label_selection_count"] == 0
     assert result["combined_row_importance_used"] is False
     assert all(result["selected_features_by_fold"])
+
+
+def test_ticket_named_verify_run_alias_resolves_terminal_family() -> None:
+    result = verify_family_run(
+        Path("experiments/top10_20260815"),
+        "family-05-semantic-portfolio",
+        recompute_all=False,
+    )
+    assert result["experiment_id"] == "family-05-stable-semantic-portfolio"
+    assert result["status"] == "complete"
