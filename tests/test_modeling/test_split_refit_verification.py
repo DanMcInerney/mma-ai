@@ -7,9 +7,11 @@ import pytest
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
 from libs.modeling.split_refit_experiment.verification import (
     BranchVerificationError,
+    EXPECTED_BRANCH_REVISIONS,
     EvaluationVerificationError,
     RefitVerificationError,
     validate_branch_documents,
+    verify_branches,
     has_database_token,
     validate_evaluation_documents,
     validate_refit_documents,
@@ -41,6 +43,12 @@ def test_branch_documents_require_exact_separate_refs_and_rollback_merge_base():
     ]
     with pytest.raises(BranchVerificationError, match="distinct"):
         validate_branch_documents(actual, merge_bases, aliased)
+
+
+def test_live_campaign_branches_replay_without_moving_refs():
+    verified = verify_branches(Path("experiments/split_refit_20260816"), repo=Path.cwd(), strict=True)
+    assert verified["status"] == "PASS"
+    assert verified["revisions"] == EXPECTED_BRANCH_REVISIONS
 
 
 def _documents():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import shutil
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from libs.modeling.split_refit_experiment.report import (
     build_report,
     render_report_markdown,
     validate_report_documents,
+    write_final_report,
 )
 
 
@@ -90,3 +92,43 @@ def test_markdown_uses_precise_retrospective_and_refit_language():
     assert "No validation metric is claimed for the full-data refit" in text
     assert "RealMLP_r9_FULL is an Original clone fitted on 2,807 rows" in text
 
+
+def _copy_report_inputs(destination: Path) -> Path:
+    for relative in (
+        "rollback-manifest.json",
+        "partitions/manifest.json",
+        "runs/80-10-10-evaluation/evaluation.json",
+        "runs/80-10-10-evaluation/selection.json",
+        "runs/full-data-refit/refit-lineage-correction.json",
+        "runs/full-data-refit/fit-failure.json",
+        "registry.jsonl",
+        "registry-head.json",
+    ):
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(CAMPAIGN / relative, target)
+    return destination
+
+
+def test_final_report_write_is_append_once_and_does_not_open_predictions_or_models(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    import libs.modeling.split_refit_experiment.report as report_module
+
+    campaign = _copy_report_inputs(tmp_path / "campaign")
+    opened: list[str] = []
+    original = report_module._read_json
+
+    def recording_read(path: Path):
+        opened.append(Path(path).as_posix())
+        return original(path)
+
+    monkeypatch.setattr(report_module, "_read_json", recording_read)
+    result = write_final_report(campaign)
+    assert result["registry_record_id"] == "final-evidence-report"
+    assert (campaign / "report.json").is_file()
+    assert (campaign / "report.md").is_file()
+    assert (campaign / "final-manifest.json").is_file()
+    assert not any("prediction" in path or "model" in path or "access" in path for path in opened)
+    with pytest.raises(ReportError, match="already exists"):
+        write_final_report(campaign)
