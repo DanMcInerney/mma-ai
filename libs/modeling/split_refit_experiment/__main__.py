@@ -38,6 +38,27 @@ def _parser() -> argparse.ArgumentParser:
     verify = commands.add_parser("verify-evaluation")
     verify.add_argument("--campaign", type=Path, required=True)
     verify.add_argument("--recompute-all", action="store_true")
+    preflight_refit = commands.add_parser("preflight-refit")
+    preflight_refit.add_argument("--campaign", type=Path, required=True)
+    preflight_refit.add_argument("--source-csv", type=Path, required=True)
+    preflight_refit.add_argument("--strict", action="store_true")
+    fit_refit = commands.add_parser("fit-refit")
+    fit_refit.add_argument("--campaign", type=Path, required=True)
+    fit_refit.add_argument("--source-csv", type=Path, required=True)
+    fit_refit.add_argument("--timeout-seconds", type=int, default=3900)
+    refit_child = commands.add_parser("refit-child", help=argparse.SUPPRESS)
+    refit_child.add_argument("--campaign", type=Path, required=True)
+    refit_child.add_argument("--source-csv", type=Path, required=True)
+    recover_refit = commands.add_parser("recover-refit-evidence")
+    recover_refit.add_argument("--campaign", type=Path, required=True)
+    correct_refit = commands.add_parser("correct-refit-lineage")
+    correct_refit.add_argument("--campaign", type=Path, required=True)
+    verify_attempt = commands.add_parser("verify-refit-attempt")
+    verify_attempt.add_argument("--campaign", type=Path, required=True)
+    verify_attempt.add_argument("--strict", action="store_true")
+    verify_refit = commands.add_parser("verify-refit")
+    verify_refit.add_argument("--campaign", type=Path, required=True)
+    verify_refit.add_argument("--recompute-lineage", action="store_true")
     return parser
 
 
@@ -78,10 +99,44 @@ def main() -> int:
         from .runner import score_evaluation
 
         result = score_evaluation(args.campaign, source_csv=args.source_csv)
-    else:
+    elif args.command == "verify-evaluation":
         from .verification import verify_evaluation
 
         result = verify_evaluation(args.campaign, recompute_all=args.recompute_all)
+    elif args.command == "preflight-refit":
+        if not args.strict:
+            raise ValueError("full-data refit preflight requires --strict")
+        from .refit import durable_refit_preflight
+
+        result = durable_refit_preflight(args.campaign, source_csv=args.source_csv)
+    elif args.command == "fit-refit":
+        from .refit import launch_refit
+
+        result = launch_refit(
+            args.campaign,
+            source_csv=args.source_csv,
+            timeout_seconds=args.timeout_seconds,
+        )
+    elif args.command == "refit-child":
+        from .refit import refit_child
+
+        result = refit_child(args.campaign, source_csv=args.source_csv)
+    elif args.command == "recover-refit-evidence":
+        from .refit import recover_refit_evidence
+
+        result = recover_refit_evidence(args.campaign)
+    elif args.command == "correct-refit-lineage":
+        from .refit import correct_refit_lineage
+
+        result = correct_refit_lineage(args.campaign)
+    elif args.command == "verify-refit-attempt":
+        from .refit import verify_refit_attempt
+
+        result = verify_refit_attempt(args.campaign, strict=args.strict)
+    else:
+        from .verification import verify_refit
+
+        result = verify_refit(args.campaign, recompute_lineage=args.recompute_lineage)
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))
     return 0
 
