@@ -128,7 +128,7 @@ def test_rollback_instructions_select_only_the_immutable_worktree_and_name_profi
     )
     assert "C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline" in commands
     assert "C:/Users/danhm/mma-ai/mma-ai" not in commands
-    assert "rev-parse HEAD^{tree}" in commands
+    assert "rev-parse 'HEAD^{tree}'" in commands
     assert "get_training_profile('v8-hybrid-weighted')" in commands
     assert "train_profile('v8-hybrid-weighted')" in commands
     assert rollback["verification_changes_production"] is False
@@ -137,6 +137,7 @@ def test_rollback_instructions_select_only_the_immutable_worktree_and_name_profi
 
 def _copy_report_inputs(destination: Path) -> Path:
     for relative in (
+        "artifact-handoffs.json",
         "rollback-manifest.json",
         "partitions/manifest.json",
         "profiles/evaluation.json",

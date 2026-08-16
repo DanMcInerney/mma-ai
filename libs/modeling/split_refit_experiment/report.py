@@ -96,6 +96,7 @@ def build_report(campaign_root: Path) -> dict[str, Any]:
     selection = _read_json(root / "runs/80-10-10-evaluation/selection.json")
     refit = _read_json(root / "runs/full-data-refit/refit-lineage-correction.json")
     failure = _read_json(root / "runs/full-data-refit/fit-failure.json")
+    handoffs = _read_json(root / "artifact-handoffs.json")
 
     accepted = rollback["evaluation"]["accepted_direct_validation"]
     nested = rollback["evaluation"]["nested_historical"]["metrics"]
@@ -181,30 +182,56 @@ def build_report(campaign_root: Path) -> dict[str, Any]:
             "post_fit_evidence_recovery": refit["post_fit_evidence_recovery"],
         },
         "branches": {
-            "rollback": {
-                "name": "codex/weighted-v8-67-baseline",
-                "revision": ROLLBACK_REVISION,
-            },
-            "evaluation": {
-                "name": "codex/exp-80-10-10-v8-20260816",
-                "revision": EVALUATION_REVISION,
-                "merge_base": ROLLBACK_REVISION,
-            },
-            "full_refit": {
-                "name": "codex/exp-full-refit-v8-20260816",
-                "revision": FULL_REFIT_REVISION,
-                "merge_base": ROLLBACK_REVISION,
+            key: {
+                "name": name,
+                "revision": handoffs["branch_worktrees"][name]["head"],
+                "tree": handoffs["branch_worktrees"][name]["tree"],
+                "worktree": handoffs["branch_worktrees"][name]["path"],
+                "merge_base": handoffs["branch_worktrees"][name]["merge_base"],
+                "direct_cut_from_rollback": handoffs["branch_worktrees"][name][
+                    "direct_cut_from_rollback"
+                ],
+                "executor_branch": handoffs["branch_worktrees"][name]["executor_branch"],
+                "executor_baseline": handoffs["branch_worktrees"][name]["executor_baseline"],
+                "history_statement": handoffs["branch_worktrees"][name]["history_statement"],
+            }
+            for key, name in (
+                ("rollback", "codex/weighted-v8-67-baseline"),
+                ("evaluation", "codex/exp-80-10-10-v8-20260816"),
+                ("full_refit", "codex/exp-full-refit-v8-20260816"),
+            )
+        },
+        "artifact_handoffs": {
+            "manifest_path": "artifact-handoffs.json",
+            "manifest_sha256": file_sha256(root / "artifact-handoffs.json"),
+            "resolver_precedence": ["dedicated_destination", "executor_source"],
+            "dedicated_destinations": {
+                row["id"]: row["dedicated_destination"]["artifact_root"]
+                for row in handoffs["handoffs"]
             },
         },
         "rollback": {
             "named_profile": "v8-hybrid-weighted",
             "named_seam": 'libs.modeling.training_profiles.train_profile("v8-hybrid-weighted")',
-            "commands": [
-                "git -C C:/Users/danhm/mma-ai/mma-ai rev-parse codex/weighted-v8-67-baseline",
-                "git -C C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline rev-parse HEAD",
-                "git -C C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline status --short",
+            "selection_commands": [
+                "$RollbackWorktree = 'C:/Users/danhm/mma-ai/worktrees/weighted-v8-67-baseline'",
+                "Set-Location -LiteralPath $RollbackWorktree",
             ],
+            "verification_commands": [
+                "git rev-parse HEAD",
+                "git rev-parse 'HEAD^{tree}'",
+                "git status --porcelain",
+            ],
+            "profile_verification_command": "uv run python -c \"from libs.modeling.training_profiles import get_training_profile; p=get_training_profile('v8-hybrid-weighted'); assert p.model_type == 'win' and p.preset == 'hybrid' and p.refit_full is True\"",
+            "training_invocation": "uv run python -c \"from libs.modeling.training_profiles import train_profile; train_profile('v8-hybrid-weighted')\"",
+            "verification_changes_production": False,
+            "training_invocation_starts_new_fit": True,
             "expected_revision": ROLLBACK_REVISION,
+            "expected_tree": "82305ddf6160338bfab8e1e8e4e6dc3b82efc7bf",
+            "expected_status": "",
+            "expected_profile_sha256": rollback["reproduction"]["profile"]["canonical_sha256"],
+            "accepted_model_complete_tree_sha256": rollback["model_identity"]["complete_tree_sha256"],
+            "accepted_model_native_tree_sha256": rollback["model_identity"]["native_tree_sha256"],
         },
         "decision": {
             "recommendation": "retain-rollback",
@@ -292,6 +319,38 @@ def validate_report_documents(report: Mapping[str, Any]) -> None:
         or not decision.get("replace_if_all")
     ):
         raise ReportError("retain/replace decision predicates are incomplete")
+    branches = report.get("branches", {})
+    if branches.get("evaluation", {}).get("direct_cut_from_rollback") is not False or branches.get(
+        "full_refit", {}
+    ).get("direct_cut_from_rollback") is not False:
+        raise ReportError("experiment direct-cut history claim is false")
+    if branches.get("rollback", {}).get("direct_cut_from_rollback") is not True:
+        raise ReportError("rollback direct-cut identity is missing")
+    if branches.get("evaluation", {}).get("executor_baseline") != "4ef43de12db79252355e5b6f5ecd58ccdb4c6a06" or branches.get(
+        "full_refit", {}
+    ).get("executor_baseline") != "70233a10c24cc240f84584cc6979717c46abf51e":
+        raise ReportError("executor integration baselines changed")
+    rollback = report.get("rollback", {})
+    commands = [
+        *rollback.get("selection_commands", []),
+        *rollback.get("verification_commands", []),
+        rollback.get("profile_verification_command", ""),
+        rollback.get("training_invocation", ""),
+    ]
+    command_text = "\n".join(commands).lower()
+    if "c:/users/danhm/mma-ai/mma-ai" in command_text or any(
+        token in command_text for token in (" switch ", " checkout ", " reset ", " clean ")
+    ):
+        raise ReportError("rollback commands could mutate the dirty main checkout")
+    if (
+        "c:/users/danhm/mma-ai/worktrees/weighted-v8-67-baseline" not in command_text
+        or "rev-parse 'head^{tree}'" not in command_text
+        or "get_training_profile('v8-hybrid-weighted')" not in command_text
+        or "train_profile('v8-hybrid-weighted')" not in command_text
+        or rollback.get("verification_changes_production") is not False
+        or rollback.get("training_invocation_starts_new_fit") is not True
+    ):
+        raise ReportError("rollback selection, verification, or profile invocation is incomplete")
 
 
 def render_report_markdown(report: Mapping[str, Any]) -> str:
@@ -330,13 +389,23 @@ def render_report_markdown(report: Mapping[str, Any]) -> str:
         f"- evaluation: `codex/exp-80-10-10-v8-20260816` at `{EVALUATION_REVISION}`",
         f"- full refit: `codex/exp-full-refit-v8-20260816` at `{FULL_REFIT_REVISION}`",
         "",
-        "Verify the existing rollback worktree without touching the original dirty checkout:",
+        "The evaluation and full-refit refs have the rollback revision as their merge base, but were not directly cut from the rollback revision: their executors began from later integration baselines (`4ef43de...` and `70233a1...`). Each accepted ref now owns the dedicated worktree named above.",
+        "",
+        "Select and verify the immutable rollback worktree without touching the original dirty checkout:",
         "",
         "```powershell",
-        *report["rollback"]["commands"],
+        *report["rollback"]["selection_commands"],
+        *report["rollback"]["verification_commands"],
+        report["rollback"]["profile_verification_command"],
         "```",
         "",
-        "The first two commands must both print the fixed rollback revision above; the final command must print nothing.",
+        f"`HEAD` must be `{report['rollback']['expected_revision']}`, its tree must be `{report['rollback']['expected_tree']}`, and status must print nothing. These verification commands select a shell working directory and prove identities; verification itself does not switch production.",
+        "",
+        "If an operator intentionally wants to retrain this exact named profile, the profile-based invocation seam is below. It starts a new training run; it does not activate or switch a deployed model:",
+        "",
+        "```powershell",
+        report["rollback"]["training_invocation"],
+        "```",
         "",
         "## Replacement predicate",
         "",
@@ -349,7 +418,7 @@ def render_report_markdown(report: Mapping[str, Any]) -> str:
 def report_manifest(campaign_root: Path, report: Mapping[str, Any], markdown: str) -> dict[str, Any]:
     root = Path(campaign_root)
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "report_json_sha256": canonical_sha256(report),
         "report_markdown_sha256": canonical_sha256(markdown),
         "report_markdown_bytes_sha256": file_sha256(root / "report.md"),
@@ -359,6 +428,7 @@ def report_manifest(campaign_root: Path, report: Mapping[str, Any], markdown: st
             "evaluation": EVALUATION_REVISION,
             "full_refit": FULL_REFIT_REVISION,
         },
+        "artifact_handoffs_sha256": file_sha256(root / "artifact-handoffs.json"),
     }
 
 
