@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,12 @@ from libs.modeling.experiment_campaign.families.matchup_geometry import (
 )
 from libs.modeling.experiment_campaign.hashing import canonical_sha256, file_sha256
 from libs.modeling.experiment_campaign.protocol import initialize_gate
+from libs.modeling.experiment_campaign.runner import (
+    audit_campaign_safety,
+    validate_terminal_campaign,
+    verify_family_run,
+    verify_feature_lineage,
+)
 from libs.modeling.experiment_campaign.matchup_geometry import (
     MatchupGeometryError,
     build_directional_interactions,
@@ -216,3 +224,71 @@ def test_preregistration_freezes_all_profiles_before_construction(tmp_path: Path
     }
     with pytest.raises(ValueError, match="destinations must all be absent"):
         write_preregistration(campaign, source_revision="retry")
+
+
+def test_actual_campaign_has_pre_score_eight_profile_preregistration() -> None:
+    campaign = Path("experiments/top10_20260815")
+    profile_path = campaign / "profiles/family-07-matchup-geometry.json"
+    preregistration_path = campaign / "runs/family-07-matchup-geometry/preregistration.json"
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    preregistration = json.loads(preregistration_path.read_text(encoding="utf-8"))
+    assert profile == build_preregistered_profile()
+    assert tuple(item["id"] for item in profile["profiles"]) == PROFILE_IDS
+    assert preregistration["scoring_state"] == "not-started"
+    assert preregistration["profile_sha256"] == canonical_sha256(profile)
+    assert preregistration["profile_file_sha256"] == file_sha256(profile_path)
+    registry_lines = (campaign / "registry.jsonl").read_bytes().splitlines(keepends=True)
+    assert preregistration["registry_prefix_sha256_before"] == hashlib.sha256(
+        b"".join(registry_lines[:7])
+    ).hexdigest().upper()
+
+
+def test_actual_campaign_records_one_terminal_dependency_failure() -> None:
+    campaign = Path("experiments/top10_20260815")
+    manifest = json.loads(
+        (campaign / "runs/family-07-matchup-geometry/manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["experiment_id"] == "family-07-matchup-swap-geometry"
+    assert manifest["exit_state"] == "failed"
+    assert manifest["terminal_failure"]["stage"] == "pre-construction-dependency-resolution"
+    assert manifest["terminal_failure"]["row_decode_started"] is False
+    assert manifest["terminal_failure"]["target_decode_started"] is False
+    assert manifest["terminal_failure"]["retry_performed"] is False
+    assert manifest["outer_original_prediction_identities"] == []
+    assert manifest["outer_swapped_prediction_identities"] == []
+    assert manifest["swap_mapping_and_invariance_evidence"]["status"] == "unavailable"
+    assert manifest["development_safe_population"] == {
+        "asserted_before_row_or_target_decode": True,
+        "development_safe_id_count": 3_089,
+        "development_max_date": "2025-12-13",
+        "retired_id_count": 178,
+    }
+
+
+def test_family_07_failure_replays_lineage_run_safety_and_terminal_prefix() -> None:
+    campaign = Path("experiments/top10_20260815")
+    lineage = verify_feature_lineage(campaign, "family-07-matchup-geometry", strict=True)
+    assert lineage["status"] == "failed-pre-construction"
+    assert lineage["lineage_materialized"] is False
+    assert lineage["development_safe_id_count"] == 3_089
+    verified = verify_family_run(campaign, "family-07-matchup-geometry", recompute_all=True)
+    assert verified["status"] == "failed"
+    assert verified["attempt_count"] == 1
+    assert verified["retry_count"] == 0
+    assert verified["outer_original_prediction_identities"] == []
+    assert verified["outer_swapped_prediction_identities"] == []
+    safety = audit_campaign_safety(
+        campaign,
+        through="family-07-matchup-geometry",
+        require_gate_closed=True,
+    )
+    assert safety["gpu_lease_count"] == 1
+    assert safety["retry_count"] == 0
+    assert safety["database_access"] == {"used": False, "sql": None, "urls": []}
+    terminal = validate_terminal_campaign(
+        campaign,
+        expect_terminal_through=7,
+        require_gate_closed=True,
+    )
+    assert len(terminal["family_ids"]) == 7
+    assert terminal["protected_gate_access_count"] == 0
