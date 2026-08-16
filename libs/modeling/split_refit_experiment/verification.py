@@ -6,6 +6,7 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -21,9 +22,12 @@ from .runner import (
     RUN_ID,
     EvaluationError,
     _direct_event_intervals,
+    _git,
+    _original_checkout_identity,
     _paths,
     _read_json,
     assert_production_grammar,
+    gpu_process_snapshot,
     read_jsonl,
     tree_identity,
 )
@@ -38,6 +42,17 @@ def has_database_token(text: str) -> bool:
     return "clankerfights" in lowered or bool(
         re.search(r"(?:localhost\s*:|\bport\s*=\s*)5432\b", lowered)
     )
+
+
+def validate_loaded_predictor(predictor: Any, selection: Mapping[str, Any]) -> None:
+    if str(predictor.model_best) != selection.get("selected_node"):
+        raise EvaluationVerificationError("loaded predictor selected node changed")
+    names = [str(name) for name in predictor.model_names()]
+    base = [name for name in names if not name.startswith("WeightedEnsemble")]
+    if base != selection.get("base_models") or tuple(base) != EXPECTED_BASE_MODELS:
+        raise EvaluationVerificationError("loaded predictor graph changed")
+    if any("_FULL" in name.upper() or "CONTEXT" in name.upper() for name in names):
+        raise EvaluationVerificationError("loaded predictor contains FULL/context nodes")
 
 
 def _same(actual: Any, expected: Any, noun: str) -> None:
@@ -190,6 +205,14 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
     )
     if access[0].get("selection_sha256") != file_sha256(paths["selection"]):
         raise EvaluationVerificationError("test access selection hash changed")
+    if access[0].get("label_decode_count") != 307:
+        raise EvaluationVerificationError("test label access did not decode exactly 307 labels")
+    if attempts[-1].get("exited_unix_ns", 0) >= access[0].get("opened_unix_ns", 0):
+        raise EvaluationVerificationError("test access did not occur after fit exit")
+    for noun in ("stdout", "stderr"):
+        log_path = Path(attempts[-1][f"{noun}_path"])
+        if file_sha256(log_path) != attempts[-1][f"{noun}_sha256"]:
+            raise EvaluationVerificationError(f"fit {noun} log changed")
     repo = Path.cwd().resolve()
     selection_relative = paths["selection"].resolve().relative_to(repo).as_posix()
     selection_commit = subprocess.check_output(
@@ -203,6 +226,12 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
     _same(intervals, result.get("event_block_intervals"), "event-block intervals")
     if tree_identity(Path(selection["model_root"])) != selection.get("model_tree"):
         raise EvaluationVerificationError("post-test model bytes changed")
+    from autogluon.tabular import TabularPredictor
+
+    predictor = TabularPredictor.load(selection["model_root"])
+    validate_loaded_predictor(predictor, selection)
+    if tree_identity(Path(selection["model_root"])) != selection.get("model_tree"):
+        raise EvaluationVerificationError("predictor load mutated frozen model bytes")
     if selection.get("profile_sha256") != EXPECTED_PROFILE_SHA256:
         raise EvaluationVerificationError("post-test profile identity changed")
     profile = _read_json(campaign_root / prereg["profile_path"])
@@ -215,6 +244,16 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
         raise EvaluationVerificationError("retired fight entered evaluation")
     if preflight.get("retired_label_reads") != 0 or preflight.get("database_access") is not False:
         raise EvaluationVerificationError("preflight safety state changed")
+    if file_sha256(campaign_root / "rollback-manifest.json") != preflight["preservation"]["rollback_manifest_sha256"]:
+        raise EvaluationVerificationError("rollback manifest changed")
+    rollback_ref = _git("rev-parse", "codex/weighted-v8-67-baseline", cwd=repo)
+    rollback_tree = _git("rev-parse", "codex/weighted-v8-67-baseline^{tree}", cwd=repo)
+    if {"revision": rollback_ref, "tree": rollback_tree} != preflight.get("rollback"):
+        raise EvaluationVerificationError("rollback ref/tree changed")
+    if _original_checkout_identity() != preflight.get("original_checkout"):
+        raise EvaluationVerificationError("original dirty checkout identity changed")
+    if gpu_process_snapshot()["python_rows"]:
+        raise EvaluationVerificationError("training process remained active after evaluation")
     registry = _validate_registry(campaign_root)
     changed = _git_scope(repo)
     diff = subprocess.run(
@@ -222,6 +261,14 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
     )
     if diff.returncode:
         raise EvaluationVerificationError(f"whitespace verification failed: {diff.stdout}{diff.stderr}")
+    compile_result = subprocess.run(
+        [sys.executable, "-m", "compileall", "-q", "libs/modeling/split_refit_experiment"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if compile_result.returncode:
+        raise EvaluationVerificationError("evaluation package compile check failed")
     forbidden_hits = []
     for path in [paths["preflight"], paths["preregistration"], paths["attempts"], paths["access"], paths["selection"], paths["result"]]:
         text = path.read_text(encoding="utf-8")
@@ -236,6 +283,7 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
         "selection_sha256": file_sha256(paths["selection"]),
         "selection_commit": selection_commit,
         "prediction_sha256": file_sha256(paths["predictions"]),
+        "predictor_load": {"selected_node": predictor.model_best, "model_count": len(predictor.model_names())},
         "registry": registry,
         "changed_paths": changed,
         "preservation": {
