@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 
 import pytest
 
 from libs.modeling.split_refit_experiment.__main__ import _parser
 from libs.modeling.split_refit_experiment.refit import (
     RefitError,
+    _registered_file_sha256,
     assert_single_refit_attempt,
     build_refit_invocation,
     classify_saved_lineage,
@@ -28,6 +30,13 @@ def test_refit_cli_commands_are_explicit_named_entrypoints(command: str):
     if command == "verify-refit":
         arguments.append("--recompute-lineage")
     assert _parser().parse_args(arguments).command == command
+
+
+def test_registered_identity_canonicalizes_tracked_crlf_json(tmp_path):
+    artifact = tmp_path / "selection.json"
+    artifact.write_bytes(b'{"a":1}\r\n')
+    expected = hashlib.sha256(b'{"a":1}\n').hexdigest().upper()
+    assert _registered_file_sha256(artifact) == expected
 
 
 def _profile() -> dict[str, object]:

@@ -59,6 +59,11 @@ def _canonical_registry_sha(path: Path) -> str:
     return hashlib.sha256(raw).hexdigest().upper()
 
 
+def _registered_file_sha256(path: Path) -> str:
+    raw = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(raw).hexdigest().upper()
+
+
 def _paths(campaign_root: Path) -> dict[str, Path]:
     campaign = Path(campaign_root)
     run = campaign / "runs" / RUN_ID
@@ -279,7 +284,7 @@ def durable_refit_preflight(campaign_root: Path, *, source_csv: Path) -> dict[st
     ids = _load_population_ids(paths["campaign"])
     selection_path = paths["campaign"] / "runs/80-10-10-evaluation/selection.json"
     selection = _read_json(selection_path)
-    if file_sha256(selection_path) != EXPECTED_EVALUATION_SELECTION_SHA256:
+    if _registered_file_sha256(selection_path) != EXPECTED_EVALUATION_SELECTION_SHA256:
         raise RefitError("evaluation selection identity changed")
     if tuple(selection.get("base_models", ())) != EXPECTED_BASE_MODELS:
         raise RefitError("evaluation ten-model resolver changed")
