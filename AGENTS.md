@@ -82,7 +82,7 @@ For tests, prefer the narrowest relevant command first. Common examples:
   `docker/postgres-init/01-create-odds.sql` so the `odds` database exists.
 - The setup scripts download from the Hugging Face dataset, verify checksums,
   restore both database dumps, copy processed CSVs, extract the starter
-  `ag-20260304_110750-win-extreme` model, optionally write LLM configuration,
+  `ag-20260815_090928-win-hybrid` model, optionally write LLM configuration,
   and start the dashboard.
 
 ## Dashboard Surface

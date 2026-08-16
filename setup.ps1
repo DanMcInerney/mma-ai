@@ -26,16 +26,16 @@ Set-Location $Root
 
 $DatasetBaseUrl = "https://huggingface.co/datasets/DanMcInerney/mma-ai/resolve/main"
 $ArtifactsRoot = Join-Path $Root "artifacts\mma-ai-dataset"
-$ModelName = "ag-20260304_110750-win-extreme"
+$ModelName = "ag-20260815_090928-win-hybrid"
 
 $Artifacts = @(
     [pscustomobject]@{ Path = "manifest.json"; Sha256 = "" },
-    [pscustomobject]@{ Path = "dumps/mma-ai.postgres-custom"; Sha256 = "0EB0D2CBDECC55B6EA625F70A12914F72BD0FDCF67B91BCDFC0146393E1A7B7A" },
-    [pscustomobject]@{ Path = "dumps/odds.postgres-custom"; Sha256 = "767AFB5C2642DD8D450B6F043F333CD5FE8589B4D8574E41831E8BBC2614F352" },
-    [pscustomobject]@{ Path = "processed/training_data.csv"; Sha256 = "FFBF161D6F6E307132EB8150B5978728DED93AA9B4D3282F892C725503BA654E" },
-    [pscustomobject]@{ Path = "processed/training_data_dec.csv"; Sha256 = "91D6918DFCE10C5C5C788721C58FB98AB42AC51D9FB854BA935E6CB54701EFFB" },
-    [pscustomobject]@{ Path = "processed/prediction_data.csv"; Sha256 = "1C28D3B04DA412980777D38032E95A5B695C4B53BEA0014192D4D6C07413F754" },
-    [pscustomobject]@{ Path = "models/ag-20260304_110750-win-extreme.tar.gz"; Sha256 = "248511976D55895BE2C167F2F8FA8C4013E635B39A9BAB0D5F28C0916B5AAD74" }
+    [pscustomobject]@{ Path = "dumps/mma-ai.postgres-custom"; Sha256 = "7AA8315DAC62244A2FE882DA294C3BAFA6E1C70D3C4938CBCD54A960C59801F2" },
+    [pscustomobject]@{ Path = "dumps/odds.postgres-custom"; Sha256 = "478979E3370D041957583B6636A72DFDC6C1BB94EC71694519144227993C027A" },
+    [pscustomobject]@{ Path = "processed/training_data.csv"; Sha256 = "157649B780965ECC585F18B3030199CDC0F4FE3013958FFA4095FCF665FDB1EA" },
+    [pscustomobject]@{ Path = "processed/training_data_dec.csv"; Sha256 = "3D674BF37E09ABA7C82A39281F6D0CD84DAAAAA7A504025D60D9280A45130686" },
+    [pscustomobject]@{ Path = "processed/prediction_data.csv"; Sha256 = "19EE2751F33CEBA123C782A9BE66D649AFC441A99486B0A51E1C302F87DEB50B" },
+    [pscustomobject]@{ Path = "models/ag-20260815_090928-win-hybrid.tar.gz"; Sha256 = "A1562B5105BFE874812AE4F5EF88DFD6DD5A5E7E5385B392B65D16775C17A57B" }
 )
 
 function Show-SetupHelp {

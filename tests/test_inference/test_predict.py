@@ -1101,7 +1101,7 @@ def test_apply_manual_odds_overrides_missing_odds_and_devigs_pair():
 def test_latest_model_path_uses_configured_models_dir_for_starter_model(monkeypatch, tmp_path):
     models_dir = tmp_path / "AutogluonModels"
     older = models_dir / "ag-20260101_000000-win-extreme"
-    starter = models_dir / "ag-20260304_110750-win-extreme"
+    starter = models_dir / "ag-20260815_090928-win-hybrid"
     older.mkdir(parents=True)
     starter.mkdir()
     (older / "feats.txt").write_text("feature\n", encoding="utf-8")
@@ -1117,7 +1117,7 @@ def test_latest_model_path_uses_configured_models_dir_for_starter_model(monkeypa
 
 def test_latest_model_path_ignores_newer_incomplete_model_dirs(monkeypatch, tmp_path):
     models_dir = tmp_path / "AutogluonModels"
-    usable = models_dir / "ag-20260304_110750-win-extreme"
+    usable = models_dir / "ag-20260815_090928-win-hybrid"
     incomplete = models_dir / "ag-20260401_120000-win-extreme"
     usable.mkdir(parents=True)
     incomplete.mkdir()

@@ -87,7 +87,7 @@ def test_deployed_smoke_checks_readiness_and_win_models(monkeypatch, capsys):
         if request.full_url.endswith("/api/readiness"):
             return JsonResponse({"ready": True, "checks": {"starter_model": {"ok": True}}})
         if request.full_url.endswith("/api/predict/models?model_type=win"):
-            return JsonResponse({"models": [{"name": "ag-20260304_110750-win-extreme"}]})
+            return JsonResponse({"models": [{"name": "ag-20260815_090928-win-hybrid"}]})
         raise AssertionError(f"unexpected URL: {request.full_url}")
 
     monkeypatch.setattr(docker_smoke, "urlopen", fake_urlopen)
@@ -102,7 +102,7 @@ def test_deployed_smoke_checks_readiness_and_win_models(monkeypatch, capsys):
     output = capsys.readouterr().out
     assert "deployed health ok" in output
     assert "deployed readiness ok" in output
-    assert "deployed win models ok: ag-20260304_110750-win-extreme" in output
+    assert "deployed win models ok: ag-20260815_090928-win-hybrid" in output
 
 
 def test_deployed_smoke_reports_failed_readiness_checks(monkeypatch):
@@ -122,7 +122,7 @@ def test_deployed_smoke_reports_failed_readiness_checks(monkeypatch):
                         },
                         "starter_model": {
                             "ok": False,
-                            "expected": "ag-20260304_110750-win-extreme",
+                            "expected": "ag-20260815_090928-win-hybrid",
                             "models": [],
                         },
                     },
@@ -142,7 +142,7 @@ def test_deployed_smoke_reports_failed_readiness_checks(monkeypatch):
     assert "prediction_data_csv" in message
     assert "missing columns: fighter_name" in message
     assert "starter_model" in message
-    assert "expected ag-20260304_110750-win-extreme; discovered none" in message
+    assert "expected ag-20260815_090928-win-hybrid; discovered none" in message
 
 
 def test_deployed_smoke_reports_empty_win_models(monkeypatch):

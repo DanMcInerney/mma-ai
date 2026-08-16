@@ -68,7 +68,7 @@ to `data/logs/jobs`; the dashboard reads full logs from `/api/jobs/{job_id}/log`
 The setup scripts download from
 `https://huggingface.co/datasets/DanMcInerney/mma-ai`, verify checksums, restore
 the main and odds dumps into Docker Postgres, copy processed CSVs into `data/`,
-extract `ag-20260304_110750-win-extreme` into `AutogluonModels/`, optionally
+extract `ag-20260815_090928-win-hybrid` into `AutogluonModels/`, optionally
 write the LLM provider/model/API key configuration, and start the dashboard.
 
 ## Data And Database
