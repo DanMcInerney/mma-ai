@@ -12,6 +12,7 @@ from libs.modeling.experiment_campaign.calibration import (
 from libs.modeling.experiment_campaign.families.temporal_calibration import (
     SourceLineageError,
     audit_registered_rows,
+    promotion_decision,
     select_and_calibrate_outer,
 )
 
@@ -294,3 +295,11 @@ def test_outer_labels_cannot_change_chronological_variant_selection_or_probabili
     assert first["selection"]["variant_id"] == second["selection"]["variant_id"]
     assert first["predictions"][0]["probability"] == second["predictions"][0]["probability"]
     assert first["selection"]["selection_max_date"] < outer[0]["event_date"]
+
+
+def test_promotion_consumes_the_recorded_metric_delta_shape() -> None:
+    decision = promotion_decision(
+        {"log_loss": -0.01},
+        {"log_loss_delta": {"upper": -0.001}},
+    )
+    assert decision["promoted"] is True

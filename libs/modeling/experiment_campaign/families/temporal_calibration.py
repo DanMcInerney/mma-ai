@@ -231,7 +231,7 @@ def promotion_decision(
     intervals: Mapping[str, Any],
 ) -> dict[str, Any]:
     promote = (
-        float(metrics["log_loss_delta"]) < 0.0
+        float(metrics["log_loss"]) < 0.0
         and float(intervals["log_loss_delta"]["upper"]) < 0.0
     )
     return {
@@ -251,7 +251,12 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def _write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
+    if path.exists():
+        if path.read_text(encoding="utf-8") != payload:
+            raise ValueError(f"refusing to overwrite non-identical result bytes: {path}")
+        return
+    path.write_text(payload, encoding="utf-8")
 
 
 def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
@@ -259,6 +264,10 @@ def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
     payload = "".join(
         json.dumps(dict(row), sort_keys=True, separators=(",", ":")) + "\n" for row in rows
     )
+    if path.exists():
+        if path.read_text(encoding="utf-8") != payload:
+            raise ValueError(f"refusing to overwrite non-identical result bytes: {path}")
+        return
     path.write_text(payload, encoding="utf-8")
 
 
@@ -317,7 +326,14 @@ def materialize_family_03(
     campaign_root = Path(campaign_root)
     artifact_root = campaign_root / "artifacts/04-family-03-temporal-calibration"
     if artifact_root.exists():
-        raise ValueError("family 3 artifact destination already exists")
+        registry_records = _read_jsonl(campaign_root / "registry.jsonl")
+        manifest_path = campaign_root / f"runs/{EXPERIMENT_ID}/manifest.json"
+        if (
+            (artifact_root / "result.json").exists()
+            or manifest_path.exists()
+            or any(row["payload"]["experiment_id"] == EXPERIMENT_ID for row in registry_records)
+        ):
+            raise ValueError("family 3 artifact destination already exists")
     profile_path = campaign_root / "profiles/family-03-temporal-calibration.json"
     profile = read_json(profile_path)
     configs = _variant_configs(profile)
