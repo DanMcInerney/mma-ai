@@ -13,6 +13,7 @@ from libs.modeling.split_refit_experiment.verification import (
     RefitVerificationError,
     validate_branch_documents,
     verify_branches,
+    _validate_refit_registry,
     has_database_token,
     validate_evaluation_documents,
     validate_refit_documents,
@@ -50,6 +51,14 @@ def test_live_campaign_branches_replay_without_moving_refs():
     verified = verify_branches(Path("experiments/split_refit_20260816"), repo=Path.cwd(), strict=True)
     assert verified["status"] == "PASS"
     assert verified["revisions"] == EXPECTED_BRANCH_REVISIONS
+
+
+def test_refit_replay_accepts_only_the_appended_final_report_successor():
+    registry = _validate_refit_registry(Path("experiments/split_refit_20260816"))
+    assert registry["record_ids"][-2:] == [
+        "full-data-refit-lineage-correction",
+        "final-evidence-report",
+    ]
 
 
 def _documents():
