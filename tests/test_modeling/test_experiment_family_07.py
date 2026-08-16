@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
 from libs.modeling.experiment_campaign.families.matchup_geometry import (
     PROFILE_IDS,
     build_preregistered_profile,
+    write_preregistration,
 )
+from libs.modeling.experiment_campaign.hashing import canonical_sha256, file_sha256
+from libs.modeling.experiment_campaign.protocol import initialize_gate
 from libs.modeling.experiment_campaign.matchup_geometry import (
     MatchupGeometryError,
     build_directional_interactions,
@@ -187,3 +191,28 @@ def test_global_fit_normalization_and_more_than_eight_profiles_are_rejected() ->
     profile["profiles"][-1]["id"] = "ninth-profile"
     with pytest.raises(MatchupGeometryError, match="maximum eight"):
         validate_preregistered_matchup_profiles(profile)
+
+
+def test_preregistration_freezes_all_profiles_before_construction(tmp_path: Path) -> None:
+    campaign = tmp_path / "experiments" / "top10_20260815"
+    campaign.mkdir(parents=True)
+    initialize_gate(campaign, expected_family_ids=())
+    (campaign / "registry.jsonl").write_bytes(b"fixed-prefix\n")
+    preregistration = write_preregistration(campaign, source_revision="revision-before-score")
+    profile_path = campaign / "profiles/family-07-matchup-geometry.json"
+    preregistration_path = campaign / "runs/family-07-matchup-geometry/preregistration.json"
+    assert profile_path.is_file()
+    assert preregistration_path.is_file()
+    profile = build_preregistered_profile()
+    assert preregistration["scoring_state"] == "not-started"
+    assert preregistration["preregistered_profile_ids"] == list(PROFILE_IDS)
+    assert preregistration["profile_sha256"] == canonical_sha256(profile)
+    assert preregistration["profile_file_sha256"] == file_sha256(profile_path)
+    assert preregistration["database_access"] == {"used": False, "sql": None, "urls": []}
+    assert preregistration["invocation"] == {
+        "gpu_lease_count": 1,
+        "retry_count": 0,
+        "serialized": True,
+    }
+    with pytest.raises(ValueError, match="destinations must all be absent"):
+        write_preregistration(campaign, source_revision="retry")

@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any
 
-from ..hashing import canonical_sha256
+from ..hashing import canonical_sha256, file_sha256, write_canonical_json
 from ..matchup_geometry import validate_preregistered_matchup_profiles
+from ..protocol import AccessLedger
 
 
 EXPERIMENT_ID = "family-07-matchup-swap-geometry"
 RUN_ALIAS = "family-07-matchup-geometry"
 FROZEN_SPEC_SHA256 = "93FB5CC31AD810B1867FFC8A250DD257AAF74732998D103D56AB8D3A2D309A23"
 FROZEN_SOURCE_SHA256 = "157649B780965ECC585F18B3030199CDC0F4FE3013958FFA4095FCF665FDB1EA"
+RUN_PATH = "runs/family-07-matchup-geometry"
+ARTIFACT_PATH = "artifacts/08-family-07-matchup-geometry"
+DATA_PATH = "data/experiments/top10_20260815/family-07-matchup-geometry"
 
 PROFILE_IDS = (
     "retained-incumbent-control",
@@ -149,3 +155,44 @@ def build_preregistered_profile() -> dict[str, Any]:
     }
     validate_preregistered_matchup_profiles(profile)
     return profile
+
+
+def write_preregistration(campaign_root: Path, *, source_revision: str) -> dict[str, Any]:
+    """Persist the exact eight-profile menu while score destinations are absent."""
+
+    campaign_root = Path(campaign_root)
+    profile_path = campaign_root / "profiles/family-07-matchup-geometry.json"
+    preregistration_path = campaign_root / RUN_PATH / "preregistration.json"
+    artifact_root = campaign_root / ARTIFACT_PATH
+    data_root = campaign_root.parents[1] / DATA_PATH
+    if any(path.exists() for path in (profile_path, preregistration_path, artifact_root, data_root)):
+        raise ValueError("family 7 preregistration destinations must all be absent")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 7 preregistration requires the gate closed with zero access")
+    profile = build_preregistered_profile()
+    write_canonical_json(profile_path, profile)
+    preregistration = {
+        "experiment_id": EXPERIMENT_ID,
+        "family_number": 7,
+        "source_revision": source_revision,
+        "frozen_spec_sha256": FROZEN_SPEC_SHA256,
+        "profile_path": "profiles/family-07-matchup-geometry.json",
+        "profile_sha256": canonical_sha256(profile),
+        "profile_file_sha256": file_sha256(profile_path),
+        "preregistered_profile_ids": list(PROFILE_IDS),
+        "ordered_profile_hashes": {
+            item["id"]: item["ordered_interaction_sha256"] for item in profile["profiles"]
+        },
+        "registry_prefix_sha256_before": hashlib.sha256(
+            (campaign_root / "registry.jsonl").read_bytes()
+        ).hexdigest().upper(),
+        "scoring_state": "not-started",
+        "selection": profile["selection"],
+        "database_access": profile["database_access"],
+        "invocation": profile["invocation"],
+        "gate_required_state": "closed-zero-access",
+        "terminal_failure_rule": "Any dependency, safe-population, role-swap, lineage, support, geometry, safety, or destination mismatch terminates without retry.",
+    }
+    write_canonical_json(preregistration_path, preregistration)
+    return preregistration
