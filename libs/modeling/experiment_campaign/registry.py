@@ -18,7 +18,7 @@ from .hashing import (
 
 CAMPAIGN_FAMILY_IDS = (
     "family-01-weighted-v8-control",
-    "family-02-horizon-recency-era",
+    "family-02-horizon-recency",
     "family-03-temporal-calibration",
     "family-04-chronological-oof-ensemble",
     "family-05-stable-semantic-portfolio",
@@ -27,6 +27,17 @@ CAMPAIGN_FAMILY_IDS = (
     "family-08-catboost-native-specialist",
     "family-09-capacity-foundation-context",
     "family-10-outcome-decomposition",
+)
+
+FAMILY_2_VARIANT_IDS = (
+    "expanding-decay-0",
+    "expanding-decay-0.05",
+    "rolling-8y-decay-0.10",
+    "rolling-6y-decay-0.15",
+    "rolling-4y-decay-0.25",
+    "expanding-piecewise-event-count",
+    "rolling-8y-decay-0",
+    "expanding-decay-0.15",
 )
 
 RESOLVED_PROFILE_FIELDS = (
@@ -55,7 +66,26 @@ RESOLVED_PROFILE_FIELDS = (
     "refit_full",
 )
 
-TERMINAL_STATES = {"complete", "failed", "cancelled", "superseded"}
+FAMILY_2_PROFILE_FIELDS = (
+    "experiment_id",
+    "family_number",
+    "base_training_profile",
+    "joint_variants",
+    "outer_years",
+    "embargo_days",
+    "selection_metric",
+    "selection_tie_break",
+    "selection_evidence",
+    "per_fit_time_cap_seconds",
+    "family_deadline_seconds",
+    "early_stop_rule",
+    "seeds",
+    "bootstrap",
+    "promotion_rule",
+    "adaptive_emphasis",
+)
+
+TERMINAL_STATES = {"complete", "failed", "cancelled", "limited", "superseded"}
 ZERO_HASH = "0" * 64
 
 
@@ -79,6 +109,25 @@ def validate_resolved_profile(
     *,
     required_fields: tuple[str, ...] | None = RESOLVED_PROFILE_FIELDS,
 ) -> str:
+    if profile.get("experiment_id") == CAMPAIGN_FAMILY_IDS[1]:
+        missing = sorted(set(FAMILY_2_PROFILE_FIELDS) - set(profile))
+        extra = sorted(set(profile) - set(FAMILY_2_PROFILE_FIELDS))
+        if missing or extra:
+            raise RegistryError(
+                "family 2 profile must be fully materialized; "
+                f"missing={missing or []}, extra={extra or []}"
+            )
+        validate_resolved_profile(profile["base_training_profile"])
+        variants = profile.get("joint_variants")
+        if not isinstance(variants, list):
+            raise RegistryError("family 2 joint_variants must be an ordered list")
+        if tuple(variant.get("id") for variant in variants) != FAMILY_2_VARIANT_IDS:
+            raise RegistryError("family 2 profile does not contain the frozen joint menu")
+        if profile.get("outer_years") != [2022, 2023, 2024, 2025]:
+            raise RegistryError("family 2 profile must use the four frozen outer folds")
+        if profile.get("per_fit_time_cap_seconds", 0) <= 0:
+            raise RegistryError("family 2 per-fit cap must be positive")
+        return _canonical_sha256(profile)
     if required_fields is not None:
         missing = sorted(set(required_fields) - set(profile))
         extra = sorted(set(profile) - set(required_fields))
