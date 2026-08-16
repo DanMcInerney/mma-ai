@@ -1,0 +1,32 @@
+{
+  "experiment_id": "family-03-temporal-calibration",
+  "family_number": 3,
+  "frozen_spec_sha256": "93FB5CC31AD810B1867FFC8A250DD257AAF74732998D103D56AB8D3A2D309A23",
+  "gate_required_state": "closed-zero-access",
+  "outer_label_roles": [
+    "final-metrics-only"
+  ],
+  "preregistered_variant_ids": [
+    "identity",
+    "sigmoid-platt",
+    "temperature",
+    "conservative-isotonic"
+  ],
+  "profile_path": "profiles/family-03-temporal-calibration.json",
+  "profile_sha256": "E3C434FCC8820874D5541E086D00C8D85B2F1CBDAE85C02AD912C9E5421A421D",
+  "registry_prefix_sha256_before": "C5F8E37AEC82E0AEFDAAE6EECF7A89E55EFDC04788884FFA504105F131C752BB",
+  "scoring_state": "not-started",
+  "source_prediction_contract": {
+    "accepted_boundaries": [
+      "prior-oof",
+      "chronological-inner"
+    ],
+    "forbid_base_model_retraining": true,
+    "forbid_outer_label_selection": true,
+    "require_calibration_base_fit_disjoint": true,
+    "require_calibration_outer_disjoint": true,
+    "require_strictly_prior_dates": true,
+    "source_artifact_path": "artifacts/03-family-02-horizon-recency"
+  },
+  "terminal_failure_rule": "A missing or invalid registered source lineage terminates before any variant fit or score; no retry or substitute source is authorized."
+}
