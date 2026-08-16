@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from ..fighter_states import validate_preregistered_profiles
+from ..fighter_states import build_fighter_state_rows, validate_preregistered_profiles
 from ..feature_lineage import (
     build_development_safe_ids,
     decode_development_rows,
@@ -734,6 +734,151 @@ def materialize_family_06(
             "profile_path": manifest["profile_path"],
             "profile_sha256": manifest["profile_sha256"],
             "status": "complete",
+        },
+    )
+    return {**result, **registry, "artifact_tree_sha256": inventory.tree_sha256}
+
+
+def finalize_family_06_failure(
+    campaign_root: Path,
+    *,
+    source_revision: str,
+    preregistration_commit: str,
+    failure_text: str,
+) -> dict[str, Any]:
+    """Freeze the sole attempt's pre-fit failure without starting another attempt."""
+
+    campaign_root = Path(campaign_root)
+    run_root = campaign_root / RUN_PATH
+    artifact_root = campaign_root / ARTIFACT_PATH
+    manifest_path = run_root / "manifest.json"
+    data_root = campaign_root.parents[1] / "data/experiments/top10_20260815/family-06-fighter-states"
+    if manifest_path.exists() or data_root.exists():
+        raise ValueError("family 6 failure finalization requires no result or constructed data")
+    existing = sorted(path.name for path in artifact_root.iterdir())
+    if existing != ["gpu-lease-acquired.json"]:
+        raise ValueError("family 6 failure evidence directory has unexpected bytes")
+    acquired = read_json(artifact_root / "gpu-lease-acquired.json")
+    if acquired.get("ordinal") != 1 or acquired.get("state") != "acquired":
+        raise ValueError("family 6 sole lease acquisition evidence differs")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 6 failure finalization requires a closed untouched gate")
+    profile_path = campaign_root / "profiles/family-06-fighter-states.json"
+    profile = read_json(profile_path)
+    preregistration = read_json(run_root / "preregistration.json")
+    stderr_path = artifact_root / "terminal-stderr.txt"
+    stderr_path.write_text(failure_text.rstrip() + "\n", encoding="utf-8", newline="\n")
+    terminal_failure = {
+        "attempt_ordinal": 1,
+        "stage": "pre-construction-symbol-resolution",
+        "exception_type": "NameError",
+        "message": "name 'build_fighter_state_rows' is not defined",
+        "stderr_path": "terminal-stderr.txt",
+        "stderr_sha256": file_sha256(stderr_path),
+        "construction_started": False,
+        "fit_started": False,
+        "outer_labels_scored": False,
+        "retry_performed": False,
+    }
+    write_canonical_json(artifact_root / "failure.json", terminal_failure)
+    write_canonical_json(
+        artifact_root / "safety.json",
+        {
+            "database_access": profile["database_access"],
+            "gpu_lease_count": 1,
+            "production_attempt_count": 1,
+            "retry_count": 0,
+            "serialized": True,
+            "gate_access_count": gate["protected_access_count"],
+            "development_safe_id_count_asserted_before_decode": 3_089,
+            "retired_id_count_subtracted_before_decode": 178,
+        },
+    )
+    write_canonical_json(
+        artifact_root / "gpu-lease-released.json",
+        {
+            "lease_id": acquired["lease_id"],
+            "ordinal": 1,
+            "pid": acquired["pid"],
+            "state": "released-after-terminal-failure",
+        },
+    )
+    result = {
+        "experiment_id": EXPERIMENT_ID,
+        "status": "failed",
+        "terminal_failure": terminal_failure,
+        "metrics": None,
+        "paired_event_block_intervals": None,
+        "support_summary": {"status": "unavailable", "reason": "pre-construction-failure"},
+        "promotion_decision": {
+            "action": "retain-family-01-weighted-v8-control",
+            "incumbent_before": "family-01-weighted-v8-control",
+            "incumbent_after": "family-01-weighted-v8-control",
+            "promoted": False,
+            "rule": "failed candidates cannot be promoted",
+        },
+        "adaptive_signal_for_family_07": {
+            "status": "family-06-failed-pre-construction",
+            "selected_profiles": [],
+            "selected_feature_hashes": [],
+        },
+        "gate_access_count": gate["protected_access_count"],
+    }
+    write_canonical_json(artifact_root / "result.json", result)
+    inventory = tree_inventory(artifact_root)
+    _write_jsonl(
+        run_root / "attempts.jsonl",
+        [
+            {
+                "attempt_ordinal": 1,
+                "state": "failed",
+                "stage": terminal_failure["stage"],
+                "exception_type": terminal_failure["exception_type"],
+                "retry": False,
+            }
+        ],
+    )
+    (run_root / "decision.md").write_text(
+        "# Family 6 decision\n\nRetain family 1: the sole attempt failed before construction or fit and was not retried.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    manifest = {
+        **result,
+        "kind": "family",
+        "exit_state": "failed",
+        "artifact_path": ARTIFACT_PATH,
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "data_path": None,
+        "data_sha256": None,
+        "profile_path": "profiles/family-06-fighter-states.json",
+        "profile_sha256": canonical_sha256(profile),
+        "profile_file_sha256": file_sha256(profile_path),
+        "preregistration_path": f"{RUN_PATH}/preregistration.json",
+        "preregistration_commit": preregistration_commit,
+        "attempts_path": f"{RUN_PATH}/attempts.jsonl",
+        "source_revision": source_revision,
+        "outer_prediction_identities": [],
+        "outer_label_selection_count": 0,
+        "invocation": profile["invocation"],
+        "database_access": profile["database_access"],
+        "preregistration_sha256": canonical_sha256(preregistration),
+    }
+    write_canonical_json(manifest_path, manifest)
+    registry = _append_registry(
+        campaign_root,
+        {
+            "artifact_path": ARTIFACT_PATH,
+            "artifact_tree_sha256": inventory.tree_sha256,
+            "experiment_id": EXPERIMENT_ID,
+            "kind": "family",
+            "manifest_path": f"{RUN_PATH}/manifest.json",
+            "manifest_sha256": canonical_sha256(manifest),
+            "profile_path": manifest["profile_path"],
+            "profile_sha256": manifest["profile_sha256"],
+            "status": "failed",
         },
     )
     return {**result, **registry, "artifact_tree_sha256": inventory.tree_sha256}

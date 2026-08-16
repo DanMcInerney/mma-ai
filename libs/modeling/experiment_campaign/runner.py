@@ -44,12 +44,19 @@ FIXED_FAMILY_5_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\06-family-05-semantic-portfolio"
 )
+FIXED_FAMILY_6_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\07-family-06-fighter-states"
+)
 FAMILY_5_RUN_ALIAS = "family-05-semantic-portfolio"
+FAMILY_6_RUN_ALIAS = "family-06-fighter-states"
 
 
 def _canonical_family_id(experiment_id: str) -> str:
     if experiment_id == FAMILY_5_RUN_ALIAS:
         return CAMPAIGN_FAMILY_IDS[4]
+    if experiment_id == FAMILY_6_RUN_ALIAS:
+        return CAMPAIGN_FAMILY_IDS[5]
     return experiment_id
 
 
@@ -66,6 +73,9 @@ FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_4 = (
 )
 FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_5 = (
     "62EF72477F4451E42533CF2F4D7DA0FB29F4774739019569E40D6FDE16256D40"
+)
+FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_6 = (
+    "AB670F8B67B5408B949C264A808F9B9F788494D23C9F785FD0E41BCC17A63B25"
 )
 
 
@@ -91,8 +101,8 @@ def _validate_campaign_registry(campaign_root: Path):
     if len(raw_lines) <= 3:
         return validate_registry(campaign_root, strict=True)
     records = [json.loads(line) for line in raw_lines]
-    if len(records) > 6:
-        raise RegistryError("registry extends beyond the completed family-5 prefix")
+    if len(records) > 7:
+        raise RegistryError("registry extends beyond the completed family-6 prefix")
     expected_ids = ["experiment-zero", *CAMPAIGN_FAMILY_IDS[: len(records) - 1]]
     if [row["payload"]["experiment_id"] for row in records] != expected_ids:
         raise RegistryError("registry does not contain the exact completed family prefix")
@@ -110,6 +120,12 @@ def _validate_campaign_registry(campaign_root: Path):
         != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_5
     ):
         raise RegistryError("the frozen registry prefix before family 5 changed")
+    if (
+        len(raw_lines) > 6
+        and hashlib.sha256(b"".join(raw_lines[:6])).hexdigest().upper()
+        != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_6
+    ):
+        raise RegistryError("the frozen registry prefix before family 6 changed")
     previous_record = "0" * 64
     prefix_bytes = b""
     for sequence, (raw, record) in enumerate(zip(raw_lines, records, strict=True)):
@@ -186,6 +202,8 @@ def verify_family_run(
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
     experiment_id = _canonical_family_id(experiment_id)
+    if experiment_id == CAMPAIGN_FAMILY_IDS[5]:
+        return _verify_family_6_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[4]:
         return _verify_family_5_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[3]:
@@ -926,10 +944,179 @@ def _verify_family_5_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
     }
 
 
+def _verify_family_6_run(campaign_root: Path, *, recompute_all: bool) -> dict[str, Any]:
+    from .families.fighter_states import (
+        EXPERIMENT_ID,
+        PROFILE_IDS,
+        build_preregistered_profile,
+    )
+    from .fighter_states import validate_preregistered_profiles
+
+    manifest = read_json(campaign_root / "runs/family-06-fighter-states/manifest.json")
+    profile_path = campaign_root / manifest["profile_path"]
+    profile = read_json(profile_path)
+    validated = validate_preregistered_profiles(profile)
+    preregistration = read_json(campaign_root / manifest["preregistration_path"])
+    if (
+        manifest.get("experiment_id") != EXPERIMENT_ID
+        or profile != build_preregistered_profile()
+        or tuple(validated["profile_ids"]) != PROFILE_IDS
+        or canonical_sha256(profile) != manifest["profile_sha256"]
+        or file_sha256(profile_path) != manifest["profile_file_sha256"]
+        or preregistration["scoring_state"] != "not-started"
+        or canonical_sha256(preregistration) != manifest["preregistration_sha256"]
+    ):
+        raise ValueError("family 6 profile or preregistration identity mismatch")
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_6_ARTIFACT
+    inventory = tree_inventory(artifact_root)
+    if (
+        inventory.tree_sha256 != manifest["artifact_tree_sha256"]
+        or inventory.file_count != manifest["artifact_file_count"]
+    ):
+        raise ValueError("family 6 artifact inventory mismatch")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 6 verification requires the gate closed with zero access")
+    status = manifest["exit_state"]
+    if status != "failed":
+        raise ValueError("family 6 verifier expected the frozen terminal failure result")
+    failure = manifest["terminal_failure"]
+    stderr_path = artifact_root / failure["stderr_path"]
+    attempts = read_jsonl(campaign_root / manifest["attempts_path"])
+    acquired = read_json(artifact_root / "gpu-lease-acquired.json")
+    released = read_json(artifact_root / "gpu-lease-released.json")
+    safety = read_json(artifact_root / "safety.json")
+    if (
+        failure["attempt_ordinal"] != 1
+        or failure["construction_started"] is not False
+        or failure["fit_started"] is not False
+        or failure["outer_labels_scored"] is not False
+        or failure["retry_performed"] is not False
+        or file_sha256(stderr_path) != failure["stderr_sha256"]
+        or len(attempts) != 1
+        or attempts[0].get("retry") is not False
+        or acquired["lease_id"] != released["lease_id"]
+        or acquired["pid"] != released["pid"]
+        or safety["gpu_lease_count"] != 1
+        or safety["production_attempt_count"] != 1
+        or safety["retry_count"] != 0
+        or safety["database_access"] != {"used": False, "sql": None, "urls": []}
+    ):
+        raise ValueError("family 6 terminal failure or invocation evidence differs")
+    if recompute_all:
+        _assert_equal(read_json(artifact_root / "failure.json"), failure, "family 6 failure")
+        result = read_json(artifact_root / "result.json")
+        for key in (
+            "status",
+            "terminal_failure",
+            "metrics",
+            "paired_event_block_intervals",
+            "support_summary",
+            "promotion_decision",
+            "adaptive_signal_for_family_07",
+            "gate_access_count",
+        ):
+            _assert_equal(result[key], manifest[key], f"family 6 {key}")
+    return {
+        "experiment_id": EXPERIMENT_ID,
+        "status": status,
+        "gate_access_count": gate["protected_access_count"],
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "profile_count": validated["profile_count"],
+        "attempt_count": 1,
+        "retry_count": 0,
+        "terminal_failure": failure,
+        "metrics": None,
+        "paired_event_block_intervals": None,
+        "support_summary": manifest["support_summary"],
+        "promotion_decision": manifest["promotion_decision"],
+        "adaptive_signal_for_family_07": manifest["adaptive_signal_for_family_07"],
+        "outer_prediction_identities": manifest["outer_prediction_identities"],
+        "preregistration_commit": manifest["preregistration_commit"],
+    }
+
+
+def verify_feature_lineage(
+    campaign_root: Path,
+    experiment_id: str,
+    *,
+    strict: bool,
+) -> dict[str, Any]:
+    """Verify the preregistered lineage result, including an honest pre-construction failure."""
+
+    experiment_id = _canonical_family_id(experiment_id)
+    if experiment_id != CAMPAIGN_FAMILY_IDS[5]:
+        raise ValueError("feature-lineage verifier owns only family 6")
+    verified = _verify_family_6_run(Path(campaign_root), recompute_all=strict)
+    manifest = read_json(Path(campaign_root) / "runs/family-06-fighter-states/manifest.json")
+    if verified["status"] == "failed":
+        if (
+            manifest["data_path"] is not None
+            or manifest["data_sha256"] is not None
+            or manifest["outer_prediction_identities"]
+        ):
+            raise ValueError("pre-construction failure unexpectedly materialized feature data")
+        return {
+            "experiment_id": experiment_id,
+            "status": "failed-pre-construction",
+            "profile_count": verified["profile_count"],
+            "lineage_materialized": False,
+            "failure_evidence_verified": True,
+            "construction_started": False,
+            "outer_label_selection_count": 0,
+            "gate_access_count": verified["gate_access_count"],
+        }
+    raise ValueError("unsupported family 6 lineage result")
+
+
+def audit_campaign_safety(
+    campaign_root: Path,
+    *,
+    through: str,
+    require_gate_closed: bool,
+) -> dict[str, Any]:
+    """Audit the sole lease, retry count, database manifest, and gate state."""
+
+    campaign_root = Path(campaign_root)
+    through = _canonical_family_id(through)
+    if through != CAMPAIGN_FAMILY_IDS[5]:
+        raise ValueError("safety audit is bounded through family 6")
+    verified = _verify_family_6_run(campaign_root, recompute_all=True)
+    manifest = read_json(campaign_root / "runs/family-06-fighter-states/manifest.json")
+    artifact_root = campaign_root / manifest["artifact_path"]
+    if not artifact_root.is_dir():
+        artifact_root = FIXED_FAMILY_6_ARTIFACT
+    safety = read_json(artifact_root / "safety.json")
+    searchable = b"\n".join(
+        path.read_bytes().lower()
+        for path in sorted(artifact_root.rglob("*"))
+        if path.is_file()
+    )
+    if any(token in searchable for token in (b"5432", b"clankerfights", b"postgresql://")):
+        raise ValueError("family 6 safety evidence contains a forbidden database token")
+    gate = AccessLedger(campaign_root).gate_status()
+    if require_gate_closed and (gate["state"] != "closed" or gate["protected_access_count"] != 0):
+        raise ValueError("campaign gate is not closed with zero access")
+    return {
+        "through": through,
+        "status": verified["status"],
+        "gpu_lease_count": safety["gpu_lease_count"],
+        "production_attempt_count": safety["production_attempt_count"],
+        "retry_count": safety["retry_count"],
+        "serialized": safety["serialized"],
+        "database_access": safety["database_access"],
+        "forbidden_database_token_count": 0,
+        "gate_state": gate["state"],
+        "gate_access_count": gate["protected_access_count"],
+    }
+
+
 def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
     through = _canonical_family_id(through)
-    if through not in CAMPAIGN_FAMILY_IDS[:5]:
+    if through not in CAMPAIGN_FAMILY_IDS[:6]:
         raise ValueError("decision replay is bounded to the completed family prefix")
     registry = _validate_campaign_registry(campaign_root)
     through_index = CAMPAIGN_FAMILY_IDS.index(through) + 1
@@ -952,7 +1139,10 @@ def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str,
                     "adaptive_signal_for_family_04",
                     verified.get(
                         "adaptive_signal_for_family_05",
-                        verified.get("adaptive_signal_for_family_06"),
+                        verified.get(
+                            "adaptive_signal_for_family_06",
+                            verified.get("adaptive_signal_for_family_07"),
+                        ),
                     ),
                 ),
             ),

@@ -18,6 +18,12 @@ from libs.modeling.experiment_campaign.families.fighter_states import (
     build_preregistered_profile,
 )
 from libs.modeling.experiment_campaign.hashing import canonical_sha256, file_sha256
+from libs.modeling.experiment_campaign.runner import (
+    audit_campaign_safety,
+    validate_terminal_campaign,
+    verify_family_run,
+    verify_feature_lineage,
+)
 from libs.modeling.experiment_campaign.feature_lineage import validate_feature_lineage_rows
 
 
@@ -186,9 +192,14 @@ def test_actual_campaign_has_pre_score_eight_profile_preregistration() -> None:
     assert tuple(preregistration["preregistered_profile_ids"]) == PROFILE_IDS
     assert preregistration["profile_sha256"] == canonical_sha256(profile)
     assert preregistration["profile_file_sha256"] == file_sha256(profile_path)
-    assert preregistration["registry_prefix_sha256_before"] == hashlib.sha256(
-        (campaign / "registry.jsonl").read_bytes()
-    ).hexdigest().upper()
+    registry_lines = (campaign / "registry.jsonl").read_text(encoding="utf-8").splitlines()
+    family_record = json.loads(registry_lines[-1])
+    assert preregistration["registry_prefix_sha256_before"] == family_record[
+        "prefix_sha256_before"
+    ]
+    assert hashlib.sha256((campaign / "registry.jsonl").read_bytes()).hexdigest().upper() != preregistration[
+        "registry_prefix_sha256_before"
+    ]
     assert preregistration["database_access"] == {"used": False, "sql": None, "urls": []}
     assert preregistration["invocation"] == {
         "gpu_lease_count": 1,
@@ -226,9 +237,52 @@ def test_actual_campaign_has_terminal_family_06_result() -> None:
         (campaign / "runs/family-06-fighter-states/manifest.json").read_text(encoding="utf-8")
     )
     assert manifest["experiment_id"] == "family-06-multiscale-count-aware-state"
-    assert manifest["exit_state"] == "complete"
-    assert len(manifest["folds"]) == 4
+    assert manifest["exit_state"] in {"complete", "failed"}
+    if manifest["exit_state"] == "complete":
+        assert len(manifest["folds"]) == 4
+    else:
+        assert manifest["terminal_failure"]["attempt_ordinal"] == 1
+        assert manifest["terminal_failure"]["stage"] == "pre-construction-symbol-resolution"
+        assert manifest["terminal_failure"]["construction_started"] is False
+        assert manifest["terminal_failure"]["fit_started"] is False
+        assert manifest["terminal_failure"]["retry_performed"] is False
+        assert manifest["outer_prediction_identities"] == []
     assert manifest["outer_label_selection_count"] == 0
     assert manifest["gate_access_count"] == 0
     assert manifest["invocation"]["gpu_lease_count"] == 1
     assert manifest["invocation"]["retry_count"] == 0
+
+
+def test_failed_result_replays_lineage_safety_and_terminal_prefix() -> None:
+    campaign = Path("experiments/top10_20260815")
+    lineage = verify_feature_lineage(
+        campaign,
+        "family-06-fighter-states",
+        strict=True,
+    )
+    assert lineage["status"] == "failed-pre-construction"
+    assert lineage["lineage_materialized"] is False
+    assert lineage["failure_evidence_verified"] is True
+    verified = verify_family_run(
+        campaign,
+        "family-06-fighter-states",
+        recompute_all=True,
+    )
+    assert verified["status"] == "failed"
+    assert verified["attempt_count"] == 1
+    assert verified["retry_count"] == 0
+    safety = audit_campaign_safety(
+        campaign,
+        through="family-06-fighter-states",
+        require_gate_closed=True,
+    )
+    assert safety["gpu_lease_count"] == 1
+    assert safety["retry_count"] == 0
+    assert safety["database_access"] == {"used": False, "sql": None, "urls": []}
+    terminal = validate_terminal_campaign(
+        campaign,
+        expect_terminal_through=6,
+        require_gate_closed=True,
+    )
+    assert len(terminal["family_ids"]) == 6
+    assert terminal["protected_gate_access_count"] == 0

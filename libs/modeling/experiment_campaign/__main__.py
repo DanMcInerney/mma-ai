@@ -22,6 +22,14 @@ def _parser() -> argparse.ArgumentParser:
     verify_run.add_argument("--campaign", type=Path, required=True)
     verify_run.add_argument("--experiment", required=True)
     verify_run.add_argument("--recompute-all", action="store_true")
+    verify_lineage = subparsers.add_parser("verify-feature-lineage")
+    verify_lineage.add_argument("--campaign", type=Path, required=True)
+    verify_lineage.add_argument("--experiment", required=True)
+    verify_lineage.add_argument("--strict", action="store_true")
+    audit_safety = subparsers.add_parser("audit-safety")
+    audit_safety.add_argument("--campaign", type=Path, required=True)
+    audit_safety.add_argument("--through", required=True)
+    audit_safety.add_argument("--require-gate-closed", action="store_true")
     replay = subparsers.add_parser("replay-decisions")
     replay.add_argument("--campaign", type=Path, required=True)
     replay.add_argument("--through", required=True)
@@ -106,6 +114,22 @@ def main() -> int:
             args.campaign,
             args.experiment,
             recompute_all=args.recompute_all,
+        )
+    elif args.command == "verify-feature-lineage":
+        from .runner import verify_feature_lineage
+
+        result = verify_feature_lineage(
+            args.campaign,
+            args.experiment,
+            strict=args.strict,
+        )
+    elif args.command == "audit-safety":
+        from .runner import audit_campaign_safety
+
+        result = audit_campaign_safety(
+            args.campaign,
+            through=args.through,
+            require_gate_closed=args.require_gate_closed,
         )
     elif args.command == "replay-decisions":
         from .runner import replay_campaign_decisions
