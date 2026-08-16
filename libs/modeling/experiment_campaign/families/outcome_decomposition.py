@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+from pathlib import Path
 from typing import Any, Mapping
 
-from ..hashing import canonical_sha256
+from ..hashing import canonical_sha256, file_sha256, write_canonical_json
 from ..outcome_decomposition import OutcomeDecompositionError
+from ..protocol import AccessLedger
 from .semantic_portfolio import V8_FEATURES
 
 
@@ -160,3 +163,46 @@ def validate_preregistered_profile(profile: Mapping[str, Any]) -> dict[str, Any]
         "variant_ids": [item["id"] for item in variants],
         "variant_hashes": {item["id"]: item["profile_sha256"] for item in variants},
     }
+
+
+def write_preregistration(campaign_root: Path, *, source_revision: str) -> dict[str, Any]:
+    """Commit the exact six-variant menu while every launch destination is absent."""
+
+    campaign_root = Path(campaign_root)
+    profile_path = campaign_root / PROFILE_PATH
+    preregistration_path = campaign_root / RUN_PATH / "preregistration.json"
+    artifact_root = campaign_root / ARTIFACT_PATH
+    if any(path.exists() for path in (profile_path, preregistration_path, artifact_root)):
+        raise ValueError("family 10 preregistration destinations must all be absent")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 10 preregistration requires the gate closed with zero access")
+    profile = build_preregistered_profile()
+    validated = validate_preregistered_profile(profile)
+    write_canonical_json(profile_path, profile)
+    preregistration = {
+        "experiment_id": EXPERIMENT_ID,
+        "family_number": 10,
+        "source_revision": source_revision,
+        "frozen_spec_sha256": FROZEN_SPEC_SHA256,
+        "profile_path": PROFILE_PATH,
+        "profile_sha256": canonical_sha256(profile),
+        "profile_file_sha256": file_sha256(profile_path),
+        "variant_count": validated["variant_count"],
+        "variant_ids": validated["variant_ids"],
+        "variant_hashes": validated["variant_hashes"],
+        "registry_prefix_sha256_before": hashlib.sha256(
+            (campaign_root / "registry.jsonl").read_bytes()
+        ).hexdigest().upper(),
+        "launch_state": "not-started",
+        "production_process_count": 1,
+        "retry_count": 0,
+        "database_access": {"used": False, "sql": None, "urls": []},
+        "gate_required_state": "closed-zero-access",
+        "terminal_failure_rule": (
+            "Any safe-population, label, component fit, denominator, safety, or destination "
+            "mismatch terminates the single attempt without retry."
+        ),
+    }
+    write_canonical_json(preregistration_path, preregistration)
+    return preregistration

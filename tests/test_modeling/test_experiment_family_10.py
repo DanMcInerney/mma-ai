@@ -16,7 +16,10 @@ from libs.modeling.experiment_campaign.outcome_decomposition import (
 from libs.modeling.experiment_campaign.families.outcome_decomposition import (
     build_preregistered_profile,
     validate_preregistered_profile,
+    write_preregistration,
 )
+from libs.modeling.experiment_campaign.hashing import file_sha256
+from libs.modeling.experiment_campaign.protocol import initialize_gate
 
 
 def _component(fight_id: str, probability: float, *, fold: str = "2025") -> dict:
@@ -110,3 +113,19 @@ def test_preregistered_menu_is_exact_and_bounded() -> None:
     missing_fallback["fallbacks"] = []
     with pytest.raises(OutcomeDecompositionError, match="fallback"):
         validate_preregistered_profile(missing_fallback)
+
+
+def test_preregistration_is_durable_before_any_launch(tmp_path) -> None:
+    campaign = tmp_path / "campaign"
+    campaign.mkdir()
+    initialize_gate(campaign, expected_family_ids=())
+    (campaign / "registry.jsonl").write_bytes(b"fixed-nine-family-prefix\n")
+
+    preregistration = write_preregistration(campaign, source_revision="before-fit")
+    profile = campaign / "profiles/family-10-outcome-decomposition.json"
+    assert preregistration["launch_state"] == "not-started"
+    assert preregistration["variant_count"] == 6
+    assert preregistration["profile_file_sha256"] == file_sha256(profile)
+    assert preregistration["gate_required_state"] == "closed-zero-access"
+    with pytest.raises(ValueError, match="destinations must all be absent"):
+        write_preregistration(campaign, source_revision="retry")
