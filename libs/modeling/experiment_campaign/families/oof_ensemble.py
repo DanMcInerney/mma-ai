@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from datetime import date
 import hashlib
 import json
@@ -10,6 +9,9 @@ import math
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from ..hashing import canonical_sha256, file_sha256, read_json, tree_inventory, write_canonical_json
+from ..metrics import event_block_bootstrap_delta, reduce_predictions
+from ..protocol import AccessLedger
 from ..ensemble import (
     ENSEMBLE_VARIANT_IDS,
     ConstituentError,
@@ -20,6 +22,12 @@ from ..ensemble import (
 
 
 EXPERIMENT_ID = "family-04-chronological-oof-ensemble"
+FIXED_ARTIFACT_BASE = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts"
+)
+RUN_PATH = "runs/family-04-oof-ensemble"
+ARTIFACT_PATH = "artifacts/05-family-04-oof-ensemble"
 
 
 class OOFLineageError(ValueError):
@@ -217,3 +225,281 @@ def select_recipe_for_outer(
         },
         "predictions": predictions,
     }
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in path.read_bytes().splitlines()]
+
+
+def _write_jsonl(path: Path, rows: Sequence[Mapping[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(
+        b"".join(
+            json.dumps(dict(row), sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+            for row in rows
+        )
+    )
+
+
+def _append_registry(campaign_root: Path, payload: Mapping[str, Any]) -> dict[str, Any]:
+    registry_path = campaign_root / "registry.jsonl"
+    head_path = campaign_root / "registry-head.json"
+    before = registry_path.read_bytes()
+    records = [json.loads(line) for line in before.splitlines()]
+    if any(record["payload"]["experiment_id"] == EXPERIMENT_ID for record in records):
+        raise ValueError("family 4 already exists in the registry")
+    head = read_json(head_path)
+    prefix_before = hashlib.sha256(before).hexdigest().upper()
+    if prefix_before != head["registry_prefix_sha256"]:
+        raise ValueError("registry head does not match the immutable prefix")
+    record = {
+        "payload": dict(payload),
+        "prefix_sha256_before": prefix_before,
+        "previous_record_sha256": head["last_record_sha256"],
+        "sequence": head["record_count"],
+    }
+    record["record_sha256"] = canonical_sha256(record)
+    after = before + json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8") + b"\n"
+    prefix_after = hashlib.sha256(after).hexdigest().upper()
+    registry_path.write_bytes(after)
+    write_canonical_json(
+        head_path,
+        {
+            "last_record_sha256": record["record_sha256"],
+            "record_count": len(records) + 1,
+            "registry_bytes": len(after),
+            "registry_prefix_sha256": prefix_after,
+        },
+    )
+    return {
+        "record_sha256": record["record_sha256"],
+        "registry_prefix_sha256_before": prefix_before,
+        "registry_prefix_sha256_after": prefix_after,
+    }
+
+
+def promotion_decision(
+    candidate_metrics: Mapping[str, Any],
+    intervals: Mapping[str, Any],
+) -> dict[str, Any]:
+    promote = (
+        float(candidate_metrics["log_loss_delta"]) < 0.0
+        and float(intervals["log_loss_delta"]["upper"]) < 0.0
+    )
+    return {
+        "action": "promote-family-04" if promote else "retain-family-01-weighted-v8-control",
+        "incumbent_before": "family-01-weighted-v8-control",
+        "incumbent_after": EXPERIMENT_ID if promote else "family-01-weighted-v8-control",
+        "promoted": promote,
+        "rule": "pooled log-loss delta and paired event-block interval upper bound must both be below zero",
+    }
+
+
+def _metric_gaps(candidate: Mapping[str, Any], incumbent: Mapping[str, Any]) -> tuple[dict, dict]:
+    calibration = {
+        name: float(candidate[name]) - float(incumbent[name])
+        for name in ("calibration_intercept", "calibration_slope", "ece")
+    }
+    subgroup = {
+        group: {
+            metric: float(candidate["subgroup_metrics"][group][metric])
+            - float(incumbent["subgroup_metrics"][group][metric])
+            for metric in ("log_loss", "brier", "accuracy")
+        }
+        for group in sorted(candidate["subgroup_metrics"])
+    }
+    return calibration, subgroup
+
+
+def materialize_family_04(
+    campaign_root: Path,
+    *,
+    source_revision: str,
+    preregistration_commit: str,
+    artifact_base: Path = FIXED_ARTIFACT_BASE,
+) -> dict[str, Any]:
+    campaign_root = Path(campaign_root)
+    artifact_root = campaign_root / ARTIFACT_PATH
+    run_root = campaign_root / RUN_PATH
+    manifest_path = run_root / "manifest.json"
+    if artifact_root.exists() or manifest_path.exists():
+        raise ValueError("family 4 destination already exists; retries are forbidden")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 4 requires the gate closed with zero access")
+    profile_path = campaign_root / "profiles/family-04-oof-ensemble.json"
+    preregistration_path = run_root / "preregistration.json"
+    profile = read_json(profile_path)
+    preregistration = read_json(preregistration_path)
+    if (
+        tuple(profile["recipe_menu"]) != ENSEMBLE_VARIANT_IDS
+        or tuple(preregistration["preregistered_recipe_ids"]) != ENSEMBLE_VARIANT_IDS
+        or preregistration["scoring_state"] != "not-started"
+        or preregistration["profile_sha256"] != file_sha256(profile_path)
+    ):
+        raise ValueError("family 4 menu and optimizer were not preregistered")
+    registry_before = (campaign_root / "registry.jsonl").read_bytes()
+    if hashlib.sha256(registry_before).hexdigest().upper() != preregistration["registry_prefix_sha256_before"]:
+        raise ValueError("family 4 registry prefix changed after preregistration")
+
+    sources = {
+        item["id"]: artifact_base / Path(item["artifact_path"]).name
+        for item in profile["constituents"]
+    }
+    history = {name: [] for name in profile["constituent_ids"]}
+    candidate_predictions: list[dict[str, Any]] = []
+    incumbent_predictions: list[dict[str, Any]] = []
+    selections = []
+    fold_entries = []
+    source_lineage = []
+    attempts = []
+    for year in profile["outer_years"]:
+        outer = {
+            name: _read_jsonl(sources[name] / f"fold-{year}/outer-predictions.jsonl")
+            for name in profile["constituent_ids"]
+        }
+        lineage_entry = {
+            "year": year,
+            "constituents": {
+                name: {
+                    "source_path": f"{sources[name].name}/fold-{year}/outer-predictions.jsonl",
+                    "sha256": file_sha256(sources[name] / f"fold-{year}/outer-predictions.jsonl"),
+                    "row_count": len(outer[name]),
+                }
+                for name in profile["constituent_ids"]
+            },
+        }
+        selected = select_recipe_for_outer(
+            history if any(history.values()) else {},
+            outer,
+            outer_year=year,
+            profile=profile,
+        )
+        selection = selected["selection"]
+        predictions = selected["predictions"]
+        selections.append(selection)
+        candidate_predictions.extend(predictions)
+        incumbent_predictions.extend(outer[profile["current_constituent_id"]])
+        fold_root = artifact_root / f"fold-{year}"
+        prediction_path = fold_root / "outer-predictions.jsonl"
+        selection_path = fold_root / "selection.json"
+        _write_jsonl(prediction_path, predictions)
+        write_canonical_json(selection_path, selection)
+        fold_entries.append(
+            {
+                "year": year,
+                "path": f"fold-{year}/outer-predictions.jsonl",
+                "row_count": len(predictions),
+                "sha256": file_sha256(prediction_path),
+                "selected_recipe_id": selection["selected_recipe_id"],
+                "selection_path": f"fold-{year}/selection.json",
+                "selection_sha256": canonical_sha256(selection),
+            }
+        )
+        lineage_entry["fit_row_count"] = selection["fit_row_count"]
+        lineage_entry["fit_folds"] = selection["fit_folds"]
+        lineage_entry["fit_max_date"] = selection["fit_max_date"]
+        lineage_entry["weights"] = selection["weights"]
+        source_lineage.append(lineage_entry)
+        attempts.extend(
+            {
+                "fold": year,
+                "recipe_id": recipe_id,
+                "state": "not-scored-earliest" if year == profile["outer_years"][0] else "scored-inner-oof",
+                "score": selection["recipe_scores"].get(recipe_id),
+            }
+            for recipe_id in ENSEMBLE_VARIANT_IDS
+        )
+        for name in profile["constituent_ids"]:
+            history[name].extend(outer[name])
+
+    metrics = reduce_predictions(candidate_predictions).as_dict()
+    incumbent_metrics = reduce_predictions(incumbent_predictions).as_dict()
+    intervals = event_block_bootstrap_delta(
+        candidate_predictions,
+        incumbent_predictions,
+        iterations=int(profile["bootstrap"]["iterations"]),
+        seed=int(profile["bootstrap"]["seed"]),
+    )
+    metric_deltas = {
+        name: float(metrics[name]) - float(incumbent_metrics[name])
+        for name in ("log_loss", "brier", "accuracy")
+    }
+    calibration_gaps, subgroup_gaps = _metric_gaps(metrics, incumbent_metrics)
+    decision = promotion_decision(
+        {"log_loss_delta": metric_deltas["log_loss"]}, intervals
+    )
+    adaptive_signal = {
+        "selected_recipes": [selection["selected_recipe_id"] for selection in selections],
+        "foundation_weights": [
+            sum(selection["weights"][name] for name in profile["foundation_constituent_ids"])
+            for selection in selections
+        ],
+        "pooled_log_loss_delta": metric_deltas["log_loss"],
+        "pooled_ece_delta": calibration_gaps["ece"],
+    }
+    lineage = {
+        "constituent_ids": profile["constituent_ids"],
+        "foundation_constituent_ids": profile["foundation_constituent_ids"],
+        "foundation_aggregate_cap": profile["foundation_aggregate_cap"],
+        "folds": source_lineage,
+        "outer_label_fit_count": 0,
+        "full_prediction_node_count": 0,
+        "gate_access_count": gate["protected_access_count"],
+    }
+    write_canonical_json(artifact_root / "constituent-lineage.json", lineage)
+    result = {
+        "experiment_id": EXPERIMENT_ID,
+        "status": "complete",
+        "metrics": metrics,
+        "incumbent_metrics": incumbent_metrics,
+        "metric_deltas": metric_deltas,
+        "calibration_gaps": calibration_gaps,
+        "subgroup_gaps": subgroup_gaps,
+        "paired_event_block_intervals": intervals,
+        "promotion_decision": decision,
+        "selected_recipes": adaptive_signal["selected_recipes"],
+        "adaptive_signal_for_family_05": adaptive_signal,
+        "gate_access_count": gate["protected_access_count"],
+    }
+    write_canonical_json(artifact_root / "result.json", result)
+    inventory = tree_inventory(artifact_root)
+    _write_jsonl(run_root / "attempts.jsonl", attempts)
+    (run_root / "decision.md").write_bytes(
+        f"# Family 4 decision\n\n{decision['action']}: {decision['rule']}.\n".encode("utf-8")
+    )
+    manifest = {
+        **result,
+        "kind": "family",
+        "exit_state": "complete",
+        "artifact_path": ARTIFACT_PATH,
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "profile_path": "profiles/family-04-oof-ensemble.json",
+        "profile_sha256": canonical_sha256(profile),
+        "profile_file_sha256": file_sha256(profile_path),
+        "preregistration_path": f"{RUN_PATH}/preregistration.json",
+        "preregistration_commit": preregistration_commit,
+        "attempts_path": f"{RUN_PATH}/attempts.jsonl",
+        "constituent_lineage_path": "constituent-lineage.json",
+        "fold_predictions": fold_entries,
+        "selections": selections,
+        "source_revision": source_revision,
+        "terminal_failure": None,
+    }
+    write_canonical_json(manifest_path, manifest)
+    registry = _append_registry(
+        campaign_root,
+        {
+            "artifact_path": ARTIFACT_PATH,
+            "artifact_tree_sha256": inventory.tree_sha256,
+            "experiment_id": EXPERIMENT_ID,
+            "kind": "family",
+            "manifest_path": f"{RUN_PATH}/manifest.json",
+            "manifest_sha256": canonical_sha256(manifest),
+            "profile_path": manifest["profile_path"],
+            "profile_sha256": manifest["profile_sha256"],
+            "status": "complete",
+        },
+    )
+    return {**result, **registry, "artifact_tree_sha256": inventory.tree_sha256}

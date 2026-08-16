@@ -32,8 +32,15 @@ FIXED_FAMILY_2_ARTIFACT = Path(
     r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
     r"\experiments\top10_20260815\artifacts\03-family-02-horizon-recency"
 )
+FIXED_FAMILY_4_ARTIFACT = Path(
+    r"C:\Users\danhm\mma-ai\worktrees\top10-20260815"
+    r"\experiments\top10_20260815\artifacts\05-family-04-oof-ensemble"
+)
 FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_3 = (
     "C5F8E37AEC82E0AEFDAAE6EECF7A89E55EFDC04788884FFA504105F131C752BB"
+)
+FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_4 = (
+    "BAB7A9FBBFCFEA0D024DBBA8F338805CB1EBAB1B578AE663CF5E3862239C7C7D"
 )
 
 
@@ -59,11 +66,19 @@ def _validate_campaign_registry(campaign_root: Path):
     if len(raw_lines) <= 3:
         return validate_registry(campaign_root, strict=True)
     records = [json.loads(line) for line in raw_lines]
-    expected_ids = ["experiment-zero", *CAMPAIGN_FAMILY_IDS[:3]]
+    if len(records) > 5:
+        raise RegistryError("registry extends beyond the completed family-4 prefix")
+    expected_ids = ["experiment-zero", *CAMPAIGN_FAMILY_IDS[: len(records) - 1]]
     if [row["payload"]["experiment_id"] for row in records] != expected_ids:
-        raise RegistryError("registry does not contain the exact completed family-3 prefix")
+        raise RegistryError("registry does not contain the exact completed family prefix")
     if hashlib.sha256(b"".join(raw_lines[:3])).hexdigest().upper() != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_3:
         raise RegistryError("the frozen registry prefix before family 3 changed")
+    if (
+        len(raw_lines) > 4
+        and hashlib.sha256(b"".join(raw_lines[:4])).hexdigest().upper()
+        != FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_4
+    ):
+        raise RegistryError("the frozen registry prefix before family 4 changed")
     previous_record = "0" * 64
     prefix_bytes = b""
     for sequence, (raw, record) in enumerate(zip(raw_lines, records, strict=True)):
@@ -139,6 +154,8 @@ def verify_family_run(
     recompute_all: bool,
 ) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
+    if experiment_id == CAMPAIGN_FAMILY_IDS[3]:
+        return _verify_family_4_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[2]:
         return _verify_family_3_run(campaign_root, recompute_all=recompute_all)
     if experiment_id == CAMPAIGN_FAMILY_IDS[1]:
@@ -495,9 +512,173 @@ def _verify_family_3_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
     }
 
 
+def _verify_family_4_run(campaign_root: Path, *, recompute_all: bool) -> dict[str, Any]:
+    from .ensemble import ENSEMBLE_VARIANT_IDS
+    from .families.oof_ensemble import (
+        FIXED_ARTIFACT_BASE,
+        _metric_gaps,
+        promotion_decision,
+        select_recipe_for_outer,
+    )
+
+    experiment_id = CAMPAIGN_FAMILY_IDS[3]
+    manifest = read_json(campaign_root / "runs/family-04-oof-ensemble/manifest.json")
+    if manifest.get("experiment_id") != experiment_id or manifest.get("exit_state") != "complete":
+        raise ValueError("family 4 manifest is not a completed result")
+    profile_path = campaign_root / manifest["profile_path"]
+    profile = read_json(profile_path)
+    if (
+        canonical_sha256(profile) != manifest["profile_sha256"]
+        or file_sha256(profile_path) != manifest["profile_file_sha256"]
+        or tuple(profile["recipe_menu"]) != ENSEMBLE_VARIANT_IDS
+        or tuple(profile["selection_tie_break"]) != ENSEMBLE_VARIANT_IDS
+    ):
+        raise ValueError("family 4 profile differs from the preregistered exact menu")
+    preregistration = read_json(campaign_root / manifest["preregistration_path"])
+    if (
+        preregistration["profile_sha256"] != file_sha256(profile_path)
+        or preregistration["scoring_state"] != "not-started"
+        or tuple(preregistration["preregistered_recipe_ids"]) != ENSEMBLE_VARIANT_IDS
+        or preregistration["solver"] != profile["solver"]
+        or preregistration["regularization_shrinkage"] != profile["regularization_shrinkage"]
+        or preregistration["foundation_aggregate_cap"] != profile["foundation_aggregate_cap"]
+    ):
+        raise ValueError("family 4 menu or optimizer was not preregistered")
+    local_artifact = campaign_root / manifest["artifact_path"]
+    artifact_root = local_artifact if local_artifact.is_dir() else FIXED_FAMILY_4_ARTIFACT
+    inventory = tree_inventory(artifact_root)
+    if (
+        inventory.tree_sha256 != manifest["artifact_tree_sha256"]
+        or inventory.file_count != manifest["artifact_file_count"]
+    ):
+        raise ValueError("family 4 artifact inventory mismatch")
+    gate = AccessLedger(campaign_root).gate_status()
+    if gate["state"] != "closed" or gate["protected_access_count"] != 0:
+        raise ValueError("family 4 verification requires the gate closed with zero access")
+    attempts = read_jsonl(campaign_root / manifest["attempts_path"])
+    if (
+        len(attempts) != 20
+        or any(record["recipe_id"] not in ENSEMBLE_VARIANT_IDS for record in attempts)
+        or any(
+            {record["recipe_id"] for record in attempts if record["fold"] == year}
+            != set(ENSEMBLE_VARIANT_IDS)
+            for year in (2022, 2023, 2024, 2025)
+        )
+    ):
+        raise ValueError("family 4 attempts differ from the exact maximum-five menu")
+    lineage = read_json(artifact_root / manifest["constituent_lineage_path"])
+    if (
+        lineage["outer_label_fit_count"] != 0
+        or lineage["full_prediction_node_count"] != 0
+        or lineage["gate_access_count"] != 0
+        or lineage["foundation_aggregate_cap"] != profile["foundation_aggregate_cap"]
+    ):
+        raise ValueError("family 4 lineage records a forbidden fit or access")
+
+    sources = {
+        item["id"]: FIXED_ARTIFACT_BASE / Path(item["artifact_path"]).name
+        for item in profile["constituents"]
+    }
+    history = {name: [] for name in profile["constituent_ids"]}
+    predictions: list[dict[str, Any]] = []
+    incumbent: list[dict[str, Any]] = []
+    replayed_selections = []
+    for index, year in enumerate(profile["outer_years"]):
+        outer = {
+            name: read_jsonl(sources[name] / f"fold-{year}/outer-predictions.jsonl")
+            for name in profile["constituent_ids"]
+        }
+        lineage_fold = lineage["folds"][index]
+        for name in profile["constituent_ids"]:
+            source_path = sources[name] / f"fold-{year}/outer-predictions.jsonl"
+            source_identity = lineage_fold["constituents"][name]
+            if (
+                source_identity["sha256"] != file_sha256(source_path)
+                or source_identity["row_count"] != len(outer[name])
+            ):
+                raise ValueError("family 4 constituent source identity mismatch")
+        replayed = select_recipe_for_outer(
+            history if any(history.values()) else {},
+            outer,
+            outer_year=year,
+            profile=profile,
+        )
+        selection = replayed["selection"]
+        _assert_equal(selection, manifest["selections"][index], f"family 4 fold {year} selection")
+        _assert_equal(selection, read_json(artifact_root / f"fold-{year}/selection.json"), f"family 4 fold {year} selection artifact")
+        entry = manifest["fold_predictions"][index]
+        prediction_path = artifact_root / entry["path"]
+        if file_sha256(prediction_path) != entry["sha256"]:
+            raise ValueError("family 4 outer prediction identity mismatch")
+        stored = read_jsonl(prediction_path)
+        if (
+            len(stored) != entry["row_count"]
+            or any(row["boundary"] != "Original" for row in stored)
+        ):
+            raise ValueError("family 4 requires four Original outer prediction sets")
+        _assert_equal(stored, replayed["predictions"], f"family 4 fold {year} predictions")
+        predictions.extend(stored)
+        incumbent.extend(outer[profile["current_constituent_id"]])
+        replayed_selections.append(selection)
+        for name in profile["constituent_ids"]:
+            history[name].extend(outer[name])
+
+    metrics = reduce_predictions(predictions).as_dict()
+    incumbent_metrics = reduce_predictions(incumbent).as_dict()
+    intervals = event_block_bootstrap_delta(
+        predictions,
+        incumbent,
+        iterations=int(profile["bootstrap"]["iterations"]),
+        seed=int(profile["bootstrap"]["seed"]),
+    )
+    metric_deltas = {
+        name: float(metrics[name]) - float(incumbent_metrics[name])
+        for name in ("log_loss", "brier", "accuracy")
+    }
+    calibration_gaps, subgroup_gaps = _metric_gaps(metrics, incumbent_metrics)
+    decision = promotion_decision({"log_loss_delta": metric_deltas["log_loss"]}, intervals)
+    adaptive_signal = {
+        "selected_recipes": [selection["selected_recipe_id"] for selection in replayed_selections],
+        "foundation_weights": [
+            sum(selection["weights"][name] for name in profile["foundation_constituent_ids"])
+            for selection in replayed_selections
+        ],
+        "pooled_log_loss_delta": metric_deltas["log_loss"],
+        "pooled_ece_delta": calibration_gaps["ece"],
+    }
+    if recompute_all:
+        _assert_equal(metrics, manifest["metrics"], "family 4 metrics")
+        _assert_equal(incumbent_metrics, manifest["incumbent_metrics"], "family 4 incumbent metrics")
+        _assert_equal(metric_deltas, manifest["metric_deltas"], "family 4 metric deltas")
+        _assert_equal(calibration_gaps, manifest["calibration_gaps"], "family 4 calibration gaps")
+        _assert_equal(subgroup_gaps, manifest["subgroup_gaps"], "family 4 subgroup gaps")
+        _assert_equal(intervals, manifest["paired_event_block_intervals"], "family 4 intervals")
+        _assert_equal(decision, manifest["promotion_decision"], "family 4 promotion decision")
+        _assert_equal(adaptive_signal, manifest["adaptive_signal_for_family_05"], "family 4 adaptive signal")
+    return {
+        "experiment_id": experiment_id,
+        "status": "complete",
+        "gate_access_count": gate["protected_access_count"],
+        "artifact_tree_sha256": inventory.tree_sha256,
+        "artifact_file_count": inventory.file_count,
+        "outer_years": profile["outer_years"],
+        "selected_recipes": adaptive_signal["selected_recipes"],
+        "weights": [selection["weights"] for selection in replayed_selections],
+        "metrics": metrics,
+        "incumbent_metrics": incumbent_metrics,
+        "metric_deltas": metric_deltas,
+        "calibration_gaps": calibration_gaps,
+        "subgroup_gaps": subgroup_gaps,
+        "paired_event_block_intervals": intervals,
+        "promotion_decision": decision,
+        "adaptive_signal_for_family_05": adaptive_signal,
+        "preregistration_commit": manifest["preregistration_commit"],
+    }
+
+
 def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str, Any]:
     campaign_root = Path(campaign_root)
-    if through not in CAMPAIGN_FAMILY_IDS[:3]:
+    if through not in CAMPAIGN_FAMILY_IDS[:4]:
         raise ValueError("decision replay is bounded to the completed family prefix")
     registry = _validate_campaign_registry(campaign_root)
     through_index = CAMPAIGN_FAMILY_IDS.index(through) + 1
@@ -515,7 +696,11 @@ def replay_campaign_decisions(campaign_root: Path, *, through: str) -> dict[str,
             "paired_event_block_intervals": verified.get("paired_event_block_intervals"),
             "drift_summary": verified.get("drift_summary"),
             "adaptive_signal_for_next_family": verified.get(
-                "adaptive_signal_for_family_03", verified.get("adaptive_signal_for_family_04")
+                "adaptive_signal_for_family_03",
+                verified.get(
+                    "adaptive_signal_for_family_04",
+                    verified.get("adaptive_signal_for_family_05"),
+                ),
             ),
         })
     return {
