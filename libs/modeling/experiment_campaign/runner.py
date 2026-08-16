@@ -51,6 +51,13 @@ def _canonical_family_id(experiment_id: str) -> str:
     if experiment_id == FAMILY_5_RUN_ALIAS:
         return CAMPAIGN_FAMILY_IDS[4]
     return experiment_id
+
+
+def _canonical_checkout_text_sha256(path: Path) -> str:
+    normalized = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    if b"\r" in normalized:
+        raise ValueError("canonical text identity rejects bare carriage returns")
+    return hashlib.sha256(normalized).hexdigest().upper()
 FROZEN_REGISTRY_PREFIX_BEFORE_FAMILY_3 = (
     "C5F8E37AEC82E0AEFDAAE6EECF7A89E55EFDC04788884FFA504105F131C752BB"
 )
@@ -769,6 +776,7 @@ def _verify_family_5_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
         raise ValueError("family 5 attempts differ from the exact maximum-eight menu")
     lineage = read_json(artifact_root / manifest["source_lineage_path"])
     data_path = campaign_root.parents[1] / manifest["data_path"]
+    data_sha256 = _canonical_checkout_text_sha256(data_path)
     if (
         lineage["source_file_sha256"] != profile["frozen_source"]["sha256"]
         or lineage["source_header_sha256"] != _header_sha256(header)
@@ -776,8 +784,8 @@ def _verify_family_5_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
         or lineage["outer_label_selection_count"] != 0
         or lineage["gate_selection_count"] != 0
         or lineage["combined_row_importance_used"] is not False
-        or file_sha256(data_path) != manifest["data_sha256"]
-        or file_sha256(data_path) != lineage["development_table_sha256"]
+        or data_sha256 != manifest["data_sha256"]
+        or data_sha256 != lineage["development_table_sha256"]
     ):
         raise ValueError("family 5 source or selection lineage mismatch")
 
