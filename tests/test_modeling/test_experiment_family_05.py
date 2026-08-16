@@ -13,7 +13,10 @@ from libs.modeling.experiment_campaign.semantic_portfolio import (
     select_stable_features,
     validate_preregistered_profile,
 )
-from libs.modeling.experiment_campaign.runner import verify_family_run
+from libs.modeling.experiment_campaign.runner import (
+    replay_campaign_decisions,
+    verify_family_run,
+)
 
 
 SOURCE_SHA256 = "A" * 64
@@ -201,3 +204,15 @@ def test_ticket_named_verify_run_alias_resolves_terminal_family() -> None:
     )
     assert result["experiment_id"] == "family-05-stable-semantic-portfolio"
     assert result["status"] == "complete"
+
+
+def test_ticket_named_replay_alias_resolves_terminal_family() -> None:
+    result = replay_campaign_decisions(
+        Path("experiments/top10_20260815"),
+        through="family-05-semantic-portfolio",
+    )
+    assert len(result["decisions"]) == 5
+    assert result["decisions"][-1]["experiment_id"] == (
+        "family-05-stable-semantic-portfolio"
+    )
+    assert result["gate_access_count"] == 0
