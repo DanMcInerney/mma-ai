@@ -4,6 +4,7 @@ import copy
 
 import pytest
 
+from libs.modeling.split_refit_experiment.__main__ import _parser
 from libs.modeling.split_refit_experiment.refit import (
     RefitError,
     assert_single_refit_attempt,
@@ -12,6 +13,21 @@ from libs.modeling.split_refit_experiment.refit import (
     validate_full_population,
     validate_named_profile,
 )
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["preflight-refit", "fit-refit", "refit-child", "verify-refit-attempt", "verify-refit"],
+)
+def test_refit_cli_commands_are_explicit_named_entrypoints(command: str):
+    arguments = [command, "--campaign", "campaign"]
+    if command in {"preflight-refit", "fit-refit", "refit-child"}:
+        arguments.extend(["--source-csv", "sealed.csv"])
+    if command in {"preflight-refit", "verify-refit-attempt"}:
+        arguments.append("--strict")
+    if command == "verify-refit":
+        arguments.append("--recompute-lineage")
+    assert _parser().parse_args(arguments).command == command
 
 
 def _profile() -> dict[str, object]:

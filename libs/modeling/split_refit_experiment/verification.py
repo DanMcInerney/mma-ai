@@ -339,3 +339,183 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
             "database_tokens": [],
         },
     }
+
+
+def _validate_refit_registry(campaign_root: Path) -> dict[str, Any]:
+    from .refit import EXPECTED_REGISTRY_PREFIX
+
+    path = campaign_root / "registry.jsonl"
+    lines = [line.replace(b"\r\n", b"\n") for line in path.read_bytes().splitlines(keepends=True)]
+    records = [json.loads(line) for line in lines]
+    expected_ids = [
+        "rollback-capsule",
+        "split-materialization",
+        "evaluation-selection",
+        "evaluation-result",
+        "full-data-refit",
+    ]
+    if [record.get("record_id") for record in records] != expected_ids:
+        raise RefitVerificationError("registry does not have the exact full-refit sequence")
+    if hashlib.sha256(b"".join(lines[:4])).hexdigest().upper() != EXPECTED_REGISTRY_PREFIX:
+        raise RefitVerificationError("post-evaluation registry prefix changed")
+    prefix = b""
+    previous = "0" * 64
+    for sequence, (raw, record) in enumerate(zip(lines, records, strict=True)):
+        core = {key: value for key, value in record.items() if key != "record_sha256"}
+        if (
+            record.get("sequence") != sequence
+            or record.get("prefix_sha256_before") != hashlib.sha256(prefix).hexdigest().upper()
+            or record.get("previous_record_sha256") != previous
+            or record.get("record_sha256") != canonical_sha256(core)
+        ):
+            raise RefitVerificationError("full-refit registry chain changed")
+        artifact = (campaign_root / record["payload"]["artifact_path"]).resolve()
+        try:
+            artifact.relative_to(campaign_root.resolve())
+        except ValueError as exc:
+            raise RefitVerificationError("full-refit registry artifact escapes campaign") from exc
+        raw_artifact = artifact.read_bytes()
+        artifact_hashes = {
+            hashlib.sha256(raw_artifact).hexdigest().upper(),
+            hashlib.sha256(raw_artifact.replace(b"\r\n", b"\n")).hexdigest().upper(),
+        }
+        if record["payload"]["artifact_sha256"] not in artifact_hashes:
+            raise RefitVerificationError("full-refit registry artifact identity changed")
+        prefix += raw
+        previous = record["record_sha256"]
+    head = _read_json(campaign_root / "registry-head.json")
+    expected_head = {
+        "record_count": len(records),
+        "registry_bytes": len(prefix),
+        "registry_prefix_sha256": hashlib.sha256(prefix).hexdigest().upper(),
+        "last_record_sha256": previous,
+    }
+    _same(head, expected_head, "full-refit registry head")
+    return {"record_ids": expected_ids, "prefix_sha256": expected_head["registry_prefix_sha256"]}
+
+
+def _refit_git_scope(repo: Path) -> list[str]:
+    from .refit import BASELINE_REVISION
+
+    completed = subprocess.run(
+        ["git", "diff", "--name-only", f"{BASELINE_REVISION}..HEAD"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    paths = [line.strip().replace("\\", "/") for line in completed.stdout.splitlines() if line.strip()]
+    allowed_files = {
+        "libs/modeling/split_refit_experiment/__main__.py",
+        "libs/modeling/split_refit_experiment/refit.py",
+        "libs/modeling/split_refit_experiment/verification.py",
+        "tests/test_modeling/test_split_refit_refit.py",
+        "tests/test_modeling/test_split_refit_verification.py",
+        "experiments/split_refit_20260816/registry.jsonl",
+        "experiments/split_refit_20260816/registry-head.json",
+    }
+    allowed_prefix = "experiments/split_refit_20260816/runs/full-data-refit/"
+    unexpected = [path for path in paths if path not in allowed_files and not path.startswith(allowed_prefix)]
+    if unexpected:
+        raise RefitVerificationError(f"full-refit result paths exceed ticket scope: {unexpected}")
+    return paths
+
+
+def verify_refit(campaign_root: Path, *, recompute_lineage: bool) -> dict[str, Any]:
+    if not recompute_lineage:
+        raise RefitVerificationError("strict refit verification requires --recompute-lineage")
+    from autogluon.tabular import TabularPredictor
+
+    from .refit import (
+        FROZEN_SOURCE_SHA256,
+        PROFILE_NAME,
+        _native_tree,
+        _paths as refit_paths,
+        _preservation_snapshot,
+        _standard_model_info,
+        classify_saved_lineage,
+        prediction_identities,
+    )
+
+    campaign_root = Path(campaign_root).resolve()
+    paths = refit_paths(campaign_root)
+    preflight = _read_json(paths["preflight"])
+    prereg = _read_json(paths["preregistration"])
+    attempts = read_jsonl(paths["attempts"])
+    result = _read_json(paths["result"])
+    verified = validate_refit_documents(attempts=attempts, result=result)
+    if result.get("profile_name") != PROFILE_NAME or result.get("profile") != prereg.get("profile"):
+        raise RefitVerificationError("saved refit profile differs from preregistration")
+    if result.get("profile_sha256") != prereg.get("profile_sha256"):
+        raise RefitVerificationError("saved refit profile hash changed")
+    if result.get("feature_sha256") != prereg.get("feature_sha256"):
+        raise RefitVerificationError("saved refit feature hash changed")
+    source = Path(prereg["source_csv_path"])
+    if file_sha256(source) != FROZEN_SOURCE_SHA256:
+        raise RefitVerificationError("sealed source CSV changed")
+    model_root = Path(result["model_root"])
+    complete_before = tree_identity(model_root)
+    if complete_before != result.get("complete_tree"):
+        raise RefitVerificationError("registered complete model tree changed")
+    if _native_tree(model_root) != result.get("native_tree"):
+        raise RefitVerificationError("registered native model tree changed")
+    predictor = TabularPredictor.load(str(model_root))
+    if str(predictor.model_best) != result.get("selected_node"):
+        raise RefitVerificationError("loaded full-refit selected node changed")
+    names = [str(name) for name in predictor.model_names()]
+    if names != [node["name"] for node in result.get("model_graph", [])]:
+        raise RefitVerificationError("loaded full-refit model graph changed")
+    model_info = _standard_model_info(predictor)
+    prediction_hashes, probe = prediction_identities(predictor, model_root)
+    lineage = classify_saved_lineage(model_info, prediction_hashes, total_rows=3267)
+    _same(prediction_hashes, result.get("prediction_hashes"), "saved-node prediction identities")
+    _same(probe, result.get("prediction_probe"), "saved-node prediction probe")
+    _same(lineage, result.get("lineage"), "saved-node fit lineage")
+    if tree_identity(model_root) != complete_before:
+        raise RefitVerificationError("predictor load/lineage recomputation mutated model bytes")
+    if file_sha256(Path(result["scaler_path"])) != result.get("scaler_sha256"):
+        raise RefitVerificationError("refit scaler identity changed")
+    preservation_after = _preservation_snapshot(
+        campaign_root,
+        _read_json(campaign_root / "runs/80-10-10-evaluation/selection.json"),
+    )
+    _same(preservation_after, preflight.get("preservation"), "prior-artifact preservation")
+    for noun in ("stdout", "stderr"):
+        log = Path(attempts[-1][f"{noun}_path"])
+        if file_sha256(log) != attempts[-1][f"{noun}_sha256"]:
+            raise RefitVerificationError(f"refit {noun} log identity changed")
+    forbidden_hits = []
+    for path in (paths["preflight"], paths["preregistration"], paths["attempts"], paths["result"]):
+        if has_database_token(path.read_text(encoding="utf-8")):
+            forbidden_hits.append(str(path))
+    if forbidden_hits:
+        raise RefitVerificationError(f"database tokens found in refit evidence: {forbidden_hits}")
+    if gpu_process_snapshot()["python_rows"]:
+        raise RefitVerificationError("training process remained active after refit")
+    registry = _validate_refit_registry(campaign_root)
+    repo = Path.cwd().resolve()
+    changed = _refit_git_scope(repo)
+    diff = subprocess.run(
+        ["git", "diff", "--check", f"{BASELINE_REVISION}..HEAD"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    if diff.returncode:
+        raise RefitVerificationError(f"full-refit whitespace verification failed: {diff.stdout}{diff.stderr}")
+    return {
+        "status": "PASS",
+        **verified,
+        "selected_node": predictor.model_best,
+        "classes": result["classes"],
+        "model_count": len(names),
+        "complete_tree_sha256": complete_before["sha256"],
+        "native_tree_sha256": result["native_tree"]["sha256"],
+        "scaler_sha256": result["scaler_sha256"],
+        "lineage": lineage,
+        "registry": registry,
+        "changed_paths": changed,
+        "preservation": preservation_after,
+        "validation_claims": [],
+        "database_tokens": [],
+    }
