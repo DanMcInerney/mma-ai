@@ -7,8 +7,10 @@ import pytest
 from libs.modeling.experiment_campaign.metrics import reduce_predictions
 from libs.modeling.split_refit_experiment.verification import (
     EvaluationVerificationError,
+    RefitVerificationError,
     has_database_token,
     validate_evaluation_documents,
+    validate_refit_documents,
     validate_loaded_predictor,
 )
 
@@ -151,3 +153,76 @@ def test_predictor_load_smoke_requires_frozen_graph_and_selected_node():
     Predictor.model_best = "Mitra"
     with pytest.raises(EvaluationVerificationError, match="selected node"):
         validate_loaded_predictor(Predictor(), selection)
+
+
+def _refit_documents():
+    attempts = [
+        {"attempt_id": "full-data-refit-attempt-1", "state": "launched"},
+        {
+            "attempt_id": "full-data-refit-attempt-1",
+            "state": "exited",
+            "exit_code": 0,
+        },
+    ]
+    lineage = {
+        "Mitra": {
+            "boundary": "Original",
+            "origin": "internal-selection-fit",
+            "fit_rows": 2807,
+            "metric_claim": "none",
+            "context_contaminated": True,
+        },
+        "Mitra_FULL": {
+            "boundary": "FULL",
+            "origin": "fresh-full-fit",
+            "fit_rows": 3267,
+            "metric_claim": "none",
+            "context_contaminated": True,
+        },
+        "RealMLP_r9_FULL": {
+            "boundary": "FULL",
+            "origin": "original-clone",
+            "fit_rows": 2807,
+            "metric_claim": "none",
+            "context_contaminated": True,
+        },
+    }
+    result = {
+        "state": "complete",
+        "profile_name": "v8-hybrid-weighted",
+        "source_rows": 3267,
+        "feature_count": 40,
+        "fit_invocation_count": 1,
+        "validation_claims": [],
+        "database_access": False,
+        "lineage": lineage,
+    }
+    return attempts, result
+
+
+def test_refit_documents_admit_full_data_without_validation_claim():
+    attempts, result = _refit_documents()
+    verified = validate_refit_documents(attempts=attempts, result=result)
+    assert verified["source_rows"] == 3267
+    assert verified["validation_claims"] == []
+
+
+@pytest.mark.parametrize(
+    "mutation", ["rows", "retry", "validation", "clone", "context", "database"]
+)
+def test_refit_documents_reject_wrong_boundary_claims(mutation: str):
+    attempts, result = _refit_documents()
+    if mutation == "rows":
+        result["source_rows"] = 3266
+    elif mutation == "retry":
+        attempts += copy.deepcopy(attempts)
+    elif mutation == "validation":
+        result["validation_claims"] = [{"node": "Mitra_FULL", "kind": "validation"}]
+    elif mutation == "clone":
+        result["lineage"]["RealMLP_r9_FULL"]["fit_rows"] = 3267
+    elif mutation == "context":
+        result["lineage"]["Mitra_FULL"]["context_contaminated"] = False
+    else:
+        result["database_access"] = True
+    with pytest.raises(RefitVerificationError):
+        validate_refit_documents(attempts=attempts, result=result)

@@ -37,6 +37,10 @@ class EvaluationVerificationError(ValueError):
     pass
 
 
+class RefitVerificationError(ValueError):
+    pass
+
+
 def has_database_token(text: str) -> bool:
     lowered = text.lower()
     return "clankerfights" in lowered or bool(
@@ -106,6 +110,47 @@ def validate_evaluation_documents(
     if result.get("post_test_adaptation") is not False:
         raise EvaluationVerificationError("post-test adaptation is forbidden")
     return {"row_count": expected_count, "metrics": metrics, "prediction_ids_sha256": canonical_sha256(ids)}
+
+
+def validate_refit_documents(
+    *, attempts: Sequence[Mapping[str, Any]], result: Mapping[str, Any]
+) -> dict[str, Any]:
+    from .refit import RefitError, assert_single_refit_attempt
+
+    try:
+        assert_single_refit_attempt(attempts, require_success=True)
+    except RefitError as exc:
+        raise RefitVerificationError(str(exc)) from exc
+    if result.get("state") != "complete":
+        raise RefitVerificationError("refit result is not complete")
+    if result.get("profile_name") != "v8-hybrid-weighted":
+        raise RefitVerificationError("refit did not use the exact named profile")
+    if result.get("source_rows") != 3267 or result.get("feature_count") != 40:
+        raise RefitVerificationError("refit population or feature count changed")
+    if result.get("fit_invocation_count") != 1:
+        raise RefitVerificationError("refit invocation count changed")
+    if result.get("validation_claims") != []:
+        raise RefitVerificationError("full/context result makes a validation claim")
+    if result.get("database_access") is not False:
+        raise RefitVerificationError("refit evidence reports database access")
+    lineage = result.get("lineage")
+    if not isinstance(lineage, Mapping) or not lineage:
+        raise RefitVerificationError("refit lineage is missing")
+    for name, node in lineage.items():
+        if node.get("metric_claim") != "none" or node.get("context_contaminated") is not True:
+            raise RefitVerificationError(f"unqualified context boundary: {name}")
+        if node.get("boundary") not in {"Original", "FULL"}:
+            raise RefitVerificationError(f"unknown saved-node boundary: {name}")
+        if node.get("origin") == "fresh-full-fit" and node.get("fit_rows") != 3267:
+            raise RefitVerificationError(f"fresh FULL fit row count changed: {name}")
+        if node.get("origin") == "original-clone" and node.get("fit_rows") == 3267:
+            raise RefitVerificationError(f"clone is falsely labeled full-row: {name}")
+    return {
+        "source_rows": 3267,
+        "feature_count": 40,
+        "validation_claims": [],
+        "node_count": len(lineage),
+    }
 
 
 def _validate_registry(campaign_root: Path) -> dict[str, Any]:
