@@ -202,3 +202,40 @@ def test_registered_source_audit_accepts_prior_disjoint_two_class_oof_rows() -> 
     assert audit["calibration_fit_event_count"] == 2
     assert audit["variant_fit_count"] == 0
     assert audit["variant_score_count"] == 0
+
+
+def test_registered_source_audit_accepts_original_oof_with_cross_row_training() -> None:
+    inner_rows = [
+        {
+            "boundary": "Original",
+            "event_date": "2021-01-01",
+            "event_id": "prior-a",
+            "fight_id": "fight-a",
+            "fit_event_ids": ["model-a"],
+            "probability": 0.25,
+            "y_true": 0,
+        },
+        {
+            "boundary": "Original",
+            "event_date": "2021-02-01",
+            "event_id": "prior-b",
+            "fight_id": "fight-b",
+            "fit_event_ids": ["model-a", "prior-a"],
+            "probability": 0.75,
+            "y_true": 1,
+        },
+    ]
+    outer_rows = [
+        {
+            "boundary": "Original",
+            "event_date": "2022-01-01",
+            "event_id": "outer-a",
+            "fight_id": "fight-c",
+            "probability": 0.6,
+            "y_true": 1,
+        }
+    ]
+
+    audit = audit_registered_rows(inner_rows, outer_rows, outer_year=2022)
+    assert audit["status"] == "eligible"
+    assert audit["same_fit_row_count"] == 0

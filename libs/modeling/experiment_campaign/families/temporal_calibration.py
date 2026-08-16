@@ -28,7 +28,9 @@ def audit_registered_rows(
     }
     outer_ids = {str(row["fight_id"]) for row in outer_rows}
     outer_event_ids = {str(row["event_id"]) for row in outer_rows}
-    overlap = calibration_event_ids.intersection(model_fit_event_ids)
+    same_fit_rows = [
+        row for row in inner_rows if str(row["event_id"]) in {str(value) for value in row.get("fit_event_ids", [])}
+    ]
     audit = {
         "outer_year": outer_year,
         "calibration_fit_row_count": len(inner_rows),
@@ -37,7 +39,8 @@ def audit_registered_rows(
         "model_fit_event_count": len(model_fit_event_ids),
         "outer_row_count": len(outer_rows),
         "outer_event_count": len(outer_event_ids),
-        "calibration_model_fit_overlap_count": len(overlap),
+        "calibration_model_fit_overlap_count": len(same_fit_rows),
+        "same_fit_row_count": len(same_fit_rows),
         "calibration_outer_id_overlap_count": len(set(fit_ids).intersection(outer_ids)),
         "calibration_outer_event_overlap_count": len(calibration_event_ids.intersection(outer_event_ids)),
         "variant_fit_count": 0,
@@ -51,7 +54,8 @@ def audit_registered_rows(
 
     if not inner_rows or not outer_rows:
         reject("registered calibration or outer history is empty")
-    if any(row.get("boundary") != "InnerSelection" for row in inner_rows):
+    boundaries = {row.get("boundary") for row in inner_rows}
+    if len(boundaries) != 1 or not boundaries.issubset({"InnerSelection", "Original"}):
         reject("calibration history has an unsupported or shuffled fold boundary")
     if any(row.get("boundary") != "Original" for row in outer_rows):
         reject("outer history must contain Original probabilities")
@@ -59,7 +63,7 @@ def audit_registered_rows(
         reject("calibration history contains duplicate IDs")
     if set(fit_ids).intersection(outer_ids):
         reject("calibration fit IDs overlap outer IDs")
-    if overlap:
+    if same_fit_rows:
         reject("calibration event IDs overlap base model-fit event IDs")
     if calibration_event_ids.intersection(outer_event_ids):
         reject("calibration event IDs overlap outer event IDs")
