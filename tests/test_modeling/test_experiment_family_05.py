@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +12,7 @@ from libs.modeling.experiment_campaign.semantic_portfolio import (
     select_stable_features,
     validate_preregistered_profile,
 )
+from libs.modeling.experiment_campaign.runner import verify_family_run
 
 
 SOURCE_SHA256 = "A" * 64
@@ -119,3 +122,31 @@ def test_stability_selection_is_inner_only_directional_and_redundancy_capped() -
     unstable[1]["direction"] = -1
     result = select_stable_features(unstable, profile=profile, outer_year=2022)
     assert result["selected_features"] == ["feature_b"]
+
+
+def test_actual_campaign_has_frozen_eight_profile_preregistration() -> None:
+    campaign = Path("experiments/top10_20260815")
+    profile_path = campaign / "profiles/family-05-semantic-portfolio.json"
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    source_path = Path(profile["frozen_source"]["absolute_path"])
+    source_header = source_path.open(encoding="utf-8", newline="").readline().rstrip("\r\n").split(",")
+    validated = validate_preregistered_profile(profile, source_header=source_header)
+    assert validated["candidate_count"] == 40
+    assert validated["profile_count"] == 8
+    assert profile["v8_ordered_feature_sha256"] == "13E545D762A3F1BE4D023D82B8E65D77E41589031051F1F6796D742F25223022"
+
+
+def test_actual_campaign_has_terminal_semantic_portfolio_result() -> None:
+    campaign = Path("experiments/top10_20260815")
+    result = verify_family_run(
+        campaign,
+        "family-05-stable-semantic-portfolio",
+        recompute_all=True,
+    )
+    assert result["status"] == "complete"
+    assert result["gate_access_count"] == 0
+    assert result["profile_count"] == 8
+    assert result["outer_years"] == [2022, 2023, 2024, 2025]
+    assert result["outer_label_selection_count"] == 0
+    assert result["combined_row_importance_used"] is False
+    assert all(result["selected_features_by_fold"])
