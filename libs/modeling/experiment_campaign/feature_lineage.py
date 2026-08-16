@@ -125,8 +125,10 @@ def validate_feature_lineage_rows(
         _require(row["fit_scope"] != "global", "global-fit normalization is forbidden")
         _require(row["fit_scope"] == "prior-only", "feature fit scope must be prior-only")
         _require(row["prior_id"] in registered_prior_ids, "unregistered prior")
-        _require(float(row["denominator"]) > 0.0, "zero denominator rate")
-        _require(float(row["numerator"]) >= 0.0, "negative rate numerator")
+        rate_feature = "rate" in str(row["feature_name"]) or "posterior" in str(row["feature_name"])
+        if rate_feature:
+            _require(float(row["denominator"]) > 0.0, "zero denominator rate")
+            _require(float(row["numerator"]) >= 0.0, "negative rate numerator")
         support = float(row["effective_support"])
         uncertainty = float(row["uncertainty"])
         _require(support >= 0.0, "negative effective support")

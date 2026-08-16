@@ -9,6 +9,11 @@ from libs.modeling.experiment_campaign.fighter_states import (
     build_fighter_state_rows,
     validate_preregistered_profiles,
 )
+from libs.modeling.experiment_campaign.families.fighter_states import (
+    PROFILE_IDS,
+    build_preregistered_profile,
+)
+from libs.modeling.experiment_campaign.feature_lineage import validate_feature_lineage_rows
 
 
 def _profile() -> dict:
@@ -119,3 +124,46 @@ def test_same_event_history_is_not_visible() -> None:
     ][0]
     assert target["source_row_ids"] == []
     assert target["effective_support"] == 0.0
+
+
+def test_exact_eight_profile_menu_freezes_all_state_formulas() -> None:
+    profile = build_preregistered_profile()
+    validated = validate_preregistered_profiles(profile)
+    assert tuple(validated["profile_ids"]) == PROFILE_IDS
+    assert validated["profile_count"] == 8
+    assert profile["source_sha256"] == "157649B780965ECC585F18B3030199CDC0F4FE3013958FFA4095FCF665FDB1EA"
+    assert profile["construction"]["same_date_policy"] == "exclude-entire-date"
+    assert profile["construction"]["decay_18m_days"] == 548
+    assert profile["construction"]["decay_half_life_days"] == 180
+    assert profile["construction"]["inactivity_cap_days"] == 730
+    assert profile["construction"]["age_interaction_center_years"] == 30.0
+    assert set(profile["feature_definitions"]) == set(
+        profile["profiles"][-1]["feature_names"]
+    )
+    assert all(len(item["ordered_feature_sha256"]) == 64 for item in profile["profiles"])
+
+
+def test_full_state_portfolio_has_count_aware_valid_lineage() -> None:
+    profile = build_preregistered_profile()
+    rows = build_fighter_state_rows(
+        _fights(),
+        profile=profile,
+        artifact_sha256="B" * 64,
+    )
+    summary = validate_feature_lineage_rows(
+        rows,
+        registered_prior_ids=set(profile["registered_priors"]),
+    )
+    assert summary["row_count"] == 2 * len(_fights()) * len(profile["feature_definitions"])
+    assert summary["feature_count"] == len(profile["feature_definitions"])
+    target = {
+        row["feature_name"]: row
+        for row in rows
+        if row["fight_id"] == "2" and row["fighter_id"] == "a"
+    }
+    assert target["career_win_rate"]["effective_support"] == 1.0
+    assert target["sparse_ko_posterior"]["denominator"] > 1.0
+    assert target["sparse_ko_posterior"]["uncertainty"] > 0.0
+    assert target["high_count_striking_state"]["source_row_ids"] == ["1"]
+    assert target["inactivity_days"]["value"] == 152.0
+    assert target["age_win_interaction"]["source_dates"] == ["2024-01-01"]
