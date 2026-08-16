@@ -31,11 +31,19 @@ from libs.modeling.experiment_campaign.hashing import (
 )
 from libs.modeling.experiment_campaign.protocol import initialize_gate
 from libs.modeling.experiment_campaign.runner import (
+    _contains_forbidden_database_reference,
     audit_campaign_safety,
     replay_campaign_decisions,
     validate_terminal_campaign,
     verify_family_run,
 )
+
+
+def test_safety_token_scan_distinguishes_metric_digits_from_database_references() -> None:
+    assert not _contains_forbidden_database_reference(b'{"log_loss": 0.5554323842941127}')
+    assert _contains_forbidden_database_reference(b'{"url": "postgresql://example"}')
+    assert _contains_forbidden_database_reference(b'{"host": "localhost:5432"}')
+    assert _contains_forbidden_database_reference(b'{"port": 5432}')
 
 
 def _context_rows() -> pd.DataFrame:
@@ -282,6 +290,17 @@ def test_actual_campaign_is_preregistered_and_terminally_recomputable() -> None:
     }
     assert manifest["gate_access_count"] == 0
     assert manifest["candidate_fit_count"] <= 6
+    assert manifest["comparison_scope"] == {
+        "candidate_outer_years": [2025],
+        "candidate_row_count": 282,
+        "family_1_full_development_row_count": 1_108,
+        "full_development_comparable": False,
+        "campaign_promotion_eligible": False,
+        "use": "bounded-2025-capacity-probe-for-family-10",
+    }
+    assert manifest["promotion_decision"]["promoted"] is False
+    assert manifest["promotion_decision"]["campaign_promotion_eligible"] is False
+    assert manifest["adaptive_signal_for_family_10"]["best_2025_probe_profile"]
     verified = verify_family_run(campaign, "family-09-capacity-foundation", recompute_all=True)
     assert verified["status"] in {"complete", "failed"}
     assert verified["gate_access_count"] == 0

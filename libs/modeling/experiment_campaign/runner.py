@@ -1437,6 +1437,7 @@ def _verify_family_9_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
         "control_metrics",
         "paired_event_block_intervals",
         "capacity_diagnostics",
+        "comparison_scope",
         "context_lineage",
         "label_invariance",
         "outer_prediction_identities",
@@ -1504,6 +1505,22 @@ def _verify_family_9_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
                 ),
             )["candidate_id"]
     _assert_equal(selected, manifest["selected_profiles"], "family 9 inner selection")
+    if manifest["comparison_scope"] != {
+        "candidate_outer_years": [2025],
+        "candidate_row_count": 282,
+        "family_1_full_development_row_count": 1_108,
+        "full_development_comparable": False,
+        "campaign_promotion_eligible": False,
+        "use": "bounded-2025-capacity-probe-for-family-10",
+    }:
+        raise ValueError("family 9 bounded comparison scope differs")
+    if (
+        manifest["promotion_decision"]["promoted"] is not False
+        or manifest["promotion_decision"]["campaign_promotion_eligible"] is not False
+        or manifest["promotion_decision"]["incumbent_after"]
+        != "family-01-weighted-v8-control"
+    ):
+        raise ValueError("family 9 bounded probe cannot promote")
     invariance = manifest["label_invariance"]
     if (
         invariance["evaluation_label_removal"] != "byte-identical"
@@ -1534,6 +1551,7 @@ def _verify_family_9_run(campaign_root: Path, *, recompute_all: bool) -> dict[st
         )["outer_metrics"],
         "paired_event_block_intervals": manifest["paired_event_block_intervals"],
         "capacity_diagnostics": manifest["capacity_diagnostics"],
+        "comparison_scope": manifest["comparison_scope"],
         "context_lineage": manifest["context_lineage"],
         "label_invariance": manifest["label_invariance"],
         "outer_prediction_identities": manifest["outer_prediction_identities"],
@@ -1599,6 +1617,24 @@ def verify_feature_lineage(
     raise ValueError("unsupported family 6 lineage result")
 
 
+def _contains_forbidden_database_reference(searchable: bytes) -> bool:
+    """Detect database references without treating metric digits as a port."""
+
+    compact = b"".join(searchable.lower().split())
+    return any(
+        token in compact
+        for token in (
+            b"clankerfights",
+            b"postgresql://",
+            b"postgres://",
+            b"localhost:5432",
+            b"127.0.0.1:5432",
+            b'"port":5432',
+            b"'port':5432",
+        )
+    )
+
+
 def audit_campaign_safety(
     campaign_root: Path,
     *,
@@ -1636,7 +1672,7 @@ def audit_campaign_safety(
         for path in sorted(artifact_root.rglob("*"))
         if path.is_file() and path.suffix.lower() in {".json", ".jsonl", ".txt", ".log"}
     )
-    if any(token in searchable for token in (b"5432", b"clankerfights", b"postgresql://")):
+    if _contains_forbidden_database_reference(searchable):
         raise ValueError("family safety evidence contains a forbidden database token")
     gate = AccessLedger(campaign_root).gate_status()
     if require_gate_closed and (gate["state"] != "closed" or gate["protected_access_count"] != 0):

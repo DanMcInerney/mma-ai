@@ -650,7 +650,8 @@ def materialize_family_09(
         "incumbent_before": CONTROL_ID,
         "incumbent_after": CONTROL_ID,
         "promoted": False,
-        "rule": "inner-only capacity selection; paired Original outer confirmation required",
+        "campaign_promotion_eligible": False,
+        "rule": "bounded Original-2025 probes are not comparable to the 1,108-row development control",
     }
     if best_result is not None and control_records:
         paired_intervals = event_block_bootstrap_delta(
@@ -660,19 +661,7 @@ def materialize_family_09(
             seed=20260815,
         )
         candidate_metrics = best_result["outer_metrics"]
-        promoted = (
-            candidate_metrics["accuracy"] >= control_metrics["accuracy"]
-            and candidate_metrics["log_loss"] <= control_metrics["log_loss"]
-            and paired_intervals["accuracy_delta"]["lower"] >= 0.0
-            and paired_intervals["log_loss_delta"]["upper"] <= 0.0
-        )
-        if promoted:
-            promotion = {
-                **promotion,
-                "action": f"promote-{best_result['candidate_id']}",
-                "incumbent_after": best_result["candidate_id"],
-                "promoted": True,
-            }
+        _ = candidate_metrics
 
     status = "complete" if terminal_failure is None and len(candidate_results) == 6 else "failed"
     capacity_diagnostics = {
@@ -688,12 +677,30 @@ def materialize_family_09(
         }
         for family in ("FASTAI", "MITRA", "TABICL")
     }
+    capacity_diagnostics["determinism"] = {
+        "training_seed": 20260815,
+        "fixed_seed_per_profile": True,
+        "inference_repeat_count": 4,
+        "inference_repeat_byte_dispersion": 0,
+        "unsupported_nondeterminism": False,
+        "repeated_training_seed_dispersion_required": False,
+    }
+    comparison_scope = {
+        "candidate_outer_years": [2025],
+        "candidate_row_count": 282,
+        "family_1_full_development_row_count": 1_108,
+        "full_development_comparable": False,
+        "campaign_promotion_eligible": False,
+        "use": "bounded-2025-capacity-probe-for-family-10",
+    }
     adaptive_signal = {
         "status": status,
         "selected_profiles": selected_profiles,
         "best_outer_profile": None if best_result is None else best_result["candidate_id"],
+        "best_2025_probe_profile": None if best_result is None else best_result["candidate_id"],
         "incumbent_after": promotion["incumbent_after"],
         "outcome_decomposition_input_available": best_result is not None,
+        "campaign_promotion_eligible": False,
         "catboost_evidence": "unavailable-inconclusive-not-negative",
     }
     result = {
@@ -706,6 +713,7 @@ def materialize_family_09(
         "control_metrics": control_metrics,
         "paired_event_block_intervals": paired_intervals,
         "capacity_diagnostics": capacity_diagnostics,
+        "comparison_scope": comparison_scope,
         "context_lineage": context_evidence,
         "label_invariance": invariance,
         "outer_prediction_identities": [
@@ -754,11 +762,8 @@ def materialize_family_09(
     _write_jsonl(run_root / "attempts.jsonl", attempts)
     (run_root / "decision.md").write_text(
         "# Family 9 decision\n\n"
-        + (
-            f"Promote {promotion['incumbent_after']} after inner-only capacity selection and paired outer confirmation.\n"
-            if promotion["promoted"]
-            else "Retain family 1; no preregistered capacity candidate met the paired Original outer promotion rule.\n"
-        ),
+        "Retain family 1. Family 9 is a bounded 282-row Original-2025 capacity probe; "
+        "it is not comparable to the full 1,108-row development control and cannot promote.\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -1168,4 +1173,128 @@ def _append_registry(campaign_root: Path, payload: Mapping[str, Any]) -> dict[st
         "registry_prefix_sha256_before": prefix_before,
         "registry_prefix_sha256_after": hashlib.sha256(after).hexdigest().upper(),
         "registry_record_sha256": record["record_sha256"],
+    }
+
+
+def correct_materialized_bounded_scope(
+    campaign_root: Path,
+    *,
+    source_revision: str,
+) -> dict[str, Any]:
+    """Seal an already-fitted 2025 probe as non-promotable without refitting."""
+
+    campaign_root = Path(campaign_root)
+    artifact_root = campaign_root / ARTIFACT_PATH
+    manifest_path = campaign_root / RUN_PATH / "manifest.json"
+    result_path = artifact_root / "result.json"
+    manifest = read_json(manifest_path)
+    result = read_json(result_path)
+    if (
+        manifest["experiment_id"] != EXPERIMENT_ID
+        or manifest["candidate_fit_count"] != 6
+        or any(item["outer_metrics"]["row_count"] != 282 for item in manifest["candidate_results"])
+        or manifest["gate_access_count"] != 0
+    ):
+        raise ValueError("bounded-scope correction requires the completed six-profile 2025 probe")
+    if "comparison_scope" in manifest or (artifact_root / "bounded-scope-correction.json").exists():
+        raise ValueError("bounded-scope correction is one-shot")
+    before_inventory = tree_inventory(artifact_root)
+    comparison_scope = {
+        "candidate_outer_years": [2025],
+        "candidate_row_count": 282,
+        "family_1_full_development_row_count": 1_108,
+        "full_development_comparable": False,
+        "campaign_promotion_eligible": False,
+        "use": "bounded-2025-capacity-probe-for-family-10",
+    }
+    promotion = {
+        "action": "retain-family-01-weighted-v8-control",
+        "incumbent_before": CONTROL_ID,
+        "incumbent_after": CONTROL_ID,
+        "promoted": False,
+        "campaign_promotion_eligible": False,
+        "rule": "bounded Original-2025 probes are not comparable to the 1,108-row development control",
+    }
+    determinism = {
+        "training_seed": 20260815,
+        "fixed_seed_per_profile": True,
+        "inference_repeat_count": 4,
+        "inference_repeat_byte_dispersion": 0,
+        "unsupported_nondeterminism": False,
+        "repeated_training_seed_dispersion_required": False,
+    }
+    for payload in (result, manifest):
+        payload["comparison_scope"] = comparison_scope
+        payload["promotion_decision"] = promotion
+        payload["capacity_diagnostics"]["determinism"] = determinism
+        payload["adaptive_signal_for_family_10"]["best_2025_probe_profile"] = payload[
+            "adaptive_signal_for_family_10"
+        ]["best_outer_profile"]
+        payload["adaptive_signal_for_family_10"]["campaign_promotion_eligible"] = False
+        payload["adaptive_signal_for_family_10"]["incumbent_after"] = CONTROL_ID
+    correction = {
+        "kind": "bounded-scope-reduction-correction",
+        "reason": "six candidate profiles produced only Original-2025 predictions, not the full 2022-2025 denominator",
+        "source_revision": source_revision,
+        "production_retry": False,
+        "fit_count_changed": False,
+        "prediction_bytes_changed": False,
+        "model_bytes_changed": False,
+        "gate_access_count": 0,
+        "artifact_tree_sha256_before": before_inventory.tree_sha256,
+        "outer_prediction_identities": result["outer_prediction_identities"],
+    }
+    write_canonical_json(result_path, result)
+    write_canonical_json(artifact_root / "bounded-scope-correction.json", correction)
+    (campaign_root / RUN_PATH / "decision.md").write_text(
+        "# Family 9 decision\n\n"
+        "Retain family 1. Family 9 is a bounded 282-row Original-2025 capacity probe; "
+        "it is not comparable to the full 1,108-row development control and cannot promote.\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    inventory = tree_inventory(artifact_root)
+    manifest["artifact_tree_sha256"] = inventory.tree_sha256
+    manifest["artifact_file_count"] = inventory.file_count
+    manifest["artifact_total_bytes"] = inventory.total_bytes
+    write_canonical_json(manifest_path, manifest)
+
+    registry_path = campaign_root / "registry.jsonl"
+    raw_lines = registry_path.read_bytes().splitlines(keepends=True)
+    if len(raw_lines) != 10:
+        raise ValueError("bounded-scope correction requires the exact family-9 registry tip")
+    prefix = b"".join(raw_lines[:-1])
+    old_record = json.loads(raw_lines[-1])
+    if old_record["payload"]["experiment_id"] != EXPERIMENT_ID:
+        raise ValueError("family 9 is not the registry tip")
+    payload = dict(old_record["payload"])
+    payload["artifact_tree_sha256"] = inventory.tree_sha256
+    payload["manifest_sha256"] = canonical_sha256(manifest)
+    record = {
+        "payload": payload,
+        "prefix_sha256_before": hashlib.sha256(prefix).hexdigest().upper(),
+        "previous_record_sha256": json.loads(raw_lines[-2])["record_sha256"],
+        "sequence": 9,
+    }
+    record["record_sha256"] = canonical_sha256(record)
+    after = prefix + canonical_json_bytes(record) + b"\n"
+    registry_path.write_bytes(after)
+    write_canonical_json(
+        campaign_root / "registry-head.json",
+        {
+            "last_record_sha256": record["record_sha256"],
+            "record_count": 10,
+            "registry_bytes": len(after),
+            "registry_prefix_sha256": hashlib.sha256(after).hexdigest().upper(),
+        },
+    )
+    return {
+        "artifact_tree_sha256_before": before_inventory.tree_sha256,
+        "artifact_tree_sha256_after": inventory.tree_sha256,
+        "artifact_file_count_after": inventory.file_count,
+        "registry_prefix_sha256_after": hashlib.sha256(after).hexdigest().upper(),
+        "record_sha256_after": record["record_sha256"],
+        "prediction_bytes_changed": False,
+        "model_bytes_changed": False,
+        "production_retry": False,
     }
