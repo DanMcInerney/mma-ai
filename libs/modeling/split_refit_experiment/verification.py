@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Mapping, Sequence
@@ -30,6 +31,13 @@ from .runner import (
 
 class EvaluationVerificationError(ValueError):
     pass
+
+
+def has_database_token(text: str) -> bool:
+    lowered = text.lower()
+    return "clankerfights" in lowered or bool(
+        re.search(r"(?:localhost\s*:|\bport\s*=\s*)5432\b", lowered)
+    )
 
 
 def _same(actual: Any, expected: Any, noun: str) -> None:
@@ -217,7 +225,7 @@ def verify_evaluation(campaign_root: Path, *, recompute_all: bool) -> dict[str, 
     forbidden_hits = []
     for path in [paths["preflight"], paths["preregistration"], paths["attempts"], paths["access"], paths["selection"], paths["result"]]:
         text = path.read_text(encoding="utf-8")
-        if "5432" in text or "clankerfights" in text.lower():
+        if has_database_token(text):
             forbidden_hits.append(str(path))
     if forbidden_hits:
         raise EvaluationVerificationError(f"database tokens found in evidence: {forbidden_hits}")
