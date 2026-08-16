@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from libs.modeling.experiment_campaign import runner as campaign_runner
 from libs.modeling.experiment_campaign.families import semantic_portfolio as family_05
 from libs.modeling.experiment_campaign.semantic_portfolio import (
     MEASUREMENT_GROUP_IDS,
@@ -216,3 +217,44 @@ def test_ticket_named_replay_alias_resolves_terminal_family() -> None:
         "family-05-stable-semantic-portfolio"
     )
     assert result["gate_access_count"] == 0
+
+
+def test_joined_windows_checkout_preserves_development_table_identity() -> None:
+    joined_root = Path(r"C:\Users\danhm\mma-ai\worktrees\top10-20260815")
+    joined_campaign = joined_root / "experiments/top10_20260815"
+    manifest = json.loads(
+        (
+            joined_campaign / "runs/family-05-semantic-portfolio/manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    joined_data = (joined_root / manifest["data_path"]).read_bytes()
+    assert joined_data.count(b"\r\n") == 3090
+
+    result = verify_family_run(
+        joined_campaign,
+        "family-05-semantic-portfolio",
+        recompute_all=False,
+    )
+    assert result["status"] == "complete"
+    assert result["artifact_tree_sha256"] == (
+        "346318577146874AFCD823516956346D53E23C87CD2BA752BF7A598610F8BC1B"
+    )
+
+
+def test_checkout_text_identity_normalizes_only_line_endings(tmp_path: Path) -> None:
+    canonical = b"fight_id,event_date,value\n1,2025-12-13,alpha\n"
+    expected = hashlib.sha256(canonical).hexdigest().upper()
+    lf_path = tmp_path / "lf.csv"
+    crlf_path = tmp_path / "crlf.csv"
+    changed_path = tmp_path / "changed.csv"
+    bare_cr_path = tmp_path / "bare-cr.csv"
+    lf_path.write_bytes(canonical)
+    crlf_path.write_bytes(canonical.replace(b"\n", b"\r\n"))
+    changed_path.write_bytes(canonical.replace(b"alpha", b"omega"))
+    bare_cr_path.write_bytes(canonical.replace(b"alpha", b"alpha\rbeta"))
+
+    assert campaign_runner._canonical_checkout_text_sha256(lf_path) == expected
+    assert campaign_runner._canonical_checkout_text_sha256(crlf_path) == expected
+    assert campaign_runner._canonical_checkout_text_sha256(changed_path) != expected
+    with pytest.raises(ValueError, match="bare carriage returns"):
+        campaign_runner._canonical_checkout_text_sha256(bare_cr_path)
