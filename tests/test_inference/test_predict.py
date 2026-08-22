@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock, mock_open
 import tempfile
 import joblib
 from unittest import mock
+from types import SimpleNamespace
 
 # Add parent directory to path to import modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -31,8 +32,10 @@ from predict import (
     maybe_take_screenshots,
     parse_manual_odds_json,
     apply_manual_odds,
+    configure_prediction_builder,
 )
 from libs.bfo_scraper import BFOScraper
+from libs.feature_store.inference.transformers.feature_transformer import FeatureTransformer
 
 
 class TestBFOLatestOddsOnly:
@@ -1096,6 +1099,23 @@ def test_apply_manual_odds_overrides_missing_odds_and_devigs_pair():
     assert result["fighter two"]["original"] == 100
     assert isinstance(result["fighter one"]["vigless"], int)
     assert isinstance(result["fighter two"]["vigless"], int)
+
+
+def test_prediction_builder_excludes_source_metadata_from_numeric_diffs():
+    transformer = FeatureTransformer()
+    builder = SimpleNamespace(transformer=transformer)
+    configure_prediction_builder(builder)
+    fighter1 = pd.DataFrame(
+        {"numeric_stat": [2.0], "event_url": ["event-one"], "fighter_url": ["fighter-one"]}
+    )
+    fighter2 = pd.DataFrame(
+        {"numeric_stat": [1.0], "event_url": ["event-two"], "fighter_url": ["fighter-two"]}
+    )
+
+    transformed = transformer.transform(fighter1, fighter2)
+
+    assert transformed.loc[0, "numeric_stat_diff"] == 1.0
+    assert not any("event_url" in name or "fighter_url" in name for name in transformed.columns)
 
 
 def test_latest_model_path_uses_configured_models_dir_for_starter_model(monkeypatch, tmp_path):

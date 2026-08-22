@@ -18,6 +18,10 @@ import urllib3
 import warnings
 from libs.bfo_scraper import BFOScraper
 from libs.modeling.discovery import is_loadable_prediction_model_dir
+from libs.modeling.inference_contract import (
+    inference_features_to_scale,
+    validate_weighted_v8_inference_contract,
+)
 from libs.modeling.portable_artifacts import (
     install_pathlib_pickle_compatibility,
     load_joblib_artifact,
@@ -29,6 +33,22 @@ from libs.paths import data_file, models_dir, picks_dir
 # Disable SSL warnings
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+
+PREDICTION_SOURCE_METADATA_COLUMNS = (
+    'event_url',
+    'fighter_url',
+    'fighter1_url',
+    'fighter2_url',
+    'fight_source_key',
+)
+
+
+def configure_prediction_builder(builder):
+    """Exclude source identity fields from numeric feature transformation."""
+    for column in PREDICTION_SOURCE_METADATA_COLUMNS:
+        if column not in builder.transformer.metadata_cols:
+            builder.transformer.metadata_cols.append(column)
+    return builder
 
 class BFOLatestOddsOnly:
     """
@@ -972,6 +992,30 @@ def get_manual_fight(fighter1, fighter2, fight_date=None):
     clean_fighter2 = fighter2.strip()
     return [(parsed_date, clean_fighter1, clean_fighter2)], [f"{clean_fighter1}_vs_{clean_fighter2}"]
 
+
+def load_fight_card_json(path):
+    """Load a reconciled event identity and ordered fight card from JSON."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("--fight-card-json must contain a JSON object")
+
+    event_name = str(payload.get("event_name", "")).strip()
+    event_date = datetime.strptime(str(payload.get("event_date", "")), "%Y-%m-%d")
+    rows = payload.get("fights")
+    if not event_name or not isinstance(rows, list) or not rows:
+        raise ValueError("--fight-card-json requires event_name, event_date, and a non-empty fights list")
+
+    fights = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("each --fight-card-json fight must be an object")
+        fighter1 = str(row.get("fighter1", "")).strip()
+        fighter2 = str(row.get("fighter2", "")).strip()
+        if not fighter1 or not fighter2 or fighter1.lower() == fighter2.lower():
+            raise ValueError("each --fight-card-json fight requires two different fighters")
+        fights.append((event_date, fighter1, fighter2))
+    return fights, [event_name]
+
 def load_model_and_calibrator(model_path, use_calibrated=True):
     """
     Universal loader that works with:
@@ -1304,6 +1348,7 @@ def parse_args():
     parser.add_argument("--upcoming-number", type=int, default=1, help="1 is the next event, 2 is the event after next.")
     parser.add_argument("--fighter1", default=None, help="Manual matchup fighter 1. Skips Wikipedia event lookup when paired with --fighter2.")
     parser.add_argument("--fighter2", default=None, help="Manual matchup fighter 2. Skips Wikipedia event lookup when paired with --fighter1.")
+    parser.add_argument("--fight-card-json", default=None, help="Path to a reconciled event card JSON; bypasses Wikipedia lookup.")
     parser.add_argument("--fight-date", default=None, help="Manual matchup date in YYYY-MM-DD format. Defaults to now.")
     parser.add_argument("--fighter1-odds", type=int, default=None, help="Manual American odds for fighter 1.")
     parser.add_argument("--fighter2-odds", type=int, default=None, help="Manual American odds for fighter 2.")
@@ -1392,6 +1437,23 @@ def cli():
     else:
         print(f"Ensemble model detected - scaling will be handled internally by each window model")
     
+    if model_path.name == "ag-20260815_090928-win-hybrid":
+        contract = validate_weighted_v8_inference_contract(model_path, scaler)
+        print(
+            "[contract] weighted-v8 inference compatibility verified: "
+            f"features={contract['feature_count']} "
+            f"sha256={contract['feature_sha256']} "
+            f"normalization={contract['normalization']} "
+            f"scaled={contract['scaled_feature_count']} "
+            f"recency_weights={contract['recency_weights']} "
+            f"decay_rate={contract['decay_rate']} "
+            f"training_weight_rows={contract['training_weight_rows']} "
+            f"training_weight_max_abs_error={contract['training_weight_max_abs_error']} "
+            f"evaluation_weight_rows={contract['evaluation_weight_rows']} "
+            f"evaluation_weights_unit={contract['evaluation_weights_unit']} "
+            f"prediction_forbidden_columns={contract['prediction_forbidden_columns']}"
+        )
+
     # Helper function to identify which columns should be scaled (matching training logic)
     def get_features_to_scale(df):
         """
@@ -1400,25 +1462,7 @@ def cli():
         This matches the logic used during training: excludes date columns, categorical static features
         (like weightclass_encoded and odds), sample_weight, and y_true from scaling.
         """
-        date_cols = ['event_date', 'fight_id', 'fighter_name', 'opp_name']
-        
-        # Categorical/encoded static features that should NOT be normalized
-        # (continuous static features like age, reach, days_since_last_fight, ufcage WILL be normalized)
-        categorical_static_feats = ['weightclass_encoded', 'odds', 'sample_weight']
-        
-        def should_exclude_col(col_name):
-            """Check if column should be excluded from scaling."""
-            if col_name in date_cols:
-                return True
-            # Exclude if column name contains categorical static feature strings
-            for cat_feat in categorical_static_feats:
-                if cat_feat in col_name:
-                    return True
-            return False
-        
-        # Get features to scale (exclude categorical features, date columns, sample_weight, y_true)
-        return [col for col in df.columns 
-                if not should_exclude_col(col) and col not in ['sample_weight', 'y_true']]
+        return inference_features_to_scale(df.columns)
     
     # Print calibration status
     if use_calibrated:
@@ -1430,7 +1474,11 @@ def cli():
         print("[prediction] Using original (uncalibrated) predictions")
 
     ## Single fight or event
-    if args.fighter1 or args.fighter2:
+    if args.fight_card_json:
+        if args.fighter1 or args.fighter2:
+            raise ValueError("--fight-card-json cannot be combined with --fighter1 or --fighter2")
+        fight_list, event_names = load_fight_card_json(args.fight_card_json)
+    elif args.fighter1 or args.fighter2:
         fight_list, event_names = get_manual_fight(args.fighter1, args.fighter2, args.fight_date)
     else:
         fight_list, event_names = get_fights(df_pred, upcoming_number)
@@ -1460,7 +1508,9 @@ def cli():
     
     # Get inference data using the prediction_data.csv file
     # New refactored system: generates all features (fighter1_*, fighter2_*, *_diff)
-    builder = InferenceDataBuilder(prediction_data_csv, fight_list, bfo_odds)
+    builder = configure_prediction_builder(
+        InferenceDataBuilder(prediction_data_csv, fight_list, bfo_odds)
+    )
     fighter_dfs = builder.build()  # Dictionary: fighter_name -> dataframe with ALL features
     
     # Build a set of fighter1 names from the fight list
