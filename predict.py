@@ -1446,7 +1446,12 @@ def cli():
             f"normalization={contract['normalization']} "
             f"scaled={contract['scaled_feature_count']} "
             f"recency_weights={contract['recency_weights']} "
-            f"decay_rate={contract['decay_rate']}"
+            f"decay_rate={contract['decay_rate']} "
+            f"training_weight_rows={contract['training_weight_rows']} "
+            f"training_weight_max_abs_error={contract['training_weight_max_abs_error']} "
+            f"evaluation_weight_rows={contract['evaluation_weight_rows']} "
+            f"evaluation_weights_unit={contract['evaluation_weights_unit']} "
+            f"prediction_forbidden_columns={contract['prediction_forbidden_columns']}"
         )
 
     # Helper function to identify which columns should be scaled (matching training logic)
