@@ -1,13 +1,40 @@
 from datetime import datetime
+import json
 from unittest.mock import MagicMock, patch
 
 from predict import (
     build_manual_odds,
     get_bfo_odds,
     get_manual_fight,
+    load_fight_card_json,
     manual_odds_cover_fight_list,
     resolve_prediction_odds,
 )
+
+
+def test_load_fight_card_json_uses_explicit_event_identity(tmp_path):
+    card_path = tmp_path / "card.json"
+    card_path.write_text(
+        json.dumps(
+            {
+                "event_name": "UFC Fight Night: Official Card",
+                "event_date": "2026-08-22",
+                "fights": [
+                    {"fighter1": "fighter one", "fighter2": "fighter two"},
+                    {"fighter1": "fighter three", "fighter2": "fighter four"},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    fights, event_names = load_fight_card_json(card_path)
+
+    assert event_names == ["UFC Fight Night: Official Card"]
+    assert fights == [
+        (datetime(2026, 8, 22), "fighter one", "fighter two"),
+        (datetime(2026, 8, 22), "fighter three", "fighter four"),
+    ]
 
 
 def test_get_manual_fight_uses_prediction_pipeline_tuple_shape():

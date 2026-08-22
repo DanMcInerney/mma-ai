@@ -992,6 +992,30 @@ def get_manual_fight(fighter1, fighter2, fight_date=None):
     clean_fighter2 = fighter2.strip()
     return [(parsed_date, clean_fighter1, clean_fighter2)], [f"{clean_fighter1}_vs_{clean_fighter2}"]
 
+
+def load_fight_card_json(path):
+    """Load a reconciled event identity and ordered fight card from JSON."""
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("--fight-card-json must contain a JSON object")
+
+    event_name = str(payload.get("event_name", "")).strip()
+    event_date = datetime.strptime(str(payload.get("event_date", "")), "%Y-%m-%d")
+    rows = payload.get("fights")
+    if not event_name or not isinstance(rows, list) or not rows:
+        raise ValueError("--fight-card-json requires event_name, event_date, and a non-empty fights list")
+
+    fights = []
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ValueError("each --fight-card-json fight must be an object")
+        fighter1 = str(row.get("fighter1", "")).strip()
+        fighter2 = str(row.get("fighter2", "")).strip()
+        if not fighter1 or not fighter2 or fighter1.lower() == fighter2.lower():
+            raise ValueError("each --fight-card-json fight requires two different fighters")
+        fights.append((event_date, fighter1, fighter2))
+    return fights, [event_name]
+
 def load_model_and_calibrator(model_path, use_calibrated=True):
     """
     Universal loader that works with:
@@ -1324,6 +1348,7 @@ def parse_args():
     parser.add_argument("--upcoming-number", type=int, default=1, help="1 is the next event, 2 is the event after next.")
     parser.add_argument("--fighter1", default=None, help="Manual matchup fighter 1. Skips Wikipedia event lookup when paired with --fighter2.")
     parser.add_argument("--fighter2", default=None, help="Manual matchup fighter 2. Skips Wikipedia event lookup when paired with --fighter1.")
+    parser.add_argument("--fight-card-json", default=None, help="Path to a reconciled event card JSON; bypasses Wikipedia lookup.")
     parser.add_argument("--fight-date", default=None, help="Manual matchup date in YYYY-MM-DD format. Defaults to now.")
     parser.add_argument("--fighter1-odds", type=int, default=None, help="Manual American odds for fighter 1.")
     parser.add_argument("--fighter2-odds", type=int, default=None, help="Manual American odds for fighter 2.")
@@ -1444,7 +1469,11 @@ def cli():
         print("[prediction] Using original (uncalibrated) predictions")
 
     ## Single fight or event
-    if args.fighter1 or args.fighter2:
+    if args.fight_card_json:
+        if args.fighter1 or args.fighter2:
+            raise ValueError("--fight-card-json cannot be combined with --fighter1 or --fighter2")
+        fight_list, event_names = load_fight_card_json(args.fight_card_json)
+    elif args.fighter1 or args.fighter2:
         fight_list, event_names = get_manual_fight(args.fighter1, args.fighter2, args.fight_date)
     else:
         fight_list, event_names = get_fights(df_pred, upcoming_number)
