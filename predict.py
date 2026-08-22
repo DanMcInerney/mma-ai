@@ -34,6 +34,22 @@ from libs.paths import data_file, models_dir, picks_dir
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
+PREDICTION_SOURCE_METADATA_COLUMNS = (
+    'event_url',
+    'fighter_url',
+    'fighter1_url',
+    'fighter2_url',
+    'fight_source_key',
+)
+
+
+def configure_prediction_builder(builder):
+    """Exclude source identity fields from numeric feature transformation."""
+    for column in PREDICTION_SOURCE_METADATA_COLUMNS:
+        if column not in builder.transformer.metadata_cols:
+            builder.transformer.metadata_cols.append(column)
+    return builder
+
 class BFOLatestOddsOnly:
     """
     Lightweight class for getting latest odds from BestFightOdds without database operations.
@@ -1458,7 +1474,9 @@ def cli():
     
     # Get inference data using the prediction_data.csv file
     # New refactored system: generates all features (fighter1_*, fighter2_*, *_diff)
-    builder = InferenceDataBuilder(prediction_data_csv, fight_list, bfo_odds)
+    builder = configure_prediction_builder(
+        InferenceDataBuilder(prediction_data_csv, fight_list, bfo_odds)
+    )
     fighter_dfs = builder.build()  # Dictionary: fighter_name -> dataframe with ALL features
     
     # Build a set of fighter1 names from the fight list
