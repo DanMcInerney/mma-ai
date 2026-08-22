@@ -18,6 +18,10 @@ import urllib3
 import warnings
 from libs.bfo_scraper import BFOScraper
 from libs.modeling.discovery import is_loadable_prediction_model_dir
+from libs.modeling.inference_contract import (
+    inference_features_to_scale,
+    validate_weighted_v8_inference_contract,
+)
 from libs.modeling.portable_artifacts import (
     install_pathlib_pickle_compatibility,
     load_joblib_artifact,
@@ -1392,6 +1396,18 @@ def cli():
     else:
         print(f"Ensemble model detected - scaling will be handled internally by each window model")
     
+    if model_path.name == "ag-20260815_090928-win-hybrid":
+        contract = validate_weighted_v8_inference_contract(model_path, scaler)
+        print(
+            "[contract] weighted-v8 inference compatibility verified: "
+            f"features={contract['feature_count']} "
+            f"sha256={contract['feature_sha256']} "
+            f"normalization={contract['normalization']} "
+            f"scaled={contract['scaled_feature_count']} "
+            f"recency_weights={contract['recency_weights']} "
+            f"decay_rate={contract['decay_rate']}"
+        )
+
     # Helper function to identify which columns should be scaled (matching training logic)
     def get_features_to_scale(df):
         """
@@ -1400,25 +1416,7 @@ def cli():
         This matches the logic used during training: excludes date columns, categorical static features
         (like weightclass_encoded and odds), sample_weight, and y_true from scaling.
         """
-        date_cols = ['event_date', 'fight_id', 'fighter_name', 'opp_name']
-        
-        # Categorical/encoded static features that should NOT be normalized
-        # (continuous static features like age, reach, days_since_last_fight, ufcage WILL be normalized)
-        categorical_static_feats = ['weightclass_encoded', 'odds', 'sample_weight']
-        
-        def should_exclude_col(col_name):
-            """Check if column should be excluded from scaling."""
-            if col_name in date_cols:
-                return True
-            # Exclude if column name contains categorical static feature strings
-            for cat_feat in categorical_static_feats:
-                if cat_feat in col_name:
-                    return True
-            return False
-        
-        # Get features to scale (exclude categorical features, date columns, sample_weight, y_true)
-        return [col for col in df.columns 
-                if not should_exclude_col(col) and col not in ['sample_weight', 'y_true']]
+        return inference_features_to_scale(df.columns)
     
     # Print calibration status
     if use_calibrated:
