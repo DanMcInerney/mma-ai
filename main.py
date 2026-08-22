@@ -64,7 +64,6 @@ import time
 from libs.feature_store.calculators.mad_calc import MedianAbsoluteDeviationCalculator
 from libs.feature_store.calculators.time_dec_mad_calc import TimedecMadCalculator
 from datetime import datetime
-from pathlib import Path
 # Import the BFO Scraper
 from libs.bfo_scraper import BFOScraper
 from libs.paths import data_dir, database_url, raw_ufcstats_dir
@@ -581,6 +580,7 @@ def main(
 ):
     from libs.feature_store.config import DECAY_HALF_LIFE_YEARS
     decay_rate_years = DECAY_HALF_LIFE_YEARS
+    from pathlib import Path
     raw_data_dir = Path(raw_data_dir or raw_ufcstats_dir()).expanduser().resolve()
     output_data_dir = Path(output_data_dir or data_dir()).expanduser().resolve()
     output_data_dir.mkdir(parents=True, exist_ok=True)
