@@ -8,7 +8,9 @@ from itertools import combinations
 from datetime import datetime
 import os
 import argparse
+import math
 from pathlib import Path
+from decimal import Decimal
 from libs.screenshot import take_screenshots
 import json
 import re
@@ -1302,6 +1304,32 @@ def calculate_expected_value(ai_odds_str, bookie_odds_str):
         
     except (ValueError, TypeError, AttributeError):
         return 0.0
+
+
+def calculate_wager_ev_percentage(win_probability, american_odds):
+    """Return the signed expected wager profit as a percentage, or ``None``."""
+    try:
+        probability = float(win_probability)
+        odds = float(american_odds)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(probability) or not math.isfinite(odds) or odds == 0:
+        return None
+    if not 0 <= probability <= 1:
+        return None
+
+    probability_decimal = Decimal(str(probability))
+    odds_decimal = Decimal(str(odds))
+    if odds_decimal > 0:
+        profit_multiplier = odds_decimal / Decimal("100")
+    else:
+        profit_multiplier = Decimal("100") / abs(odds_decimal)
+
+    ev_percentage = Decimal("100") * (
+        probability_decimal * profit_multiplier - (Decimal("1") - probability_decimal)
+    )
+    return float(ev_percentage)
 
 def has_positive_ev(ai_odds_str, bookie_odds_str):
     """Compare AI odds with bookie odds to determine if there's positive EV"""

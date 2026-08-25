@@ -9,6 +9,7 @@ import tempfile
 import joblib
 from unittest import mock
 from types import SimpleNamespace
+import predict as predict_module
 
 # Add parent directory to path to import modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -1158,6 +1159,25 @@ def test_latest_model_path_reports_configured_models_dir_when_missing(monkeypatc
 
     with pytest.raises(FileNotFoundError, match="empty-models"):
         latest_model_path("win")
+
+
+@pytest.mark.parametrize(
+    ("probability", "american_odds", "expected"),
+    [
+        (0.60, 150, 50.0),
+        (0.40, 150, 0.0),
+        (0.30, 150, -25.0),
+        (0.70, -150, pytest.approx(16.666666666666664)),
+        (0.60, -150, 0.0),
+        (0.50, -150, pytest.approx(-16.666666666666668)),
+    ],
+)
+def test_calculate_wager_ev_percentage_contract(probability, american_odds, expected):
+    assert predict_module.calculate_wager_ev_percentage(probability, american_odds) == expected
+
+    unavailable_odds = [None, "N/A", "not-odds", pd.NA, float("inf"), float("-inf"), 0, "0"]
+    for unavailable in unavailable_odds:
+        assert predict_module.calculate_wager_ev_percentage(probability, unavailable) is None
 
 
 if __name__ == "__main__":
