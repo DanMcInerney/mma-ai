@@ -1260,6 +1260,8 @@ def create_conf_parlays(results):
 
 def convert_prob_to_american_odds(prob):
     """Convert a probability to American odds format"""
+    if prob == 0 or prob == 1:
+        return "N/A"
     if prob > 0.5:
         odds = -100 * (prob / (1 - prob))
         return f"{int(odds)}"
@@ -1382,12 +1384,12 @@ def write_prediction_outputs(results, output_dir, prediction_type):
                 result["fighter2_name"],
                 result["fighter1_odds"],
                 result["fighter2_odds"],
-                f"{result['fighter1_win_prob'] * 100:.1f}",
-                f"{result['fighter2_win_prob'] * 100:.1f}",
+                repr(float(result["fighter1_win_prob"]) * 100),
+                repr(float(result["fighter2_win_prob"]) * 100),
                 f"{result['fighter1_market_prob'] * 100:.1f}",
                 f"{result['fighter2_market_prob'] * 100:.1f}",
                 winner_name,
-                f"{result['proba'] * 100:.1f}",
+                repr(float(result["proba"]) * 100),
                 ai_odds,
                 ev_value,
             ]

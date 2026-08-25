@@ -452,6 +452,10 @@ class TestUtilityFunctions:
         odds_even = convert_prob_to_american_odds(0.5)
         assert odds_even.startswith("+")
         assert int(odds_even[1:]) == 100
+
+        # Endpoint probabilities have no finite American-odds representation.
+        assert convert_prob_to_american_odds(0.0) == "N/A"
+        assert convert_prob_to_american_odds(1.0) == "N/A"
     
     def test_american_odds_to_prob(self):
         """Test American odds to probability conversion"""
@@ -1189,12 +1193,12 @@ def test_prediction_outputs_canonical_numeric_ev_round_trip(tmp_path, capsys):
             "fighter2_name": "bravo",
             "fighter1_odds": -150,
             "fighter2_odds": 130,
-            "fighter1_win_prob": 0.62649,
-            "fighter2_win_prob": 0.37351,
+            "fighter1_win_prob": np.float64(0.62649),
+            "fighter2_win_prob": np.float64(0.37351),
             "fighter1_market_prob": 0.60,
             "fighter2_market_prob": 0.40,
             "winner": "fighter1",
-            "proba": 0.62649,
+            "proba": np.float64(0.62649),
         },
         {
             "fighter1_name": "charlie",
@@ -1208,6 +1212,18 @@ def test_prediction_outputs_canonical_numeric_ev_round_trip(tmp_path, capsys):
             "winner": "fighter2",
             "proba": 0.65007,
         },
+        {
+            "fighter1_name": "echo",
+            "fighter2_name": "foxtrot",
+            "fighter1_odds": -150,
+            "fighter2_odds": 130,
+            "fighter1_win_prob": 1.0,
+            "fighter2_win_prob": 0.0,
+            "fighter1_market_prob": 0.60,
+            "fighter2_market_prob": 0.40,
+            "winner": "fighter1",
+            "proba": 1.0,
+        },
     ]
 
     csv_path = predict_module.write_prediction_outputs(results, tmp_path, "ORIGINAL")
@@ -1217,14 +1233,27 @@ def test_prediction_outputs_canonical_numeric_ev_round_trip(tmp_path, capsys):
     expected_evs = [
         predict_module.calculate_wager_ev_percentage(0.62649, -150),
         predict_module.calculate_wager_ev_percentage(0.65007, -250),
+        predict_module.calculate_wager_ev_percentage(1.0, -150),
     ]
-    assert len(rows) == 2
+    assert len(rows) == 3
     assert all(len(row) == 12 for row in rows)
     assert [float(row["EV"]) for row in rows] == expected_evs
     assert all(value not in {0.0, 1.0} for value in expected_evs)
     assert float(rows[0]["EV"]) != predict_module.calculate_wager_ev_percentage(0.626, -150)
+    for row in rows:
+        picked_odds = (
+            row["Fighter1_Odds"]
+            if row["AI_Pick"] == row["Fighter1"]
+            else row["Fighter2_Odds"]
+        )
+        reproduced_ev = predict_module.calculate_wager_ev_percentage(float(row["Confidence"]) / 100, picked_odds)
+        assert reproduced_ev == float(row["EV"])
+    assert rows[0]["Fighter1_AI_Prob"] == rows[0]["Confidence"] == "62.649"
+    assert rows[1]["Fighter2_AI_Prob"] == rows[1]["Confidence"] == "65.007"
+    assert rows[2]["AI_Odds"] == "N/A"
     assert rows[0]["EV"] in console
     assert rows[1]["EV"] in console
+    assert rows[2]["EV"] in console
     assert f"{expected_evs[0]:+.1f}%" in console
     assert f"{expected_evs[1]:+.1f}%" in console
 
