@@ -1457,7 +1457,7 @@ def parse_args():
     parser.add_argument("--no-shap", action="store_true", help="Skip SHAP visualizations.")
     parser.add_argument("--use-calibrated", action="store_true", help="Use calibrated predictions when calibrator.pkl exists.")
     parser.add_argument("--output-dir", default=None, help="Directory for prediction images and CSVs.")
-    parser.add_argument("--screenshots", action="store_true", help="Create PNG screenshots from generated HTML visualizations when Chrome is available.")
+    parser.add_argument("--screenshots", action=argparse.BooleanOptionalAction, default=True, help="Save SHAP and stats PNGs by default; --no-screenshots explicitly skips captures.")
     return parser.parse_args()
 
 

@@ -1,11 +1,34 @@
+import json
+import math
 import os
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import shap
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import joblib
+
+
+def _json_safe(value):
+    """Convert nested NumPy/pandas values into strict JSON values."""
+    if isinstance(value, np.ndarray):
+        return _json_safe(value.tolist())
+    if isinstance(value, (np.integer, np.floating)):
+        return _json_safe(value.item())
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        missing = False
+    if isinstance(missing, (bool, np.bool_)) and missing:
+        return None
+    return value
 
 class ShapVisualizer:
     def __init__(self, model, feats, feature_display_names=None, output_dir=None):
@@ -402,8 +425,8 @@ class ShapVisualizer:
             yaxis_title='Feature',
             barmode='relative',
             height=850,
-            width=1000,
-            margin=dict(t=140),
+            width=1100,
+            margin=dict(t=140, l=380, r=80, b=80),
             legend=dict(
                 orientation="h",
                 yanchor="bottom",
@@ -415,6 +438,13 @@ class ShapVisualizer:
             )
         )
         
+        # Keep outside bar labels inside the plotting area, away from feature names.
+        extent = max(float(top_features['Abs Value'].max()), 0.001)
+        minimum = min(float(top_features['SHAP Value'].min()), 0.0)
+        maximum = max(float(top_features['SHAP Value'].max()), 0.0)
+        fig.update_xaxes(range=[minimum - extent * 0.25, maximum + extent * 0.25])
+        fig.update_traces(cliponaxis=False)
+
         # Add zero line
         fig.add_shape(
             type="line",
@@ -512,7 +542,7 @@ class ShapVisualizer:
         plot.write_html(filename)
         return filename
     
-    def explain_prediction(self, prediction_data, background_data=None, fighter1_name="Fighter 1", fighter2_name="Fighter 2", win_prob=None, nsamples=500):
+    def explain_prediction(self, prediction_data, background_data=None, fighter1_name="Fighter 1", fighter2_name="Fighter 2", win_prob=None, nsamples=500, random_seed=42):
         """
         Generate and save SHAP explanation for a prediction.
         
@@ -527,8 +557,14 @@ class ShapVisualizer:
         Returns:
             Dictionary with paths to saved visualizations
         """
-        # Compute SHAP values
-        shap_data = self.compute_shap_values(prediction_data, background_data, nsamples)
+        # KernelExplainer is approximate and uses NumPy's global RNG. Preserve
+        # the caller's state while making this explanation reproducible.
+        numpy_random_state = np.random.get_state()
+        np.random.seed(random_seed)
+        try:
+            shap_data = self.compute_shap_values(prediction_data, background_data, nsamples)
+        finally:
+            np.random.set_state(numpy_random_state)
         
         # Create force plot
         force_fig = self.create_force_plot(
@@ -545,9 +581,47 @@ class ShapVisualizer:
             fighter1_name, 
             fighter2_name
         )
-        
+
+        # Keep the numeric explanation beside the HTML visualization.  The
+        # HTML is useful for browsing, but it is not a stable machine-readable
+        # record of the actual explanation values.
+        shap_json_path = os.path.splitext(force_path)[0] + ".json"
+
+        feature_names = list(shap_data["feature_names"])
+        feature_columns = list(prediction_data.columns)
+        if feature_columns != feature_names:
+            raise ValueError(
+                "SHAP feature/value order mismatch: "
+                f"prediction columns={feature_columns}, SHAP features={feature_names}"
+            )
+
+        shap_record = {
+            "fighter1": fighter1_name,
+            "fighter2": fighter2_name,
+            "feature_names": feature_names,
+            "feature_values": _json_safe(prediction_data.to_numpy()),
+            "shap_values": _json_safe(shap_data["shap_values"]),
+            "base_values": _json_safe(shap_data["expected_value"]),
+            "prediction_probability": _json_safe(win_prob),
+            "provenance": {
+                "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+                "model_class": type(self.model).__name__,
+                "target": "binary class 1 probability",
+                "explainer": "shap.KernelExplainer",
+                "approximation": True,
+                "nsamples": int(nsamples),
+                "random_seed": int(random_seed),
+                "background_sample_random_state": 42,
+                "background_rows": int(len(background_data)) if background_data is not None else None,
+                "feature_count": int(len(shap_data["feature_names"])),
+                "library_version": getattr(shap, "__version__", "unknown"),
+            },
+        }
+        with open(shap_json_path, "w", encoding="utf-8") as shap_file:
+            json.dump(shap_record, shap_file, indent=2, allow_nan=False)
+
         # Return paths to visualizations
-        return {'force_plot': force_path}
+        return {'force_plot': force_path, 'data': shap_json_path}
 
 # Usage example:
 # model = TabularPredictor.load('path/to/model')
@@ -565,4 +639,4 @@ class ShapVisualizer:
 #     "Fighter2", 
 #     win_prob=0.65
 # )
-# print(f"SHAP visualization saved to: {result['force_plot']}") 
+# print(f"SHAP visualization saved to: {result['force_plot']}")

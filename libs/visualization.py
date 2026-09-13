@@ -5,6 +5,18 @@ import plotly.graph_objects as go
 from typing import List, Dict
 from datetime import datetime
 
+def compact_feature_label(name):
+    """Keep radar labels readable; raw feature keys remain in the saved data."""
+    name = name.replace('_dec_adjperf_dec_avg_diff', ' (adj)')
+    name = name.replace('_dec_avg_diff', '').replace('_diff', '')
+    replacements = {'sig_str':'sig strikes', 'per_min':'/min', 'adjperf':'adj',
+                    'ctrlopp':'opp control', 'ctrl':'control', 'opp':'against',
+                    'td':'TD', 'acc':'accuracy', 'def':'defense', 'att':'attempts',
+                    'weightclass_encoded':'weight class'}
+    for old, new in replacements.items():
+        name = name.replace(old, new)
+    return name.replace('_', ' ')
+
 class FightVisualizer:
     def __init__(self, feats: List[str],
                  feature_display_names: Dict[str, str] = None,
@@ -153,7 +165,7 @@ class FightVisualizer:
         Create a radar chart using each individual stat.
         """
         features = features or self.key_features
-        display_names = [self.feature_display_names.get(f, f) for f in features]
+        display_names = [self.feature_display_names.get(f, compact_feature_label(f)) for f in features]
 
         # Copy stats and apply inversion where needed
         plot_stats = fighter_stats.copy()
@@ -191,16 +203,17 @@ class FightVisualizer:
                     tickformat=".1f"
                 ),
                 angularaxis=dict(
-                    tickfont=dict(size=12),
+                    tickfont=dict(size=11),
                     rotation=90,
                     direction='clockwise'
                 )
             ),
             showlegend=True,
             title=dict(text=title, x=0.5, xanchor='center'),
-            width=900,
-            height=900,
-            margin=dict(l=200, r=200, t=200, b=200)
+            width=1800,
+            height=1800,
+            legend=dict(orientation='h', x=0.5, xanchor='center', y=1.08),
+            margin=dict(l=320, r=320, t=250, b=200)
         )
         return fig
 
