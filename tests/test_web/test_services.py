@@ -1262,6 +1262,51 @@ def test_run_event_prediction_respects_prediction_knobs(monkeypatch, tmp_path):
     assert result["predictions"][0]["EV"] == "1"
 
 
+def test_run_event_prediction_preserves_numeric_ev_magnitudes_and_cli_contract(monkeypatch, tmp_path):
+    monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))
+    write_prediction_model(tmp_path / "AutogluonModels")
+    prediction_csv = tmp_path / "prediction_data.csv"
+    write_csv(prediction_csv, [{"fighter_name": "fighter one"}, {"fighter_name": "fighter two"}])
+    captured = {}
+
+    def fake_run(command, log_prefix, **kwargs):
+        captured["log_prefix"] = log_prefix
+        captured["command"] = command
+        output_dir = Path(command[command.index("--output-dir") + 1])
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "fight_predictions.csv").write_text(
+            "# Fight Predictions using ORIGINAL model predictions\n"
+            "Fighter1,Fighter2,Fighter1_Odds,Fighter2_Odds,Fighter1_AI_Prob,Fighter2_AI_Prob,"
+            "Fighter1_Market_Prob,Fighter2_Market_Prob,AI_Pick,Confidence,AI_Odds,EV\n"
+            "fighter one,fighter two,-120,100,55.0,45.0,52.0,48.0,fighter one,55.0,-122,8.75\n"
+            "fighter three,fighter four,110,-130,50.0,50.0,47.0,53.0,fighter four,50.0,100,0\n"
+            "fighter five,fighter six,-105,-115,48.0,52.0,49.0,51.0,fighter six,52.0,-108,-3.125\n",
+            encoding="utf-8",
+        )
+        return subprocess.CompletedProcess(command, 0, stdout="prediction ok", stderr="")
+
+    monkeypatch.setattr("libs.web.services._run_logged_subprocess", fake_run)
+    request = EventPredictionRequest(
+        prediction_data_csv=str(prediction_csv),
+        output_dir="predictions/event-numeric-ev",
+        upcoming_number=2,
+        odds=True,
+    )
+
+    result = run_event_prediction(request)
+
+    command = captured["command"]
+    assert command[command.index("--upcoming-number") + 1] == "2"
+    assert command[command.index("--output-dir") + 1] == str(tmp_path / "predictions" / "event-numeric-ev")
+    assert command[command.index("--prediction-data-csv") + 1] == str(prediction_csv)
+    assert "--odds" in command
+    assert "--no-manual-odds" in command
+    assert "--no-shap" in command
+    assert captured["log_prefix"] == "prediction"
+    assert [row["EV"] for row in result["predictions"]] == ["8.75", "0", "-3.125"]
+
+
 def test_run_event_prediction_passes_manual_odds_json(monkeypatch, tmp_path):
     monkeypatch.setenv("MMA_AI_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("MMA_AI_MODELS_DIR", str(tmp_path / "AutogluonModels"))

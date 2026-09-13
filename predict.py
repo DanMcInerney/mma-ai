@@ -8,7 +8,10 @@ from itertools import combinations
 from datetime import datetime
 import os
 import argparse
+import csv
+import math
 from pathlib import Path
+from decimal import Decimal
 from libs.screenshot import take_screenshots
 import json
 import re
@@ -1257,6 +1260,8 @@ def create_conf_parlays(results):
 
 def convert_prob_to_american_odds(prob):
     """Convert a probability to American odds format"""
+    if prob == 0 or prob == 1:
+        return "N/A"
     if prob > 0.5:
         odds = -100 * (prob / (1 - prob))
         return f"{int(odds)}"
@@ -1302,6 +1307,99 @@ def calculate_expected_value(ai_odds_str, bookie_odds_str):
         
     except (ValueError, TypeError, AttributeError):
         return 0.0
+
+
+def calculate_wager_ev_percentage(win_probability, american_odds):
+    """Return the signed expected wager profit as a percentage, or ``None``."""
+    try:
+        probability = float(win_probability)
+        odds = float(american_odds)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(probability) or not math.isfinite(odds) or odds == 0:
+        return None
+    if not 0 <= probability <= 1:
+        return None
+
+    probability_decimal = Decimal(str(probability))
+    odds_decimal = Decimal(str(odds))
+    if odds_decimal > 0:
+        profit_multiplier = odds_decimal / Decimal("100")
+    else:
+        profit_multiplier = Decimal("100") / abs(odds_decimal)
+
+    ev_percentage = Decimal("100") * (
+        probability_decimal * profit_multiplier - (Decimal("1") - probability_decimal)
+    )
+    return float(ev_percentage)
+
+
+def _picked_fighter_output_values(result):
+    winner_name = (
+        result["fighter1_name"]
+        if result["winner"] == "fighter1"
+        else result["fighter2_name"]
+    )
+    bookie_odds = (
+        result["fighter1_odds"]
+        if result["winner"] == "fighter1"
+        else result["fighter2_odds"]
+    )
+    ev_percentage = calculate_wager_ev_percentage(result["proba"], bookie_odds)
+    return winner_name, bookie_odds, ev_percentage
+
+
+def write_prediction_outputs(results, output_dir, prediction_type):
+    """Write the established prediction CSV and echo its rows to the console."""
+    columns = [
+        "Fighter1",
+        "Fighter2",
+        "Fighter1_Odds",
+        "Fighter2_Odds",
+        "Fighter1_AI_Prob",
+        "Fighter2_AI_Prob",
+        "Fighter1_Market_Prob",
+        "Fighter2_Market_Prob",
+        "AI_Pick",
+        "Confidence",
+        "AI_Odds",
+        "EV",
+    ]
+    print(f"\nCSV Format ({prediction_type} predictions):")
+    print(",".join(columns))
+
+    csv_path = Path(output_dir) / "fight_predictions.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+        csv_file.write(f"# Fight Predictions using {prediction_type} model predictions\n")
+        writer = csv.writer(csv_file, lineterminator="\n")
+        writer.writerow(columns)
+
+        for result in results:
+            winner_name, _bookie_odds, ev_percentage = _picked_fighter_output_values(result)
+            ai_odds = convert_prob_to_american_odds(result["proba"])
+            ev_value = "N/A" if ev_percentage is None else repr(ev_percentage)
+            row = [
+                result["fighter1_name"],
+                result["fighter2_name"],
+                result["fighter1_odds"],
+                result["fighter2_odds"],
+                repr(float(result["fighter1_win_prob"]) * 100),
+                repr(float(result["fighter2_win_prob"]) * 100),
+                f"{result['fighter1_market_prob'] * 100:.1f}",
+                f"{result['fighter2_market_prob'] * 100:.1f}",
+                winner_name,
+                repr(float(result["proba"]) * 100),
+                ai_odds,
+                ev_value,
+            ]
+            writer.writerow(row)
+            print(",".join(str(value) for value in row))
+            ev_display = "N/A" if ev_percentage is None else f"{ev_percentage:+.1f}%"
+            print(f"  Wager EV: {ev_display}")
+
+    print(f"CSV data saved to: {csv_path}")
+    return csv_path
 
 def has_positive_ev(ai_odds_str, bookie_odds_str):
     """Compare AI odds with bookie odds to determine if there's positive EV"""
@@ -1359,7 +1457,7 @@ def parse_args():
     parser.add_argument("--no-shap", action="store_true", help="Skip SHAP visualizations.")
     parser.add_argument("--use-calibrated", action="store_true", help="Use calibrated predictions when calibrator.pkl exists.")
     parser.add_argument("--output-dir", default=None, help="Directory for prediction images and CSVs.")
-    parser.add_argument("--screenshots", action="store_true", help="Create PNG screenshots from generated HTML visualizations when Chrome is available.")
+    parser.add_argument("--screenshots", action=argparse.BooleanOptionalAction, default=True, help="Save SHAP and stats PNGs by default; --no-screenshots explicitly skips captures.")
     return parser.parse_args()
 
 
@@ -1728,38 +1826,8 @@ def cli():
         # Convert AI confidence to American odds
         ai_odds = convert_prob_to_american_odds(r['proba'])
         
-        # Calculate true mathematical expected value
-        ai_win_prob = r['proba']  # AI win probability (0-1)
-        
-        # Get Vegas odds for the fighter the AI is picking
-        if r['winner'] == 'fighter1':
-            vegas_odds_str = str(r['fighter1_odds'])
-        else:
-            vegas_odds_str = str(r['fighter2_odds'])
-        
-        # Convert Vegas odds to decimal payout multiplier
-        try:
-            if vegas_odds_str.startswith('+'):
-                vegas_odds_num = int(vegas_odds_str[1:])
-                payout_multiplier = vegas_odds_num / 100
-            elif vegas_odds_str.startswith('-'):
-                vegas_odds_num = int(vegas_odds_str[1:])
-                payout_multiplier = 100 / vegas_odds_num
-            else:
-                vegas_odds_num = int(vegas_odds_str)
-                if vegas_odds_num > 0:
-                    payout_multiplier = vegas_odds_num / 100
-                else:
-                    payout_multiplier = 100 / abs(vegas_odds_num)
-            
-            # Calculate EV: (AI_win_prob * payout) - (AI_lose_prob * 1)
-            # For a $1 bet: win = get back $1 + payout, lose = lose $1
-            ev_value = (ai_win_prob * payout_multiplier) - ((1 - ai_win_prob) * 1)
-            ev_percentage = ev_value * 100  # Convert to percentage
-            ev_display = f"{ev_percentage:+.0f}%"
-            
-        except (ValueError, TypeError):
-            ev_display = "N/A"
+        _winner_name, _bookie_odds, ev_percentage = _picked_fighter_output_values(r)
+        ev_display = "N/A" if ev_percentage is None else f"{ev_percentage:+.1f}%"
         
         # Truncate long names with ellipsis if necessary (increased character limit)
         f1_name = r['fighter1_name']
@@ -1781,37 +1849,7 @@ def cli():
     
     # Add CSV output
     prediction_type = "CALIBRATED" if (use_calibrated and calibrator is not None) else "ORIGINAL"
-    print(f"\nCSV Format ({prediction_type} predictions):")
-    print("Fighter1,Fighter2,Fighter1_Odds,Fighter2_Odds,Fighter1_AI_Prob,Fighter2_AI_Prob,Fighter1_Market_Prob,Fighter2_Market_Prob,AI_Pick,Confidence,AI_Odds,EV")
-    
-    # Create a CSV file in the output directory
-    csv_file_path = os.path.join(ss_output_dir, "fight_predictions.csv")
-    with open(csv_file_path, "w") as csv_file:
-        # Write header with prediction type comment
-        csv_file.write(f"# Fight Predictions using {prediction_type} model predictions\n")
-        csv_file.write("Fighter1,Fighter2,Fighter1_Odds,Fighter2_Odds,Fighter1_AI_Prob,Fighter2_AI_Prob,Fighter1_Market_Prob,Fighter2_Market_Prob,AI_Pick,Confidence,AI_Odds,EV\n")
-        
-        # Write data rows
-        for r in results:
-            # Determine winner for the CSV row
-            winner_name = r['fighter1_name'] if r['winner'] == 'fighter1' else r['fighter2_name']
-            # Convert AI confidence to American odds
-            ai_odds = convert_prob_to_american_odds(r['proba'])
-            # Check for positive EV (use original odds - what you'd actually bet at)
-            bookie_odds = r['fighter1_odds'] if r['winner'] == 'fighter1' else r['fighter2_odds']
-            has_ev = has_positive_ev(ai_odds, bookie_odds)
-            ev_value = "1" if has_ev else "0"
-            
-            csv_row = f"{r['fighter1_name']},{r['fighter2_name']},{r['fighter1_odds']},{r['fighter2_odds']}," \
-                     f"{r['fighter1_win_prob']*100:.1f},{r['fighter2_win_prob']*100:.1f}," \
-                     f"{r['fighter1_market_prob']*100:.1f},{r['fighter2_market_prob']*100:.1f}," \
-                     f"{winner_name},{r['proba']*100:.1f},{ai_odds},{ev_value}\n"
-            
-            # Write to file and print to console
-            csv_file.write(csv_row)
-            print(csv_row.strip())
-    
-    print(f"CSV data saved to: {csv_file_path}")
+    write_prediction_outputs(results, ss_output_dir, prediction_type)
     
     # Combine and save raw prediction stats with _diffs columns
     if raw_stats_dfs:
