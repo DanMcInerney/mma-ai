@@ -1,0 +1,27 @@
+{
+  "retrieved_at_utc": "2026-10-20T01:11:29Z",
+  "source_urls": [
+    "https://www.ufc.com/events",
+    "https://www.ufc.com/event/ufc-333",
+    "https://www.bestfightodds.com/"
+  ],
+  "card_note": "Official 14-bout October 24 UFC 333 card (Abu Dhabi). American prices frozen from the ufc.com event page at retrieval; Yan-Dvalishvili had no ufc.com price, so its FanDuel price from BestFightOdds is used. Asaf Chopurov and both Iasmin Lucindo / Nicolle Caliari are absent from prediction_data.csv, so those bouts are excluded. Vagaev-Malkoun and Oki-Santos are listed with Malkoun/Santos as fighter1 because their latest historical division matches the official bout division (middleweight, featherweight), while Vagaev (welterweight) and Oki (lightweight) do not. Model and inputs are unchanged from UFC 332 (prediction_data.csv built 2026-08-14). Positive-EV picks are Pending.",
+  "model_path": "AutogluonModels/ag-20260815_163858-win-hybrid",
+  "alias_map": {},
+  "card": [
+    ["alexander volkanovski", "movsar evloev", -110, -110],
+    ["petr yan", "merab dvalishvili", -178, 138],
+    ["lone'er kavanagh", "ramazan temirov", -105, -115],
+    ["alexander volkov", "rizvan kuniev", -120, 100],
+    ["aaron pico", "losene keita", -105, -115],
+    ["azamat murzakanov", "dominick reyes", -220, 180],
+    ["nikita krylov", "abdul rakhman yakhyaev", 350, -450],
+    ["abus magomedov", "cam rowston", -120, 100],
+    ["grant dawson", "nurullo aliev", -125, 105],
+    ["colby thicknesse", "asaf chopurov", 400, -550],
+    ["jacob malkoun", "abubakar vagaev", 160, -190],
+    ["daniel santos", "bolaji oki", -130, 110],
+    ["kody steele", "noah gugnon", -155, 130],
+    ["iasmin lucindo", "nicolle caliari", -350, 275]
+  ]
+}

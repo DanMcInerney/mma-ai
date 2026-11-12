@@ -1,0 +1,28 @@
+{
+  "retrieved_at_utc": "2026-11-12T16:05:58Z",
+  "code_ref": "origin/main fa54a34 (clean worktree mma-ai-main-20261112)",
+  "source_urls": [
+    "https://www.ufc.com/events",
+    "https://www.ufc.com/event/ufc-334",
+    "https://www.ufc.com/event/ufc-fight-night-november-07-2026",
+    "https://www.bestfightodds.com/"
+  ],
+  "card_note": "Official 13-bout November 14 UFC 334: Gane vs Hokit card (Madison Square Garden). Fighter1 is the red corner per UFC.com corner markup. American prices frozen from the ufc.com event page at retrieval; Alatengheili-Diaz had no ufc.com price, so the median of the BestFightOdds book prices (+310/-400) is used. Kayla Harrison, Amanda Nunes, Bia Mesquita and Samuel Sanches are absent from prediction_data.csv. Bilal Hasan and Juan Diaz have one recorded fight each, so those bouts fall out under the minimum-history rule. Every red-corner fighter's last division matches the bout division, so no division overrides. Production model ag-20260815_163858-win-hybrid with prediction_data.csv rebuilt 2026-10-20 (UFCStats through 2026-10-17); no fighter on this card has fought since (checked UFC 333, Oct 31 and Nov 7 cards). Code is origin/main. Positive-EV picks are Pending.",
+  "model_path": "AutogluonModels/ag-20260815_163858-win-hybrid",
+  "alias_map": {"uroš medić": "uros medic"},
+  "card": [
+    ["ciryl gane", "josh hokit", -200, 165],
+    ["kayla harrison", "amanda nunes", -185, 155],
+    ["caio borralho", "yousri belgaroui", -155, 130],
+    ["uros medic", "kevin holland", -155, 130],
+    ["bilal hasan", "luis gurule", -1100, 700],
+    ["stephen thompson", "charles radtke", -155, 130],
+    ["drew dober", "chris duncan", 135, -160],
+    ["jim miller", "terrance mckinney", 170, -205],
+    ["donte johnson", "cesar almeida", -165, 140],
+    ["jared gordon", "melquizael costa", 290, -370],
+    ["macy chiasson", "bia mesquita", 210, -260],
+    ["alatengheili", "juan diaz", 310, -400],
+    ["evan elder", "samuel sanches", 100, -120]
+  ]
+}
