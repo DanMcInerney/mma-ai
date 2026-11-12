@@ -297,3 +297,10 @@ Add tests with every behavior change.
 - If you change feature semantics, update `README.md`,
   `docs/ANALYTICS_SCHEMA.md`, and tests so analytics agents can craft correct
   queries.
+
+## Corner order and division (event and single-fight runs)
+
+- Always pass `--fighter1` = **red corner**, `--fighter2` = **blue corner**. Training data uses fighter1 = red (fighter1 wins ~56.5%), so the model has a built-in fighter1 lean; listing the blue corner first gives them an unearned edge.
+- Get corners from the UFC.com event page HTML (`.c-listing-fight__corner-name--red` / `--blue`), not from BestFightOdds or article order.
+- The model's `weightclass_encoded` input is **fighter1's division from their last fight**. If the red-corner fighter is changing division, never swap corners to fix it. Keep red as fighter1 and override the division with `scripts/predict_with_event_context.py`.
+- Weight class codes in `prediction_data.csv`: 0 catchweight, 2 flyweight, 3 bantamweight, 4 featherweight, 5 lightweight, 6 welterweight, 7 middleweight, 8 light heavyweight, 9 heavyweight. Confirm the code against the data before overriding.

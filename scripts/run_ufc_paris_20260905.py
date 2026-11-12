@@ -83,6 +83,11 @@ def slug(name: str) -> str:
     return "_".join(name.lower().replace("'", "").split())
 
 
+def chart_name(name: str) -> str:
+    # Matches libs/shap_visualization.py chart filename stems.
+    return name.split()[0].lower().replace("'", "")
+
+
 def read_prediction_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as stream:
         first_line = stream.readline()
@@ -258,7 +263,8 @@ def main() -> int:
         commands.append(command)
         prediction_path = fight_dir / "fight_predictions.csv"
         existing_rows = read_prediction_rows(prediction_path) if prediction_path.is_file() else []
-        prefix = f"shap_{fighter1.split()[0]}_{fighter2.split()[0]}"
+        stem = f"{chart_name(fighter1)}_{chart_name(fighter2)}"
+        prefix = f"shap_{stem}"
         shap_paths = [fight_dir / f"{prefix}.html", fight_dir / f"{prefix}.json"]
         if args.screenshots and not args.no_shap:
             shap_paths.append(fight_dir / "screenshots" / f"{prefix}.png")
@@ -311,7 +317,7 @@ def main() -> int:
             screenshots_dir.mkdir(exist_ok=True)
             kinds = ["grouped", "ind"] + ([] if args.no_shap else ["shap"])
             for kind in kinds:
-                png = fight_dir / "screenshots" / f"{kind}_{fighter1.split()[0]}_{fighter2.split()[0]}.png"
+                png = fight_dir / "screenshots" / f"{kind}_{stem}.png"
                 if not png.is_file():
                     raise FileNotFoundError(f"Missing required chart screenshot: {png}")
                 shutil.copy2(png, screenshots_dir / png.name)

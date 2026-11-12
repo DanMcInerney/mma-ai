@@ -1,0 +1,15 @@
+{
+  "retrieved_at_utc": "2026-10-19T00:00:00Z",
+  "run_created_at_utc": "2026-10-20T13:04:17Z",
+  "source_urls": [
+    "https://www.ufc.com/event/ufc-333"
+  ],
+  "card_note": "Supplemental UFC 333 run after the 2026-10-20 rebuild (UFCStats through 2026-10-17). Losene Keita now has two recorded fights, so Pico-Keita meets the minimum-history rule. Malkoun-Vagaev and Steele-Gugnon are re-checked; none of those four fighters has a new fight. Same production model as the main UFC 333 run. Odds are the same frozen ufc.com prices used for the main card. Positive-EV picks are Pending.",
+  "model_path": "AutogluonModels/ag-20260815_163858-win-hybrid",
+  "alias_map": {},
+  "card": [
+    ["aaron pico", "losene keita", -105, -115],
+    ["jacob malkoun", "abubakar vagaev", 160, -190],
+    ["kody steele", "noah gugnon", -155, 130]
+  ]
+}
