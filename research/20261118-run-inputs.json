@@ -1,0 +1,27 @@
+{
+  "retrieved_at_utc": "2026-11-18T16:37:15Z",
+  "code_ref": "origin/main 22fd6bb (clean worktree mma-ai-main-20261112)",
+  "source_urls": [
+    "https://www.ufc.com/events",
+    "https://www.ufc.com/event/ufc-fight-night-november-21-2026",
+    "https://www.ufc.com/event/ufc-333",
+    "https://www.ufc.com/event/ufc-fight-night-october-31-2026",
+    "https://www.ufc.com/event/ufc-fight-night-november-07-2026",
+    "https://www.ufc.com/event/ufc-334"
+  ],
+  "card_note": "Official 11-bout November 21 UFC Fight Night: Prochazka vs Stirling card (ABHA Arena, Doha). Fighter1 is the red corner per UFC.com corner markup. American prices frozen from the ufc.com event page at retrieval; every bout had a ufc.com price. Tahir Abdullayev has one recorded fight, so Matthews-Abdullayev falls out under the minimum-history rule; Alik Lorenz is absent from prediction_data.csv. Every red-corner fighter's last division matches the bout division, so no division overrides. Production model ag-20260815_163858-win-hybrid with prediction_data.csv rebuilt 2026-10-20 (UFCStats through 2026-10-17); no fighter on this card has fought since (checked UFC 333, Oct 31, Nov 7 and UFC 334 cards). Code is origin/main. Positive-EV picks are Pending.",
+  "model_path": "AutogluonModels/ag-20260815_163858-win-hybrid",
+  "card": [
+    ["jiri prochazka", "navajo stirling", 130, -155],
+    ["aljamain sterling", "kevin vallejos", 110, -130],
+    ["dan hooker", "brian ortega", -185, 155],
+    ["kyoji horiguchi", "asu almabayev", -200, 165],
+    ["jared cannonier", "ikram aliskerov", 250, -310],
+    ["aleksandre topuria", "santiago luna", -310, 250],
+    ["shamil gaziev", "tallison teixeira", -200, 165],
+    ["amir albazi", "alessandro costa", -115, -105],
+    ["jake matthews", "tahir abdullayev", -250, 205],
+    ["nikolas motta", "dom mar fan", 145, -170],
+    ["diyar nurgozhay", "alik lorenz", -250, 205]
+  ]
+}
