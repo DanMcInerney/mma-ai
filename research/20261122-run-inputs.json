@@ -1,0 +1,30 @@
+{
+  "retrieved_at_utc": "2026-11-22T18:35:38Z",
+  "code_ref": "origin/main 6337695 (session worktree event-predictions-update-8e050e)",
+  "source_urls": [
+    "https://www.ufc.com/events",
+    "https://www.ufc.com/event/ufc-fight-night-december-05-2026",
+    "https://www.bestfightodds.com/events/ufc-saudi-arabia-4453",
+    "https://www.ufc.com/event/ufc-333",
+    "https://www.ufc.com/event/ufc-fight-night-october-31-2026",
+    "https://www.ufc.com/event/ufc-fight-night-november-07-2026",
+    "https://www.ufc.com/event/ufc-334",
+    "https://www.ufc.com/event/ufc-fight-night-november-21-2026"
+  ],
+  "card_note": "Official 12-bout December 5 UFC Fight Night: Adesanya vs Magomedov card (Saudi Arabia), retrieved 13 days before the event. Fighter1 is the red corner per UFC.com corner markup. American prices frozen from the ufc.com event page at retrieval; only Adesanya-Magomedov and Machado Garry-Amosov had a ufc.com price, and BestFightOdds listed no sportsbook price for any other bout (Polymarket only, or nothing), so those bouts have no odds and are excluded under the runner's odds-unavailable rule. Of them, Spivac-Pinto, Silva-Filho and Tulio-Park meet the history rule and can be added in a supplemental run once books post lines; the rest also fail it (Chokheli, Dulatov, Tuchalov, Andrusca, Osmanli, Duclos, Hussein and Sosa have one recorded fight; Akbar Abdullaev, Ivan Gnizditskiy and Modestino Rodrigues are absent from prediction_data.csv). Mairon Santos and Pavel Andrusca (red) last fought a division away from their bouts, which are excluded regardless. Production model ag-20260815_163858-win-hybrid with prediction_data.csv rebuilt 2026-10-20 (UFCStats through 2026-10-17); no fighter on this card has fought since (checked UFC 333, Oct 31, Nov 7, UFC 334 and Nov 21 cards). Code is origin/main. Positive-EV picks are Pending.",
+  "model_path": "AutogluonModels/ag-20260815_163858-win-hybrid",
+  "card": [
+    ["israel adesanya", "shara magomedov", -165, 140],
+    ["ian machado garry", "yaroslav amosov", -190, 160],
+    ["serghei spivac", "mario pinto", null, null],
+    ["levan chokheli", "islam dulatov", null, null],
+    ["mairon santos", "akbar abdullaev", null, null],
+    ["magomed tuchalov", "ion cutelaba", null, null],
+    ["bruno silva", "jafel filho", null, null],
+    ["uran satybaldiev", "ivan gnizditskiy", null, null],
+    ["marco tulio", "junyong park", null, null],
+    ["pavel andrusca", "mahammadali osmanli", null, null],
+    ["modestino rodrigues", "matthieu duclos", null, null],
+    ["abdul hussein", "hecher sosa", null, null]
+  ]
+}
